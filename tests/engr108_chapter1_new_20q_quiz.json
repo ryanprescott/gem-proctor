@@ -1,0 +1,255 @@
+{
+  "quiz_title": "Stanford ENGR108 Chapter 1 Practice Quiz (Set 2)",
+  "course": "Stanford ENGR108 / VMLS (Boyd & Vandenberghe)",
+  "chapter": 1,
+  "total_questions": 20,
+  "topics_covered": [
+    "Notation & Vector Definition",
+    "Vector Examples & Applications",
+    "Vector Addition & Scalar Multiplication",
+    "Inner Product (x^T y)",
+    "Computational Complexity (Flop Counts)"
+  ],
+  "questions": [
+    {
+      "id": 1,
+      "topic": "Notation & Dimensions",
+      "question": "What is the dimension of a column vector $z$ given by $z = \\begin{bmatrix} -4 & 2 & 7 & 0 & 9 & -1 \\end{bmatrix}^T$?",
+      "options": [
+        "5",
+        "6",
+        "7",
+        "4"
+      ],
+      "correctAnswer": "6"
+    },
+    {
+      "id": 2,
+      "topic": "Vector Elements",
+      "question": "Given the vector $v = \\begin{bmatrix} 12 \\\\ -5 \\\\ 8 \\\\ 0 \\\\ 3 \\end{bmatrix}$, what is the value of the component $v_4$?",
+      "options": [
+        "-5",
+        "8",
+        "0",
+        "3"
+      ],
+      "correctAnswer": "0"
+    },
+    {
+      "id": 3,
+      "topic": "Vector Equality",
+      "question": "When are two vectors $x$ and $y$ considered equal according to Boyd VMLS definitions?",
+      "options": [
+        "When they have the same dimension and identical corresponding entries ($x_i = y_i$ for all $i$).",
+        "When their inner product is equal to 1.",
+        "When they have the same sum of entries.",
+        "When they have the same Euclidean length."
+      ],
+      "correctAnswer": "When they have the same dimension and identical corresponding entries ($x_i = y_i$ for all $i$)."
+    },
+    {
+      "id": 4,
+      "topic": "Vector Addition",
+      "question": "What is the result of adding vector $a = \\begin{bmatrix} -4 \\\\ 3 \\\\ 8 \\end{bmatrix}$ and vector $b = \\begin{bmatrix} 7 \\\\ -1 \\\\ -5 \\end{bmatrix}$?",
+      "options": [
+        "$\\begin{bmatrix} 3 \\\\ 2 \\\\ 3 \\end{bmatrix}$",
+        "$\\begin{bmatrix} -11 \\\\ 4 \\\\ 13 \\end{bmatrix}$",
+        "$\\begin{bmatrix} 3 \\\\ -2 \\\\ -3 \\end{bmatrix}$",
+        "Undefined"
+      ],
+      "correctAnswer": "$\\begin{bmatrix} 3 \\\\ 2 \\\\ 3 \\end{bmatrix}$"
+    },
+    {
+      "id": 5,
+      "topic": "Scalar Multiplication",
+      "question": "If $x = \\begin{bmatrix} 5 \\\\ -2 \\\\ 4 \\end{bmatrix}$, what is the scalar multiple $-4x$?",
+      "options": [
+        "$\\begin{bmatrix} 1 \\\\ -6 \\\\ 0 \\end{bmatrix}$",
+        "$\\begin{bmatrix} -20 \\\\ 8 \\\\ -16 \\end{bmatrix}$",
+        "$\\begin{bmatrix} 20 \\\\ -8 \\\\ 16 \\end{bmatrix}$",
+        "$\\begin{bmatrix} -9 \\\\ 2 \\\\ 0 \\end{bmatrix}$"
+      ],
+      "correctAnswer": "$\\begin{bmatrix} -20 \\\\ 8 \\\\ -16 \\end{bmatrix}$"
+    },
+    {
+      "id": 6,
+      "topic": "Linear Combinations",
+      "question": "Compute the linear combination $3u - 2v$ where $u = \\begin{bmatrix} 2 \\\\ -1 \\end{bmatrix}$ and $v = \\begin{bmatrix} -3 \\\\ 4 \\end{bmatrix}$.",
+      "options": [
+        "$\\begin{bmatrix} 0 \\\\ 5 \\end{bmatrix}$",
+        "$\\begin{bmatrix} 12 \\\\ -11 \\end{bmatrix}$",
+        "$\\begin{bmatrix} 0 \\\\ -11 \\end{bmatrix}$",
+        "$\\begin{bmatrix} 6 \\\\ -2 \\end{bmatrix}$"
+      ],
+      "correctAnswer": "$\\begin{bmatrix} 12 \\\\ -11 \\end{bmatrix}$"
+    },
+    {
+      "id": 7,
+      "topic": "Inner Product",
+      "question": "What is the inner product $x^T y$ for $x = \\begin{bmatrix} 2 \\\\ 4 \\\\ -3 \\end{bmatrix}$ and $y = \\begin{bmatrix} 5 \\\\ -2 \\\\ 1 \\end{bmatrix}$?",
+      "options": [
+        "5",
+        "3",
+        "7",
+        "-1"
+      ],
+      "correctAnswer": "1"
+    },
+    {
+      "id": 8,
+      "topic": "Orthogonality",
+      "question": "If two vectors $u$ and $v$ of the same dimension satisfy $u^T v = 0$ (and neither is the zero vector), they are called:",
+      "options": [
+        "Orthogonal",
+        "Parallel",
+        "Collinear",
+        "Scalar multiples"
+      ],
+      "correctAnswer": "Orthogonal"
+    },
+    {
+      "id": 9,
+      "topic": "Applications / Portfolio",
+      "question": "Suppose $p = \\begin{bmatrix} 10 \\\\ 25 \\\\ 50 \\end{bmatrix}$ represents stock prices and $q = \\begin{bmatrix} 100 \\\\ 40 \\\\ 20 \\end{bmatrix}$ represents the number of shares owned. What does $q^T p$ represent?",
+      "options": [
+        "Total portfolio value in dollars",
+        "Total number of shares",
+        "Average asset price",
+        "Net return rate"
+      ],
+      "correctAnswer": "Total portfolio value in dollars"
+    },
+    {
+      "id": 10,
+      "topic": "Complexity / Flop Count",
+      "question": "How many floating-point operations (flops) are needed to add two $n$-dimensional vectors?",
+      "options": [
+        "$n$ flops",
+        "$2n$ flops",
+        "$n - 1$ flops",
+        "$2n - 1$ flops"
+      ],
+      "correctAnswer": "$n$ flops"
+    },
+    {
+      "id": 11,
+      "topic": "Complexity / Flop Count",
+      "question": "How many floating-point operations (flops) are required to scale an $n$-dimensional vector by a scalar $\\alpha$ (i.e., $\\alpha x$)?",
+      "options": [
+        "$n$ flops",
+        "$2n$ flops",
+        "$n - 1$ flops",
+        "1 flop"
+      ],
+      "correctAnswer": "$n$ flops"
+    },
+    {
+      "id": 12,
+      "topic": "Complexity / Flop Count",
+      "question": "What is the exact flop count required to compute the inner product $a^T b$ of two $n$-dimensional vectors?",
+      "options": [
+        "$2n - 1$ flops",
+        "$n$ flops",
+        "$2n$ flops",
+        "$n^2$ flops"
+      ],
+      "correctAnswer": "$2n - 1$ flops"
+    },
+    {
+      "id": 13,
+      "topic": "Standard Unit Vectors",
+      "question": "What is the 4-dimensional standard unit vector $e_3$?",
+      "options": [
+        "$\\begin{bmatrix} 0 \\\\ 0 \\\\ 1 \\\\ 0 \\end{bmatrix}$",
+        "$\\begin{bmatrix} 0 \\\\ 0 \\\\ 0 \\\\ 1 \\end{bmatrix}$",
+        "$\\begin{bmatrix} 1 \\\\ 0 \\\\ 0 \\\\ 0 \\end{bmatrix}$",
+        "$\\begin{bmatrix} 0 \\\\ 1 \\\\ 0 \\\\ 0 \\end{bmatrix}$"
+      ],
+      "correctAnswer": "$\\begin{bmatrix} 0 \\\\ 0 \\\\ 1 \\\\ 0 \\end{bmatrix}$"
+    },
+    {
+      "id": 14,
+      "topic": "Standard Unit Vectors",
+      "question": "How can the vector $x = \\begin{bmatrix} -3 \\\\ 8 \\\\ 1 \\end{bmatrix}$ be written using standard unit vectors $e_1, e_2, e_3$?",
+      "options": [
+        "$-3e_1 + 8e_2 + e_3$",
+        "$3e_1 - 8e_2 - e_3$",
+        "$-3e_1 - 8e_2 - e_3$",
+        "$e_1 + e_2 + e_3$"
+      ],
+      "correctAnswer": "$-3e_1 + 8e_2 + e_3$"
+    },
+    {
+      "id": 15,
+      "topic": "All-Ones Vector",
+      "question": "If $1$ denotes the 3-dimensional all-ones vector and $x = \\begin{bmatrix} 4 \\\\ -2 \\\\ 5 \\end{bmatrix}$, what is $1^T x$?",
+      "options": [
+        "7",
+        "11",
+        "-3",
+        "1"
+      ],
+      "correctAnswer": "7"
+    },
+    {
+      "id": 16,
+      "topic": "Vector Arithmetic Rules",
+      "question": "Why is the vector sum $x + y$ undefined when $x$ is 3-dimensional and $y$ is 4-dimensional?",
+      "options": [
+        "Vector addition requires both vectors to have the exact same dimension.",
+        "Inner products must be calculated first.",
+        "Vectors cannot contain negative numbers.",
+        "Scalar multiplication is required."
+      ],
+      "correctAnswer": "Vector addition requires both vectors to have the exact same dimension."
+    },
+    {
+      "id": 17,
+      "topic": "Algebraic Properties",
+      "question": "Which of the following represents the associative property of vector addition for vectors $x, y, z$ of the same dimension?",
+      "options": [
+        "$(x + y) + z = x + (y + z)$",
+        "$x + y = y + x$",
+        "$\\alpha(x + y) = \\alpha x + \\alpha y$",
+        "$x^T y = y^T x$"
+      ],
+      "correctAnswer": "$(x + y) + z = x + (y + z)$"
+    },
+    {
+      "id": 18,
+      "topic": "Data / Feature Vectors",
+      "question": "In machine learning and data analysis, what does a feature vector typically represent?",
+      "options": [
+        "A list of numerical attributes or measurements describing an object or data point",
+        "A single scalar threshold",
+        "An undefined mathematical error",
+        "A matrix inverse"
+      ],
+      "correctAnswer": "A list of numerical attributes or measurements describing an object or data point"
+    },
+    {
+      "id": 19,
+      "topic": "Self Inner Product",
+      "question": "For any $n$-dimensional vector $x$, what is the expression given by the inner product $x^T x$?",
+      "options": [
+        "The sum of the squares of its entries, $\\sum_{i=1}^n x_i^2$",
+        "The sum of its entries, $\\sum_{i=1}^n x_i$",
+        "Zero",
+        "The dimension $n$"
+      ],
+      "correctAnswer": "The sum of the squares of its entries, $\\sum_{i=1}^n x_i^2$"
+    },
+    {
+      "id": 20,
+      "topic": "Complexity / Flop Count",
+      "question": "What is the total flop count required to evaluate a linear combination of two $n$-dimensional vectors, i.e., $\\alpha x + \\beta y$?",
+      "options": [
+        "$3n$ flops",
+        "$2n$ flops",
+        "$n$ flops",
+        "$4n - 1$ flops"
+      ],
+      "correctAnswer": "$3n$ flops"
+    }
+  ]
+}
