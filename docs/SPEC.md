@@ -1,7 +1,7 @@
-# gem-proctor — Product & Technical Spec (Draft v0.12)
+# gem-proctor — Product & Technical Spec (Draft v0.13)
 
 > Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13.
-> Last updated: 2026-10-28 (v0.12: cross-cutting requirements: audit logging, WCAG 2.2 AA, English with i18n string tables)
+> Last updated: 2026-10-28 (v0.13: consistency pass)
 
 ---
 
@@ -10,9 +10,9 @@
 gem-proctor is a web app for practice tests and proctored tests. It provides:
 
 1. **Grounded authoring with an LLM** (primary way to create tests; works with any model, from a frontier cloud model to an open-weight model on your own hardware): a test creator adds source material. The model generates questions in our schema, and every question cites the source. Local validators check structure, grounding and coverage. The creator and the model then go back and forth until the material is properly covered. See §3A.
-2. **Import/export** of quizzes in one JSON format (the Quiz format, §4). Lenient normalization fixes common formatting mistakes in model output (§3.2).
+2. **Import/export** of quizzes in one JSON format (the Quiz format, §4). Lenient normalization fixes common formatting mistakes in model output (§3D.2).
 3. **Practice mode** with unlimited retakes and history.
-4. **Optional AI analysis** of results, using whichever model the admin assigns
+4. **Optional AI analysis** of results, using whichever model the admin assigns.
 5. **Proctored mode**: proctors assign tests, students take them once, proctors review and grade.
 
 ### 1.1 Goals
@@ -62,7 +62,7 @@ These apply to every feature, from the first release.
 
 ## 2. Base data model
 
-The JSON format in **`tests/engr108_chapter1_new_20q_quiz.json`** is the **base model** for gem-proctor. Everything else builds on it: the extended schema (§4), import/export (§3), generation output (§3A) and results (§6, §9). Its field names are kept **exactly as they are** (`quiz_title`, `topics_covered`, `options`, `correctAnswer`, …), so any file in the base format is always valid input, and the base format is always a valid export.
+The JSON format in **`tests/engr108_chapter1_new_20q_quiz.json`** is the **base model** for gem-proctor. Everything else builds on it: the extended schema (§4), import/export (§3D), generation output (§3A) and results (§6, §9). Its field names are kept **exactly as they are** (`quiz_title`, `topics_covered`, `options`, `correctAnswer`, …), so any file in the base format is always valid input, and the base format is always a valid export.
 
 ### 2.1 Base quiz format
 
@@ -118,8 +118,8 @@ A result is **the same quiz plus one attempt**. Each question gets `userAnswer` 
 ### 2.4 What the sample file shows
 
 The file is a good example of exactly what the local checks have to catch. **Question 7** ("inner product of $x = [2, 4, -3]^T$ and $y = [5, -2, 1]^T$") has `correctAnswer: "1"`, but the options are `["5", "3", "7", "-1"]`. The correct value is $10 - 8 - 3 = -1$.
-- **Validation** (§4) rejects this, because `correctAnswer` isn't one of the `options`.
-- **Normalization** (§3.2) must **not** "fix" it by snapping to the closest option. `"1"` → `"-1"` happens to be right here, but that kind of guess is exactly what normalization refuses to make. It stays an error for a human (or the repair loop) to resolve.
+- **Validation** (§4) flags this as an error, because `correctAnswer` isn't one of the `options`. The quiz can't be saved until it's resolved.
+- **Normalization** (§3D.2) must **not** "fix" it by snapping to the closest option. `"1"` → `"-1"` happens to be right here, but that kind of guess is exactly what normalization refuses to make. It stays an error for a human (or the repair loop) to resolve.
 - **Answer verification (L7, §3A.3.1)** catches it on import. It computes $x^T y = -1$ independently, finds that this matches option `"-1"`, not `"1"`, and offers the creator that fix to confirm. A numerically wrong answer can look perfectly well-formed, which is why computable answers are always checked by computation.
 
 ---
@@ -179,7 +179,7 @@ A test type is a **preset for the blueprint**. It only provides defaults, and ev
 
 ### 3A.2 Generation schema & model integration
 
-- **Structured outputs.** Generation calls the LLM layer's `generateObject(GenerationBatch)`. The inference server enforces the schema as well as it can (§3B.3), and the result is **always** re-validated with Zod on our side, whatever the server claims.
+- **Structured outputs.** Generation calls the LLM layer's `generateObject(GenerationBatch)`. The backend enforces the schema as well as it can (§3B.3), and the result is **always** re-validated with Zod on our side, whatever the backend claims.
 - **Generation schema ≠ extended quiz schema.** The schema the model fills in is kept simple: no deep unions, and options are given as objects with an `isCorrect` flag instead of a separate answer field. A deterministic mapper in `packages/shared` converts it to the extended `Question` (§4): it fills `options` and sets `correctAnswer` from the correct one, assigns `id`s 1..n, fills `topics_covered` from the objectives, and so on. This keeps the generation schema within what constrained decoding handles well and keeps model-facing changes separate from storage changes.
 
 ```ts
@@ -194,6 +194,7 @@ GeneratedQuestion = z.object({
   acceptedAnswers: z.array(z.string()).optional(),     // short_answer
   numericAnswer: z.object({ value: z.number(), tolerance: z.number() }).optional(),
   explanation: z.string(),
+  computable: z.boolean(),                             // L7: can the answer be computed? (§3A.3.1)
   evidence: z.array(z.object({ chunkId: z.string(), quote: z.string() })).min(1),
 })
 GenerationBatch = z.object({ questions: z.array(GeneratedQuestion), notes: z.string().optional() })
@@ -305,7 +306,7 @@ Every model call (authoring, judging, answer-verification checks, analysis, embe
 - **One interface for cloud and local:** first-party provider packages for the major cloud APIs, plus `@ai-sdk/openai-compatible` for any OpenAI-compatible server (all the local servers above, and gateways). Switching a role from local Qwen to a cloud model is a configuration change, not a code change.
 - **Zod-native:** `generateObject` / `streamObject` take our shared Zod schemas directly and return typed results.
 - **Native features where they exist:** each cloud provider's own structured-output mode, prompt caching and so on. These go through `providerOptions`, so shared code never depends on them.
-- **`embed` / `embedMany`** for L4/L5 embeddings, with any provider.
+- **`embed` / `embedMany`** for the knowledge base (§3C) and L4/L5, with any provider.
 - **Alternatives considered:**
   - **Plain `openai` SDK only:** simplest and most control for OpenAI-compatible servers, but cloud APIs that aren't OpenAI-compatible would need a gateway, and their native features would be lost.
   - **LangChain.js:** much broader, but heavier, and its typing is looser than we need.
@@ -375,11 +376,11 @@ Each role's `structuredOutput` capability picks one of two methods. `native_sche
 | `structuredOutput` | Typical backends | Mechanism |
 |---|---|---|
 | `native_schema` | Cloud APIs with structured outputs; vLLM (guided decoding), llama.cpp (`json_schema` → grammar), Ollama, LM Studio | The JSON Schema is sent and decoding is constrained to it. **Default.** |
-| `prompt_only` | Anything else | Schema + example in the prompt. Normalization (§3.2) extracts the JSON from the text |
+| `prompt_only` | Anything else | Schema + example in the prompt. Normalization (§3D.2) extracts the JSON from the text |
 
 Whatever the mode, the response then goes through the **repair loop**:
 
-1. **Normalize** (§3.2), then validate with the Zod schema (L1). Fixes from normalization are recorded but don't count as repairs.
+1. **Normalize** (§3D.2), then validate with the Zod schema (L1). Fixes from normalization are recorded but don't count as repairs.
 2. If that fails: re-ask once or twice, including the Zod error messages, the invalid output and the schema (`maxRepairs`, default 2).
 3. Still failing: handle **per item** where possible. Valid questions from the batch are kept, invalid ones are marked as failed, and the whole batch is only failed if nothing can be salvaged.
 4. Record `repairAttempts` and the mode used, so each role's reliability can be monitored.
@@ -475,30 +476,30 @@ objective "inner product", scope = ch. 1
 
 ---
 
-## 3. Quiz JSON import & normalization
+## 3D. Quiz JSON import & normalization
 
-Import is secondary: most quizzes are generated in the app (§3A). There is **exactly one import format, the `Quiz` JSON (§4)**. It's the same format the app exports, so a quiz can be backed up, moved between instances, or written by hand. Result files (§2.1) are export-only.
+Import is secondary: most quizzes are generated in the app (§3A). There is **exactly one import format, the `Quiz` JSON (§4)**. It's the same format the app exports, so a quiz can be backed up, moved between instances, or written by hand. A Result file (§2.2) can also be imported: it's a valid quiz with extra fields, and the attempt data is ignored. Attempts themselves are never imported.
 
-### 3.1 Pipeline
+### 3D.1 Pipeline
 
 ```
-.json / pasted text ─▶ normalize (§3.2) ─▶ Zod validate (Quiz) ─▶ verify answers (L7) ─▶ report + preview/edit ─▶ save as TestVersion
+.json / pasted text ─▶ normalize (§3D.2) ─▶ Zod validate (Quiz) ─▶ verify answers (L7) ─▶ report + preview/edit ─▶ save as TestVersion
 ```
 
 1. **Input:** upload a `.json` file or paste text (size limit configurable, default 2 MB).
-2. **Normalize:** lenient clean-up (§3.2). Every fix is recorded.
+2. **Normalize:** lenient clean-up (§3D.2). Every fix is recorded.
 3. **Validate** against `Quiz` (§4), including the cross-field checks.
-4. **Verify answers** (L7, §3A.3.1) for computable questions. Wrong answers come back as suggested fixes for the creator to confirm.
-5. **Report:** errors (block saving), warnings (e.g. recomputed `total_questions`), and the list of fixes from normalization.
+4. **Verify answers** (L7, §3A.3.1) for computable questions, **including questions that failed step 3** because their answer isn't among the options. That's how a wrong answer gets a suggested fix for the creator to confirm (sample Q7, §2.4).
+5. **Report:** errors (block saving), warnings (e.g. recomputed `total_questions`), the list of fixes from normalization, and verification results with any suggested fixes.
 6. **Preview & edit:** fix anything flagged before saving.
 7. **Save:** creates a `Test` and an immutable `TestVersion`. The original text is kept for debugging.
 
-### 3.2 Normalization ("massaging")
+### 3D.2 Normalization ("massaging")
 
 Model-produced JSON is often almost right: wrapped in prose, with a renamed key or a choice given as a letter. `normalizeQuiz(text) → { value, fixes[] }` is a pure function in `packages/shared`. It runs **before** Zod validation in two places:
 
-- **Import** (§3.1), e.g. for a quiz a model wrote outside the app.
-- **The LLM repair loop** (§3B.3), so many malformed generations are fixed locally, without asking the model again.
+- **Import** (§3D.1), e.g. for a quiz a model wrote outside the app.
+- **The LLM repair loop** (§3B.3), so many malformed generations are fixed locally, without asking the model again. There, only the JSON-level fixes apply (extraction, syntax, truncation, number coercion, key aliases for that schema). The quiz-specific fixes (answer resolution, renumbering, totals) are only for `Quiz` input.
 
 It only fixes **formatting**, never content:
 
@@ -647,7 +648,7 @@ g = _, _                         # user → role, and role → role (student < p
 e = some(where (p.eft == allow))
 
 [matchers]
-m = g(r.sub.id, p.sub) && r.obj.type == p.objType && r.act == p.act \
+m = g(r.sub.id, p.sub) && (p.objType == "*" || r.obj.type == p.objType) && (p.act == "*" || r.act == p.act) \
     && (p.cond == "any" \
         || (p.cond == "owner"  && r.obj.ownerId == r.sub.id) \
         || (p.cond == "member" && isMember(r.sub.id, r.obj.groupIds)))
@@ -697,6 +698,7 @@ g, admin,   proctor
 - **History:** the list of all attempts per test with score, date and duration. (No trend chart in v1.)
 - Practice attempts are **private to the user**. Proctors never see them.
 - Correct answers are sent to the client in practice mode, so immediate feedback doesn't need a round trip per question.
+- **Making a version available for practice reveals its answer key** to those students (immediate feedback). If the same version is used, or later assigned, in an `outcome_only` assignment, the UI warns the proctor, and the assignment dashboard shows it.
 
 ---
 
@@ -822,17 +824,17 @@ DraftQuestion(id, sessionId, revisionId, tempId, content JSON (generation schema
 QuestionEvent(id, draftQuestionId, kind: generated|regenerated|edited|accepted|rejected|locked|fix_accepted, actorId?, revisionId?, before JSON?, after JSON?, note?, at)   // provenance trail
 ValidationResult(id, draftQuestionId, layer, outcome: pass|warn|fail, detail JSON)
 Test(id, ownerId, title, description, tags[], createdAt, archivedAt?, authoringSessionId?)
-TestVersion(id, testId, versionNumber, content JSON (extended Quiz, §4), publishedAt?, createdAt)
+TestVersion(id, testId, versionNumber, content JSON (extended Quiz, §4), provenance JSON (frozen trail, §3A.1), publishedAt?, createdAt)
 TestImportRecord(id, testVersionId, originalFilename?, sourceRaw TEXT, report JSON)   // report includes normalization fixes
 PracticeAvailability(testVersionId, groupId, addedBy, addedAt)   // test versions students in a group may practise
 
 PracticeAttempt(id, userId, testVersionId, kind: full|retake_missed, shuffleSeed, startedAt, submittedAt?, durationMs?, score, maxScore)
 Assignment(id, proctorId, testVersionId, title, rules JSON, resultVisibility: outcome_only|full_review, opensAt, closesAt, releasedAt?)
 AssignmentGroup(assignmentId, groupId)
-Submission(id, assignmentId, studentId, status, startedAt, deadlineAt?, submittedAt?, releasedAt?, score?, maxScore,
+Submission(id, assignmentId, studentId, status, shuffleSeed, startedAt, deadlineAt?, submittedAt?, score?, maxScore, archivedAt?,
            UNIQUE(assignmentId, studentId) where not archived)
 
-Response(id, attemptId | submissionId, questionId, answer JSON, autoResult, pointsAwarded, needsReview, answeredAt, timeSpentMs)
+Response(id, attemptId | submissionId, questionId (int, §2.3), answer JSON, autoResult, pointsAwarded, needsReview, selfGraded, flagged, answeredAt, timeSpentMs)
 GradeOverride(id, responseId, proctorId, fromPoints, toPoints, comment, createdAt)
 AnalysisReport(id, ownerId, kind, subjectRef, endpointId, model, promptVersion, result JSON, createdAt)
 Endpoint(id, label, provider, baseUrl?, apiKeyCiphertext?, location, server?, concurrency, timeoutMs, createdBy)
@@ -887,8 +889,8 @@ apps/
   web/        React SPA (Vite)
   verify/     Python sandbox worker: runs check programs with whitelisted math tools (sympy, numpy, …); option parsing + comparison (§3A.3.1)
 packages/
-  shared/     Zod schemas (domain + API contracts, generation schema), quiz normalizer (§3.2), grading + short-answer normalization, JSON-Schema export
-  llm/        model-agnostic LLM layer: endpoints, roles, queueing, structured-output ladder, repair loop, prompts, evals
+  shared/     Zod schemas (domain + API contracts, generation schema), quiz normalizer (§3D.2), grading + short-answer normalization, JSON-Schema export
+  llm/        model-agnostic LLM layer: endpoints, roles, queueing, structured-output modes, repair loop, prompts, evals, call logging
   knowledge/  ingest (Markdown → sections → chunks → embeddings), hybrid retrieval, KnowledgeStore interface (§3C)
   authoring/  generation→quiz mapper, local validation pipeline (L1–L5)
   authz/      Casbin model + policy, enforcer setup, route permission declarations (§5.2)
@@ -905,7 +907,7 @@ docker/
 - Fastify + `fastify-type-provider-zod`: route `schema` objects are the shared Zod schemas, so request/response are validated and typed from one definition.
 - An OpenAPI document is generated from the same schemas (`@fastify/swagger`).
 - Auth and authorization per §5: bcrypt passwords, Postgres-backed sessions with an in-memory cache, and Casbin enforcement in a `preHandler` hook on every route. `@fastify/rate-limit` on auth and model-calling endpoints.
-- All model access goes through `packages/llm` (§3B): the Vercel AI SDK with provider packages (`@ai-sdk/openai-compatible` for local servers and gateways, plus cloud provider packages as needed) No other code makes model calls. (If a local server ever needs request options the AI SDK can't send, a direct `openai`-SDK adapter can be added behind the same interface. It's not in v1.)
+- All model access goes through `packages/llm` (§3B): the Vercel AI SDK with provider packages (`@ai-sdk/openai-compatible` for local servers and gateways, plus cloud provider packages as needed). No other code makes model calls. (If a local server ever needs request options the AI SDK can't send, a direct `openai`-SDK adapter can be added behind the same interface. It's not in v1.)
 - Per-endpoint concurrency limits (a queue in front of each endpoint), so a single-GPU backend isn't flooded and cloud rate limits are respected.
 - Ingest and retrieval live in `packages/knowledge`, and the local validators (L1–L5) in `packages/authoring`, so both can be tested without the server (against a test Postgres).
 - **Background jobs** (pg-boss): embedding chunks, generation batches, L7 verification runs, re-embedding. Progress is pushed to the UI over SSE.
@@ -983,10 +985,9 @@ Student     GET /me/assignments   POST /me/assignments/:id/start
             GET /submissions/:id/result   (only after release; shape depends on resultVisibility)
 Review      GET /assignments/:id/review-queue   POST /responses/:id/override
             POST /submissions/:id/reset   PUT /assignments/:id/accommodations/:studentId   POST /assignments/:id/release
-AI          POST /ai/analyze-attempt   POST /ai/analyze-cohort
+AI          POST /ai/analyze-attempt   POST /ai/analyze-cohort   GET /ai/reports/:id
 LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   POST /admin/llm/endpoints/:id/probe
             GET/PUT /admin/llm/roles   GET /admin/llm/stats   POST /admin/llm/evals/run
-            GET  /ai/reports/:id
 ```
 
 ---
@@ -1001,7 +1002,6 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 6. **Source sharing & retention:** can a source be shared with other proctors/groups? How long are sources kept? (Students see cited passages only on `full_review` assignments, §9.2.)
 7. **Deployment:** Docker Compose on one host (e.g. a Proxmox VM) is the v1 target (§11.5). Is anything beyond that needed (HA, managed Postgres, separate GPU host networking/TLS)?
 
----
 8. **Test type presets:** fixed in code for v1. Should admins be able to define their own (e.g. "lab quiz") later?
 9. **Multi-chapter quizzes:** the base format has a single `chapter` int. The proposal is an optional `chapters: int[]` extension (§4), with `chapter` set only for single-chapter quizzes. Or should `chapter` accept a list?
 10. **Whitelist growth:** which tools come next (e.g. `scipy.stats` for statistics courses, `networkx` for graph problems), and who approves additions?
@@ -1009,16 +1009,18 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 12. **Unverified questions in proctored tests:** block publishing by default (current proposal), or warn only?
 13. **Casbin adapter:** use an existing Postgres adapter for role grants, or a small custom adapter on Drizzle (only `g` lines live in the DB, so it's tiny)?
 
+---
+
 ## 14. Suggested phasing
 
 | Phase | Scope |
 |---|---|
 | **P0 – Foundations** | Bun monorepo, Docker Compose (Postgres + pgvector, api, web, verify skeleton), Drizzle schema + migrations, pg-boss, auth (bcrypt, cached sessions), Casbin roles + route enforcement, first-admin bootstrap, base + extended Zod schemas, quiz normalizer + import preview/edit, Quiz/Result export. Test run: Fastify plugins on Bun. Cross-cutting from day one: audit log, i18n scaffolding (string catalogs, error codes), accessibility CI (axe), component library |
-| **P1 – Practice** | Practice attempts, grading + normalization, results, history |
-| **P1.5 – LLM layer** | `packages/llm`, endpoints + model discovery + probe, role assignment, per-endpoint queue, structured-output ladder + repair loop, eval harness. Verified against local Qwen on the 3060 box (vLLM and llama.cpp) and at least one cloud model |
+| **P1 – Practice** | Practice attempts (shuffle, immediate feedback, soft timer, flag, autosave, retake missed), grading + short-answer normalization, self-graded override, results, history, Result export |
+| **P1.5 – LLM layer** | `packages/llm`, endpoints + model discovery + probe, role assignment, per-endpoint queue, structured-output modes + normalization/repair loop, eval harness, call logging. Verified against local Qwen on the 3060 box (vLLM and llama.cpp) and at least one cloud model |
 | **P2 – Authoring** | Text/Markdown sources + revisions, **knowledge base** (chunking, embedding jobs, pgvector + full-text hybrid retrieval, retrieval logs), scope picker, objectives from headings, blueprint, generation, L1–L3 validation, review UI, revise loop, publish, provenance trail (question history, `QuestionEvent`) |
 | **P2.1 – Answer verification** | `apps/verify` sandbox + whitelist, `verify.solve` role, option parsing/comparison, L7 in authoring and import, suggested-fix flow, proctored publish gate. Test fixture: `tests/engr108_chapter1_new_20q_quiz.json` (Q7 must fail with the fix `-1`) |
 | **P2.5 – Authoring depth** | L4/L5 coverage matrix/heatmap, L6 judge, revision compare view |
-| **P3a – AI analysis** | Attempt analysis; cohort analysis (with P3) |
 | **P3 – Proctoring** | Groups + join codes, assignments (to groups), single-attempt submissions, time limits, review queue, overrides, release action, cohort view, CSV export |
+| **P3.1 – AI analysis** | Attempt analysis, cohort analysis on top of the cohort view |
 | **P4 – Hardening** | Backups/restore drill, performance, full manual accessibility audit |
