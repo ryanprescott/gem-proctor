@@ -1,0 +1,85 @@
+
+=== gen-v3/strict trial 1 (23s) ===
+- inner (single_choice, computable=True) stated=[] options=['14', '10', '18']
+    author='-1' 
+    blind ='-1' 
+    leak=[]
+    whyWrong=['sign error on the third term: calculating $2*5 + 4*(-2) + (-3)*1$ as $10 - 8 + 3$ instead of $10 - 8 - 3$.', 'omits the third term entirely: $10 - 8$.', 'adds the absolute values of the products: $|10| + |-8| + |-3|$.']
+- norm (numeric, computable=True) stated=[] options=[]
+    author='13.0' 
+    blind ='13.0' 
+    leak=[]
+- orth (true_false, computable=True) stated=[] options=['True', 'False']
+    author='True' 
+    blind ='True' 
+    leak=[]
+- concept ok=True: Which statement about the inner product is true?
+
+=== gen-v3/strict trial 2 (20s) ===
+- inner (single_choice, computable=True) stated=[] options=['0', '-17', '-12']
+    author='-1' 
+    blind ='-1' 
+    leak=[]
+    whyWrong=['sign error on the second term: treating 4 * -2 as positive 8 instead of -8', 'missing the last term: 10 - 8 + 0 = 2', 'forgetting to multiply the first components: 4*(-2) + (-3)*1']
+- norm (numeric, computable=True) stated=[] options=[]
+    author='13.0' 
+    blind ='13.0' 
+    leak=[]
+- orth (true_false, computable=True) stated=[] options=['True', 'False']
+    author='True' 
+    blind ='True' 
+    leak=[]
+- concept ok=True: Which statement about the inner product is true?
+
+=== gen-v3/strict trial 3 (21s) ===
+- inner (single_choice, computable=True) stated=[] options=['10', '14', '12']
+    author='-1' 
+    blind ='-1' 
+    leak=[]
+    whyWrong=['sign error on the last term: treating -3*1 as +3', 'sign error on the middle term: treating 4*-2 as +8', 'arithmetic error in the first term: calculating 2*5 as 12 instead of 10']
+- norm (numeric, computable=True) stated=[] options=[]
+    author='13.0' 
+    blind ='13.0' 
+    leak=['144', '16', '169', '9']
+- orth (true_false, computable=True) stated=[] options=['True', 'False']
+    author='True' 
+    blind ='True' 
+    leak=[]
+- concept ok=True: Which of the following statements correctly defines the relationship b
+
+=== gen-v3/strict trial 4 (21s) ===
+- inner (single_choice, computable=True) stated=[] options=['14', '10', '12']
+    author='-1' 
+    blind ='-1' 
+    leak=[]
+    whyWrong=['sign error on the last term: treating -3 * 1 as +3', 'sign error on the middle term: treating 4 * -2 as +8', 'omission of the last term: calculating only 10 + 4']
+- norm (numeric, computable=True) stated=[] options=[]
+    author='13.0' 
+    blind ='13.0' 
+    leak=[]
+- orth (true_false, computable=True) stated=[] options=['True', 'False']
+    author='True' 
+    blind ='True' 
+    leak=[]
+- concept ok=True: Which statement correctly defines the relationship between the inner p
+
+=== gen-v3/strict trial 5 (24s) ===
+- inner (single_choice, computable=True) stated=[] options=['18', '13', '-8']
+    author='-1' 
+    blind ='-1' 
+    leak=['-1', '10', '3', '8']
+    whyWrong=['sign error on the second term: calculating $2*5 + 4*(-2) + (-3)*1$ as $10 + 8 - 3$ instead of $10 - 8 - 3$', "forgetting the negative sign on the first vector's third entry: calculating $2*5 + 4*(-2) + 3*1$", 'multiplying the vectors element-wise and then summing without applying the correct signs: $10 + (-8) + (-3)$ is correct but the user might have done $10 - 8 + 3$']
+- norm (numeric, computable=True) stated=[] options=[]
+    author='13.0' 
+    blind ='13.0' 
+    leak=['13', '144', '16', '169', '9']
+- orth (true_false, computable=True) stated=[] options=['True', 'False']
+    author='True' TypeError: result must be True or False for a true/false question, got 0 → repaired: ok
+    blind ='True' 
+    leak=[]
+- concept ok=True: Which statement about the norm of a vector is true?
+
+=== totals gen-v3/strict, 5 trials, avg gen 22s, gen failures 0 ===
+calc 15: flagged 15  STATED AN ANSWER 0  (stated right 0/0)
+author right first try 14  after repair 15 | blind right first try 15  after repair 15 | both right 15
+explanation leaks 3 | true value among options 0 | concept ok 5/5 | exact quotes 20/20

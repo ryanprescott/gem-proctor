@@ -1,0 +1,91 @@
+
+=== gen-v7/strict6/objective trial 1 (26s) ===
+- single_choice copied=['[1, -2, 3]'] stated=[] agree=True: What is the inner product of the vectors $[1, -2, 3]$ and $[4, 0, -2]$?
+    options=[] author='-2'  blind='-2'  leak=[]
+    mistakes=['ignores the zero component and only multiplies the non-zero entries', 'subtracts the products instead of adding them', 'multiplies the vectors element-wise and then sums, but makes a sign error in the second term']
+    built options=['-2 ✓ [computed: None]', '-1 [near: off by one]', '-6 [random: unrelated value]', '2 [common: subtracts the products instead of adding them]'] dropped=[{'whyWrong': 'ignores the zero component and only multiplies the non-zero entries', 'reason': 'equals the answer'}, {'whyWrong': 'multiplies the vectors element-wise and then sums, but makes a sign error in the second term', 'reason': 'equals the answer'}]
+- numeric copied=[] stated=[] agree=True: What is the norm of the vector $[-3, 4, 12]$?
+    options=[] author='13.0'  blind='13.0'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors $[2, -1, 0]$ and $[1, 2, 5]$ are orthogonal.
+    options=[] author='True'  blind='True'  leak=[]
+- concept ok=True copied=[]: Which statement correctly defines when two vectors are orthogonal?
+
+=== gen-v7/strict6/objective trial 2 (23s) ===
+- single_choice copied=[] stated=[] agree=True: Compute the inner product of the vectors x = [1, 2, 3] and y = [4, 5, 6].
+    options=[] author='32'  blind='32'  leak=[]
+    mistakes=['multiplies the vectors element-wise and then takes the sum of squares instead of the sum of products', 'adds the corresponding components of the two vectors instead of multiplying them', 'uses the norm of the first vector multiplied by the norm of the second vector']
+    built options=['440 [common: multiplies the vectors element-wise and then takes the sum of squares instead of the sum of products]', '32 ✓ [computed: None]', '18 [random: unrelated value]', '21 [common: adds the corresponding components of the two vectors instead of multiplying them]'] dropped=[]
+- numeric copied=[] stated=[] agree=True: Find the norm of the vector v = [-1, 2, -3].
+    options=[] author='3.7416573867739413'  blind='3.7416573867739413'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors a = [1, -1] and b = [2, 2] are orthogonal.
+    options=[] author='True'  blind='True'  leak=[]
+- concept ok=True copied=[]: Which statement correctly defines orthogonality for two vectors?
+
+=== gen-v7/strict6/objective trial 3 (23s) ===
+- single_choice copied=['[1, -2, 3]'] stated=[] agree=False: Consider two vectors in 3-dimensional space: $x = [1, -2, 3]$ and $y = [4, 1, 2]$. Are the
+    options=[] author=None TypeError: result must be a value, not False → repaired: TypeError: result must be a value, not False blind=None TypeError: result must be a value, not False → repaired: TypeError: result must be a value, not False leak=[]
+- numeric copied=[] stated=[] agree=True: What is the Euclidean norm of the vector $v = [-1, 2, -4]$?
+    options=[] author='4.58257569495584'  blind='4.58257569495584'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors $a = [2, 1, 0]$ and $b = [1, -2, 5]$ are orthogonal.
+    options=[] author='True'  blind='True'  leak=[]
+- concept ok=True copied=[]: Which statement correctly describes the inner product of two vectors $x$ and $y$?
+
+=== gen-v7/strict6/objective trial 4 (24s) ===
+- single_choice copied=[] stated=[] agree=True: Let vector x = [1, 2, 3] and vector y = [4, 5, 6]. What is the inner product x^T y?
+    options=[] author='32'  blind='32'  leak=[]
+    mistakes=['multiplies the vectors component-wise and then sums the results without cross-multiplying the corresponding components', 'swaps the order of multiplication for one pair of components', 'uses the norm formula instead of the inner product formula']
+    built options=['31 [common: swaps the order of multiplication for one pair of components]', '91 [common: multiplies the vectors component-wise and then sums the results without cross-multiplying the corresponding components]', '20 [random: unrelated value]', '32 ✓ [computed: None]'] dropped=[]
+- numeric copied=[] stated=[] agree=True: What is the norm of the vector x = [1, 2, 3]?
+    options=[] author='3.7416573867739413'  blind='3.7416573867739413'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors x = [1, -1] and y = [2, 2] are orthogonal.
+    options=[] author='True'  blind='True'  leak=[]
+- concept ok=True copied=[]: Which statement correctly defines orthogonality between two vectors x and y?
+
+=== gen-v7/strict6/objective trial 5 (22s) ===
+- single_choice copied=[] stated=[] agree=True: Let $\mathbf{u} = [1, 2, -3]$ and $\mathbf{v} = [4, -1, 2]$. What is the inner product $\m
+    options=[] author='-4'  blind='-4'  leak=[]
+    mistakes=['adds the components of the vectors instead of multiplying corresponding components', 'multiplies the vectors element-wise and then takes the norm of the result', 'swaps the order of vectors and subtracts the smaller from the larger']
+    built options=['$7.483314773547883$ [common: multiplies the vectors element-wise and then takes the norm of the result]', '7 [random: unrelated value]', '5 [common: adds the components of the vectors instead of multiplying corresponding components]', '-4 ✓ [computed: None]'] dropped=[{'whyWrong': 'swaps the order of vectors and subtracts the smaller from the larger', 'reason': 'duplicate'}]
+- numeric copied=[] stated=[] agree=True: What is the norm of the vector $\mathbf{w} = [-2, 3, -4]$?
+    options=[] author='5.385164807134504'  blind='5.385164807134504'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors $\mathbf{a} = [1, -1]$ and $\mathbf{b} = [2, 2]$ are orthogonal
+    options=[] author='True'  blind='True'  leak=[]
+- concept ok=True copied=['pen']: Which of the following statements about the inner product of two vectors is true?
+
+=== gen-v7/strict6/objective trial 6 (21s) ===
+- single_choice copied=['[1, -2, 3]'] stated=[] agree=True: Let x = [1, -2, 3] and y = [4, 0, -1]. What is the inner product x^T y?
+    options=[] author='1'  blind='1'  leak=[]
+    mistakes=['forgets the sign of the second component of x when multiplying', 'adds the components of x and y separately before multiplying']
+    built options=['0 [near: off by one]', '1 ✓ [computed: None]', '10 [random: unrelated value]', '6 [common: adds the components of x and y separately before multiplying]'] dropped=[{'whyWrong': 'forgets the sign of the second component of x when multiplying', 'reason': 'equals the answer'}]
+- numeric copied=[] stated=[] agree=True: What is the norm ||v|| of the vector v = [-1, 2, -3]?
+    options=[] author='3.7416573867739413'  blind='3.7416573867739413'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors u = [2, 1, -1] and w = [-1, 2, 4] are orthogonal.
+    options=[] author='False'  blind='False'  leak=[]
+- concept ok=True copied=[]: Which statement correctly defines the relationship between the norm of a vector and its in
+
+=== gen-v7/strict6/objective trial 7 (23s) ===
+- single_choice copied=[] stated=[] agree=True: Given vectors x = [2, -1, 4] and y = [3, 0, -2], what is the value of their inner product 
+    options=[] author='-2'  blind='-2'  leak=[]
+    mistakes=['ignores the negative sign in the second component of vector x', 'adds the components of x and y separately before multiplying', 'multiplies corresponding components but forgets to sum them up']
+    built options=['-13 [random: unrelated value]', '5 [common: adds the components of x and y separately before multiplying]', '-2 ✓ [computed: None]', '-5 [common: ignores the negative sign in the second component of vector x]'] dropped=[]
+- numeric copied=[] stated=[] agree=True: What is the norm of the vector v = [-3, 5, 1]?
+    options=[] author='5.916079783099616'  blind='5.916079783099616'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors a = [1, -2] and b = [4, 2] are orthogonal.
+    options=[] author='True'  blind='True'  leak=[]
+- concept ok=True copied=[]: According to the definition, under what condition are two vectors considered orthogonal?
+
+=== gen-v7/strict6/objective trial 8 (23s) ===
+- single_choice copied=[] stated=[] agree=True: What is the inner product of the vectors [2, 1, -3] and [1, -2, 4]?
+    options=[] author='-12'  blind='-12'  leak=[]
+    mistakes=['adds the components of the first vector and multiplies by the sum of the second vector', 'multiplies the vectors element-wise and then takes the norm of the result', 'subtracts the second vector from the first and then computes the inner product of the difference with itself']
+    built options=['$12.328828005937952$ [common: multiplies the vectors element-wise and then takes the norm of the result]', '-12 ✓ [computed: None]', '-28 [random: unrelated value]', '0 [common: adds the components of the first vector and multiplies by the sum of the second vector]'] dropped=[]
+- numeric copied=[] stated=[] agree=True: What is the norm of the vector [-1, 2, -4]?
+    options=[] author='sqrt(21)'  blind='4.58257569495584'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors [3, -1, 2] and [2, 6, -3] are orthogonal.
+    options=[] author='False'  blind='False'  leak=[]
+- concept ok=True copied=[]: Which statement correctly defines when two vectors are orthogonal?
+
+=== totals gen-v7/strict6/objective, 8 trials ===
+calc 24: STATED 0 | author ran 23 blind ran 23 (after repair) | programs AGREE 23 | copied example 3 | leaks 0
+concept 8: ok 8 copied example 1 | exact quotes 31/32
+model-written option values on calc questions 0 | single_choice built 7: mistakes 20, ran 20, equal to the answer 3, used as common 12 | 4 options 7/7 | option sources {'computed': 7, 'near': 2, 'random': 7, 'common': 12}

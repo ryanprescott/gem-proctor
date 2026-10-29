@@ -1,7 +1,7 @@
-# gem-proctor — Product & Technical Spec (Draft v0.16)
+# gem-proctor — Product & Technical Spec (Draft v0.17)
 
 > Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13; planned contingencies and the decision log are in §15.
-> Last updated: 2026-10-28 (v0.16: the model never decides computable answers; they are computed locally, §3A.3.1)
+> Last updated: 2026-10-29 (v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
 
 ---
 
@@ -144,7 +144,7 @@ The model assigned to each authoring role (§3B) writes questions in our schema 
 1. **Sources & scope.** The creator picks text sources from their **source library** (§3C), or adds new ones by pasting or uploading `.md`/`.txt`. They then narrow the **scope** to particular sections (from the Markdown headings), e.g. "§1.1–1.4 only". Only chunks inside the scope go on to the next steps. The stored text is what the local grounding check (§3A.3) compares against.
 2. **Learning objectives.** The model reads the in-scope chunks from the knowledge base (§3C; section by section for long sources, then merged) and proposes a list of learning objectives / topics. Each one cites the chunks it comes from. The creator edits, merges, removes or adds objectives. This list becomes the **coverage target**.
 3. **Blueprint.** The creator picks a **test type** (§3A.1.1), which fills in the defaults: question count, question-type mix, how questions are spread across the selected sections, and style guidance for the model. The creator can then change any number and add constraints ("no questions on §1.4", "include 3 applied word problems"). Together with the **scope** from step 1, this is what sets how hard the test is. There's no separate difficulty setting.
-4. **Generate.** The model writes questions that follow the blueprint, in the **generation schema** (§3A.2). Each question includes its objective id(s), source chunk id(s), and a verbatim supporting quote. For a **computable** question the model leaves the answer blank: it writes the question, the distractors and a program, and the answer is computed locally (§3A.3.1).
+4. **Generate.** The model writes questions that follow the blueprint, in the **generation schema** (§3A.2). Each question includes its objective id(s), source chunk id(s), and a verbatim supporting quote. For a **computable** question the model writes no answer and no option values: it writes the question and programs, and the answer and the options are computed locally (§3A.3.1).
 5. **Validate.** The local pipeline (§3A.3) checks every question and builds a **coverage matrix** (objectives × questions, plus source sections that no question touches).
 6. **Review.** The creator sees each question with its validation results and source passage next to it. Per-question actions: **accept / edit / reject / regenerate with a note** ("too easy", "distractor B is also correct", "test the concept, not the definition"). Whole-test actions: "more on objective 3", "fill coverage gaps".
 7. **Revise.** Only the affected questions go back to the model, along with the creator's notes and the validation failures. Accepted questions are **locked**: they're sent as context so the model avoids duplicating them, but the model can't change them. Steps 5–7 repeat until the creator is satisfied.
@@ -191,18 +191,27 @@ GeneratedQuestion = z.object({
   topic: z.string(),
   question: z.string(),
   options: z.array(z.object({ text: z.string(), isCorrect: z.boolean(), whyWrong: z.string().optional() })).optional(),
-                                                       // computable: distractors only, every isCorrect false
-  acceptedAnswers: z.array(z.string()).optional(),     // short_answer; omitted when computable
-  numericAnswer: z.object({ value: z.number(), tolerance: z.number() }).optional(),   // omitted when computable
+                                                       // at most one isCorrect true; computable: empty (L7 builds them)
+  acceptedAnswers: z.array(z.string()).optional(),     // short_answer; computable: a hint only, replaced by L7
+  numericAnswer: z.object({ value: z.number(), tolerance: z.number() }).optional(),   // computable: a hint only, replaced by L7
   explanation: z.string(),                             // computable: explains the method, never states the value
   computable: z.boolean(),                             // the model decides *whether* it's computable, never the answer (§3A.3.1)
   answerProgram: z.string().optional(),                // required when computable: Python setting `result`, whitelisted tools
+  mistakes: z.array(z.object({ whyWrong: z.string(), program: z.string() })).max(3).optional(),
+                                                       // computable single_choice: 2–3 common mistakes as programs (§3A.3.1)
+  inputs: z.array(z.object({                           // computable: the question's {placeholders} (§3A.3.1, input values)
+    name: z.string(), kind: z.enum(["integer", "rational", "vector", "matrix"]), size: z.array(z.number().int()).optional(),
+    from: z.enum(["source", "sample"]), sourceText: z.string().optional(),   // source: copied verbatim from an evidence quote
+  })).optional(),
+  constraint: z.string().optional(),                   // computable: Python setting `valid` from the inputs
   evidence: z.array(z.object({ chunkId: z.string(), quote: z.string() })).min(1),
 })
 GenerationBatch = z.object({ questions: z.array(GeneratedQuestion), notes: z.string().optional() })
 ```
 
-- **Computable questions carry no answer from the model.** If `computable` is true, the model marks no option correct, gives no `numericAnswer` or `acceptedAnswers`, and supplies `answerProgram` instead. L1 fails a question that breaks this. The answer is filled in by L7 (§3A.3.1).
+- **`isCorrect` and computable questions.** `isCorrect` exists on every question's options, and **at most one** may be `true`. A non-computable `single_choice` question needs exactly one. A **computable** question comes back from the model with **no options**. It supplies `answerProgram` and, for `single_choice`, 2–3 `mistakes`. After L7, the options are the computed answer (the only `isCorrect: true`) plus locally built distractors (§3A.3.1, flow A). If the model wrote options, a `numericAnswer` or `acceptedAnswers` on a computable question anyway (possible in `prompt_only` mode), they're discarded: a marked or stated value that differs from the computed one is recorded as `verification.modelClaim`, and nothing the model wrote becomes an option.
+- **Constrained schema.** In `native_schema` mode (§3B.3) the JSON Schema sent to the server is one shallow `anyOf` with a branch per (computable, type). On computable branches `options` has `maxItems: 0`; on computable `single_choice` `mistakes` has 2–3 items; concept `single_choice` has 3–4 options. Free-text fields have a `maxLength`, and `evidence` needs at least one item. Properties are listed in the order they should be written (`computable` and `answerProgram` before `options`; `whyWrong` before `program`), because grammar-constrained servers emit them in schema order. The Zod schema above stays the validation contract; the constrained schema is generated from it per branch.
+- **Prompt.** The generation prompt (including the role guidance for computable questions and for writing distractors) is kept in [`docs/prompts/authoring-generate.md`](prompts/authoring-generate.md), where it's iterated with the probe results. It moves into `packages/llm/prompts` when the LLM layer is built (§3B.4).
 
 - **Citations, done our way.** The schema asks for `evidence: { chunkId, quote }`, and we verify those locally (§3A.3). No server-side citation feature is needed.
 - **How sources are sent.** For each objective, our server **retrieves** the relevant chunks from the knowledge base (§3C.3) and sends their text, each chunk tagged with its id. The model never queries the knowledge base itself, and only sees what we send. So ids and quotes always match stored text, and we always know exactly what the model was shown (recorded with the revision).
@@ -226,7 +235,7 @@ Structured outputs already guarantee that the JSON has the right **shape**, so t
 
 | Layer | Check | How (all local) |
 |---|---|---|
-| **L1 Structure** | Parses as `GeneratedQuestion`. Cross-field rules: a non-computable single_choice has exactly one correct option; options are unique; `objectiveIds` and `chunkId`s exist. Computable questions: no option marked correct, no `numericAnswer`/`acceptedAnswers`, `answerProgram` present, and the type is one that can be computed (§3A.3.1). | Zod + `superRefine` |
+| **L1 Structure** | Parses as `GeneratedQuestion`. Cross-field rules: at most one option has `isCorrect: true`; a non-computable single_choice has exactly one; options are unique; `objectiveIds` and `chunkId`s exist. Computable questions: `answerProgram` present, the type is one that can be computed (§3A.3.1), no options from the model, and 2–3 `mistakes` for `single_choice`. Every `{placeholder}` in the question is declared in `inputs` and vice versa; a number in the question outside a placeholder (and not in the cited quote) is a **warn**, since it may be a model-chosen input; a `source` input's `sourceText` appears in an evidence quote. After L7, exactly one option is true. | Zod + `superRefine` |
 | **L2 Grounding** | Each `evidence.quote` actually appears in the cited chunk. | Normalized exact match, then fuzzy match (token-level similarity ≥ threshold). A **fail** means a missing chunk or a quote that isn't there, which is a likely hallucination. |
 | **L3 Answer leakage & form** | The correct answer isn't given away by the question text; the longest choice isn't always the correct one; no "all of the above"/"none of the above" unless allowed; the text is reasonably short. | Heuristics |
 | **L4 Duplicates** | Near-duplicate questions within the test, or against locked questions. | Question embeddings (same `embeddings` role as the knowledge base) + cosine threshold, plus n-gram overlap. |
@@ -241,7 +250,7 @@ Structured outputs already guarantee that the JSON has the right **shape**, so t
 
 ### 3A.3.1 Answer computation & verification (L7)
 
-**Principle:** for anything computable, **the model never decides the answer.** It decides *whether* a question is computable, and writes the question, the distractors and a program. The answer is whatever a local library computes. Generated computable questions have no model-stated answer at all, and a stated answer on an imported or edited question is only ever checked against the computation, never trusted.
+**Principle:** for anything computable, **the model never decides the answer.** It decides *whether* a question is computable, and writes the question and programs. The answer is whatever a local library computes, and for choice questions **the options are built locally too**: the model never writes a value that a student sees as an option. Generated computable questions have no model-stated answer at all, and a stated answer on an imported or edited question is only ever checked against the computation, never trusted.
 
 There are two paths:
 - **Generated questions: the answer is computed.** The generator leaves the answer blank, and L7 fills it in (flow A).
@@ -263,7 +272,29 @@ Both run in the sandbox (`apps/verify`). Each returns a value: a number, rationa
 
 **Flow A: generated computable question (answer computed)**
 
-1. **Classify.** The generator sets `computable: true`, writes the question and (for choice questions) **distractors only**, and supplies `answerProgram` (§3A.2).
+**Notation check (concept questions).** Every generated question the model marks **not computable** is scanned locally for mathematical notation in its question and options. Notation means any of:
+- math delimiters (`$…$`, `\(…\)`, `\[…\]`) or LaTeX commands;
+- a bracketed or parenthesised list of numbers (`[1, 2]`, `(1, −2, 2)`);
+- numbers joined by an operator or `=`;
+- symbols with sub- or superscripts (`x_1`, `x^T`).
+
+If the scan finds any, `verify.solve` classifies the question, as in flow B, step 1. If it finds the question computable (e.g. "Let $x = [1, 2]$, $y = [-2, 1]$. Which statement is true?"), the question **fails** and is regenerated as a calculation question, with the reason "calculation written as a concept question". The answer the model marked is never used. A definition written in symbols only (`x^T y = x_1 y_1 + …`) normally classifies as not computable and passes. A question without notation skips the classification call. Without this check, a calculation could pass as a concept question with a model-decided answer; the probe has seen that happen.
+
+**Input values.** The model doesn't choose a computable question's numbers either. The question text names its inputs as placeholders (`{x}`, `{y}`), and the generator declares each one in `inputs` (§3A.2): a `kind` (`integer`, `rational`, `vector` or `matrix`), an optional size (`n` or `m×n`), and where its value comes from:
+- **Values from the source text come first.** The sandbox parses the values written out in the question's cited chunks (vectors and matrices such as `x = (1, −2, 2)` in a worked example, a table or given data). It uses them in order of appearance for inputs of a matching kind and size, before sampling anything. The constraint still applies, and if the values fail it, they're sampled instead. Each source value is used once per test. This doesn't depend on the model: in the probe, the model never chose `source` on its own (0 of 40 inputs), although the passage had a worked example.
+- **`from: "source"`** (optional): the generator can also point at a specific value by copying it into `sourceText`, e.g. a scalar that isn't written as a tuple. It's parsed locally and **must appear in one of the question's evidence quotes** (after normalizing whitespace, minus signs and brackets), otherwise the question fails.
+- **`from: "sample"`**: values are drawn locally with a seeded random draw. Defaults (instance setting; a test type can override them):
+  - integers in −9…9;
+  - vectors of 3–5 entries, the same length for every vector in the question unless sizes are declared;
+  - at least one negative entry, at most one zero, not all entries equal;
+  - matrices from 2×2 to 3×3;
+  - no well-known textbook values (`[1, 2]`, `[3, 4]`, `[1, 2, 3]`, `[4, 5, 6]`, unit vectors), and no value set already used in the test.
+- **`constraint`** (optional): a program that reads the inputs and sets `valid`. Examples: `valid = x.dot(y) != 0` for "not orthogonal", `valid = A.det() != 0` for "invertible". Sampling redraws up to 50 times; if no draw is valid, the question **fails** ("constraint can't be met").
+- **`true_false`**: a constraint must allow both answers; one that only ever lets one answer through (e.g. "not orthogonal" on an orthogonality question) is a **warn**, found when sampling can't reach the target. The system picks a target truth value with the seeded draw, about half True. Sampling redraws until the computed result matches it, so the answers aren't nearly always False (random vectors are almost never orthogonal). It allows up to 2,000 draws, about 0.5 s: in the probe, 50 draws reached a True target only 3 times in 12, and 2,000 reached it every time. If no draw hits the target, the last valid draw is used.
+
+The values are rendered into the question by the option formatter (step 5). They're predefined as SymPy values in `answerProgram`, in the mistake programs and in `constraint`: `Integer`, `Rational`, or `Matrix`, with vectors as columns. The blind program sees only the rendered question. The values and the seed are recorded in `verification`. All of this happens before step 2.
+
+1. **Classify.** The generator sets `computable: true`, writes the question, supplies `answerProgram` and (for `single_choice`) 2–3 `mistakes`, and writes no options (§3A.2). Anything it marks or states as an answer anyway is discarded (recorded as `modelClaim`).
 2. **Blind program.** `verify.solve` writes the blind program.
 3. **Run both** in the sandbox.
 4. **Agree?**
@@ -275,8 +306,22 @@ Both run in the sandbox (`apps/verify`). Each returns a value: a number, rationa
    | **Couldn't compute** | Either program fails or times out | **warn**, `status = "unverified"`. The question has **no answer** and can't be accepted until it's re-run, regenerated, or the creator supplies the answer by hand (`provenance: "human"`, re-checked by flow B) |
 
 5. **Build the answer** from the computed value:
-   - **`single_choice`:** parse every distractor (same parsing as flow B, step 3). If any distractor **equals** the computed value, or can't be parsed, the question **fails** and goes back for regeneration with that reason. Otherwise **all options are rendered by one formatter** (integers and decimals as plain text; rationals as `$\frac{p}{q}$`; vectors and matrices as `$\begin{bmatrix}…\end{bmatrix}$`, with `^T` for column vectors written inline; other expressions through `sympy.latex` in `$…$`). The formatted value is inserted at a position chosen by a seeded random draw, and becomes `correctAnswer`. Using one formatter for every option means the correct one can't stand out by its formatting (an L3 concern).
-   - **`true_false`:** the value must be a boolean, and becomes `"True"` or `"False"`.
+   - **`single_choice`:** build the options locally (`apps/verify`):
+     1. **Common errors.** Run each `mistakes[].program` in the sandbox (no repair; one that fails is dropped). Its value is what a student making that mistake would get.
+     2. **Candidates.** A candidate must have the answer's shape (scalar, or the same vector or matrix dimensions). A float is converted to exact form where one fits (`7.4833…` → $2\sqrt{14}$), otherwise rounded to 3 places. Candidates equal to the answer or to each other are dropped.
+     3. **Choose** `distractorCount` distractors (instance setting, default 3), with a seeded random draw:
+        - **up to 2 common errors**;
+        - **at least 1 completely wrong value**: random, the same shape and kind as the answer (integer, rational, surd), and on its scale;
+        - any remaining places filled by **generic slips** of the answer: sign flipped, off by one, doubled, reciprocal, forgot the root or off by one under it, one entry flipped or off by one, transposed.
+
+        Then add more random values until there are enough.
+     4. **Assemble.** The computed answer (`isCorrect: true`) plus the distractors, in seeded random order. **All options are rendered by one formatter** (integers and decimals as plain text; rationals as $\frac{p}{q}$; vectors and matrices as $\begin{bmatrix}…\end{bmatrix}$, with `^T` for column vectors written inline; other expressions through `sympy.latex`, in `$…$`). `correctAnswer` is the correct option's text. Using one formatter for every option means the correct one can't stand out by its formatting (an L3 concern).
+     5. **Record** each distractor's source (`common`, `near` or `random`), its reason and, for a common error, its program, in `verification.distractors`.
+
+        A mistake's `whyWrong` text isn't checked against its program. It's shown to the creator in review, but it isn't used as student feedback unless the creator accepts it.
+
+     Since the distractors are computed values, the answer can never appear as a "wrong" option, and options can't duplicate one another.
+   - **`true_false`:** the value must be a boolean. L7 adds the options `"True"` and `"False"`, and the matching one gets `isCorrect: true`.
    - **`numeric`:** `correctAnswer` is the value as a decimal string. Exact values get `numericTolerance: 0`. Floats get a default relative tolerance of 1e-6 (instance setting; the creator can change it per question).
    - **`short_answer`:** `correctAnswer` is the formatted value. It is graded per §7.
 6. **Record** both programs, the value and the outcome in `verification` (§4), and a `QuestionEvent` of kind `answer_computed`.
@@ -430,7 +475,7 @@ The shared Zod schemas are written for the **weakest supported model**, not the 
 
 ### 3B.4 Prompts & evals
 
-- Prompts are versioned templates in `packages/llm/prompts`, one per role. Each `LlmResult` and saved report records the prompt version.
+- Prompts are versioned templates in `packages/llm/prompts`, one per role. Until that package exists, drafts are iterated in `docs/prompts/` together with their probe results (e.g. [`authoring-generate.md`](prompts/authoring-generate.md)). Each `LlmResult` and saved report records the prompt version.
 - **Call logging:** every call records metadata (endpoint, model, prompt version, tokens, repairs, latency). For **authoring and `verify.solve` calls, the full request and response are stored as well**, so any question's origin can be reproduced exactly (provenance, §3A.1). Analysis calls, which carry student data, store metadata only.
 - One default prompt per role, written to work on small models (short, explicit, one example), which also works on large models. The mechanism for **per-model variants** exists, but none ship in v1; one is added only when evals show it's needed.
 - A small **eval set** (fixed sources plus expected properties: grounding pass rate, single-correct-answer rate, coverage, repair rate, seconds per question) is run against each role's model. That makes model choices ("is local 8B enough?", "is the cloud judge worth it?") measured answers instead of guesses.
@@ -602,6 +647,12 @@ Question = BaseQuestion.extend({
     answerSource: z.enum(["computed", "stated"]).optional(), // computed: answer came from flow A; stated: checked by flow B
     program: z.string().optional(),              // the blind check program (Python, whitelisted tools)
     authorProgram: z.string().optional(),        // flow A only: the generator's answerProgram
+    modelClaim: z.string().optional(),           // flow A only: an answer the model marked or stated, if it differed from the computed one
+    inputs: z.record(z.string()).optional(),     // flow A: each input's value (LaTeX), as rendered into the question
+    seed: z.string().optional(),                 // flow A: the seed for input sampling, distractors and option order
+    distractors: z.array(z.object({              // flow A single_choice only: how each wrong option was built
+      text: z.string(), source: z.enum(["common", "near", "random"]), reason: z.string(), program: z.string().optional(),
+    })).optional(),
     result: z.string().optional(),               // serialized value (LaTeX)
     matchedOption: z.string().optional(),
     checkedAt: z.string().datetime().optional(),

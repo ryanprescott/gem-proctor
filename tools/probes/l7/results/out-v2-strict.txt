@@ -1,0 +1,85 @@
+
+=== gen-v2/strict trial 1 (17s) ===
+- inner (single_choice, computable=True) stated=[] options=['15', '10', '9']
+    author='-1' 
+    blind ='-1' 
+    leak=[]
+    whyWrong=['Incorrect multiplication of the first terms: 2*5 + 4*(-2) + (-3)*1', 'Incorrect multiplication of the second terms: 2*5 + 4*(-2) + (-3)*1', 'Incorrect addition: 2*5 + 4*(-2) + (-3)*1']
+- norm (numeric, computable=True) stated=[] options=[]
+    author='13.0' 
+    blind ='13.0' 
+    leak=[]
+- orth (true_false, computable=True) stated=[] options=['True', 'False']
+    author='True' NameError: name 'math' is not defined. Did you forget to import 'math'? → repaired: ok
+    blind ='True' 
+    leak=[]
+- concept ok=True: Which statement about the inner product is true?
+
+=== gen-v2/strict trial 2 (17s) ===
+- inner (single_choice, computable=True) stated=[] options=['14', '15', '17']
+    author='-1' 
+    blind ='-1' 
+    leak=[]
+    whyWrong=['wrong product for the first term: 2*5', 'wrong product for the second term: 4*(-2)', 'wrong product for the third term: -3*1']
+- norm (numeric, computable=True) stated=[] options=[]
+    author='13.0' 
+    blind ='13.0' 
+    leak=[]
+- orth (true_false, computable=True) stated=[] options=['True', 'False']
+    author='True' NameError: name 'math' is not defined. Did you forget to import 'math'? → repaired: ok
+    blind ='True' 
+    leak=[]
+- concept ok=True: Which statement about the inner product is true?
+
+=== gen-v2/strict trial 3 (17s) ===
+- inner (single_choice, computable=True) stated=[] options=['15', '20', '10']
+    author='-1' 
+    blind ='-1' 
+    leak=[]
+    whyWrong=['misses the second term: 2*4 + 4*(-2) + -3*1', 'adds the terms incorrectly: (2+5) + (4-2) + (-3+1)', 'adds the terms incorrectly: (2+5) + (4-2) + (-3*1)']
+- norm (numeric, computable=True) stated=[] options=[]
+    author='13.0' 
+    blind ='13.0' 
+    leak=[]
+- orth (true_false, computable=True) stated=[] options=['True', 'False']
+    author='True' NameError: name 'math' is not defined. Did you forget to import 'math'? → repaired: ok
+    blind ='True' 
+    leak=[]
+- concept ok=True: Which statement about the inner product is true?
+
+=== gen-v2/strict trial 4 (18s) ===
+- inner (single_choice, computable=True) stated=[] options=['11', '10', '9']
+    author='-1' 
+    blind ='-1' 
+    leak=[]
+    whyWrong=['ignores the last term: 10 - 8 + 0', 'ignores the first term: 8 - 6', 'incorrectly adds all terms: 10 - 6 + 3']
+- norm (numeric, computable=True) stated=[] options=[]
+    author='13.0' 
+    blind ='13.0' 
+    leak=[]
+- orth (true_false, computable=True) stated=[] options=['True', 'False']
+    author='True' 
+    blind ='True' 
+    leak=[]
+- concept ok=True: Which statement about the inner product is true?
+
+=== gen-v2/strict trial 5 (17s) ===
+- inner (single_choice, computable=True) stated=[] options=['13', '11', '15']
+    author='-1' 
+    blind ='-1' 
+    leak=[]
+    whyWrong=['incorrect multiplication: 2*5 + 4*(-2) + (-3)*1', 'incorrect sign on the last term: 2*5 + 4*(-2) - 3*1', 'incorrect addition: 2*5 + 4*(-2) + 1*1']
+- norm (numeric, computable=True) stated=[] options=[]
+    author='13.0' 
+    blind ='13.0' 
+    leak=[]
+- orth (true_false, computable=True) stated=[] options=['True', 'False']
+    author='True' NameError: name 'math' is not defined. Did you forget to import 'math'? → repaired: ok
+    blind ='True' 
+    leak=[]
+- concept ok=True: Which statement about the inner product is true?
+
+=== totals gen-v2/strict, 5 trials, avg gen 17s, gen failures 0 ===
+calc 15: flagged 15  STATED AN ANSWER 0  (stated right 0/0)
+author right first try 11  after repair 15 | blind right first try 15  after repair 15 | both right 15
+explanation leaks 0 | true value among options 0 | concept ok 5/5 | exact quotes 16/20

@@ -1,0 +1,118 @@
+
+=== gen-v8/strict7 trial 1 (26s) ===
+- single_choice inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given the vectors $\begin{bmatrix}1 & -2 & 2\end{bmatrix}^T$ and $\begin{bmatrix}3 & 0 & -1\end{bmatrix}^T$, what is their inner product?
+    constraint='valid = True' author='1'  blind='1'  agree=True
+    built options=['1 ✓ [computed: None]', '9 [common: multiplies the vectors element-wise and sums the squares instead of multiplying corresponding components]', '-1 [common: subtracts the components of y from x instead of multiplying]', '-7 [random: unrelated value]'] dropped=[]
+- numeric inputs=[('v', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: For the vector $\begin{bmatrix}-5 & 2\end{bmatrix}^T$, compute its norm ||v||.
+    constraint='valid = True' author='sqrt(29)'  blind='5.385164807134504'  agree=True
+- true_false inputs=[('a', 'vector', 'sample', ''), ('b', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors $\begin{bmatrix}-8 & -3\end{bmatrix}^T$ and $\begin{bmatrix}-3 & 8\end{bmatrix}^T$, are they orthogonal?
+    constraint='valid = True' author='True'  blind='True'  agree=True
+    target=True hit=True
+- concept notation=False classified=None: Which of the following statements correctly describes how to compute the inner product of two vectors?
+
+=== gen-v8/strict7 trial 2 (24s) ===
+- single_choice inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given two vectors $\begin{bmatrix}1 & -2 & 2\end{bmatrix}^T$ and $\begin{bmatrix}3 & 0 & -1\end{bmatrix}^T$, what is their inner product?
+    constraint='valid = True' author='1'  blind='1'  agree=True
+    built options=['-11 [random: unrelated value]', '13 [common: multiplies the vectors element-wise and then sums the squares of the results]', '1 ✓ [computed: None]', '3 [common: adds the corresponding components instead of multiplying them]'] dropped=[]
+- numeric inputs=[('v', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given the vector $\begin{bmatrix}-5 & 3 & -8\end{bmatrix}^T$, what is its norm?
+    constraint='' author='7*sqrt(2)'  blind='9.899494936611665'  agree=True
+- true_false inputs=[('a', 'vector', 'sample', ''), ('b', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors $\begin{bmatrix}8 & -2\end{bmatrix}^T$ and $\begin{bmatrix}-2 & -8\end{bmatrix}^T$, are they orthogonal?
+    constraint='valid = True' author='True'  blind='True'  agree=True
+    target=True hit=True
+- concept notation=False classified=None: Which statement correctly defines when two vectors are orthogonal?
+
+=== gen-v8/strict7 trial 3 (25s) ===
+- single_choice inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors $\begin{bmatrix}1 & -2 & 2\end{bmatrix}^T$ and $\begin{bmatrix}3 & 0 & -1\end{bmatrix}^T$, what is their inner product?
+    constraint='valid = x.shape[0] == y.shape[0] and min(x) != 0 or min(y) != 0' author='1'  blind='1'  agree=True
+    built options=['6 [random: unrelated value]', '$3 \\sqrt{10}$ [common: multiplies the norms of the two vectors]', '1 ✓ [computed: None]', '3 [common: adds the corresponding components instead of multiplying them]'] dropped=[]
+- numeric inputs=[('x', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: What is the norm of the vector $\begin{bmatrix}9 & -3\end{bmatrix}^T$?
+    constraint='valid = True' author='3*sqrt(10)'  blind='9.486832980505138'  agree=True
+- true_false inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors $\begin{bmatrix}-7 & 0\end{bmatrix}^T$ and $\begin{bmatrix}0 & -4\end{bmatrix}^T$, are they orthogonal?
+    constraint='valid = True' author='True'  blind='True'  agree=True
+    target=True hit=True
+- concept notation=False classified=None: Which statement correctly describes the relationship between the inner product and orthogonality?
+
+=== gen-v8/strict7 trial 4 (23s) ===
+- single_choice inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=False stray=[]
+    rendered: Given vectors x and y, what is the value of their inner product x^T y?
+    constraint='valid = True' author='1'  blind='1'  agree=True
+    built options=['1 ✓ [computed: None]', '3 [common: adds the components of the vectors instead of multiplying corresponding components]', '$3 \\sqrt{10}$ [common: multiplies the norms of the two vectors instead of the dot product]', '-4 [random: unrelated value]'] dropped=[{'whyWrong': 'subtracts the components of the first vector from the second', 'reason': 'equals the answer'}]
+- numeric inputs=[('x', 'vector', 'sample', '')] placeholders_ok=False stray=[]
+    rendered: Given the vector x, what is its norm ||x||?
+    constraint='' author='sqrt(194)'  blind='3.0'  agree=False
+- true_false inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=False stray=[]
+    rendered: Are the vectors x and y orthogonal?
+    constraint='valid = True' author='True'  blind='False'  agree=False
+    target=True hit=True
+- concept notation=False classified=None: Which statement correctly describes when two vectors are orthogonal?
+
+=== gen-v8/strict7 trial 5 (22s) ===
+- single_choice inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors $\begin{bmatrix}1 & -2 & 2\end{bmatrix}^T$ and $\begin{bmatrix}3 & 0 & -1\end{bmatrix}^T$, what is their inner product?
+    constraint='valid = True' author='1'  blind='1'  agree=True
+    built options=['2 [near: off by one]', '1 ✓ [computed: None]', '9 [common: calculates the dot product of x with itself instead of x with y]', '-2 [random: unrelated value]'] dropped=[]
+- numeric inputs=[('x', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: What is the norm of the vector $\begin{bmatrix}-8 & 7\end{bmatrix}^T$?
+    constraint='valid = True' author='sqrt(113)'  blind='10.63014581273465'  agree=True
+- true_false inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Are the vectors $\begin{bmatrix}-5 & -1 & -6\end{bmatrix}^T$ and $\begin{bmatrix}1 & 9 & -4\end{bmatrix}^T$ orthogonal?
+    constraint='valid = True' author='False'  blind='False'  agree=True
+    target=False hit=True
+- concept notation=False classified=None: According to the definition provided, what condition must be met for two vectors to be orthogonal?
+
+=== gen-v8/strict7 trial 6 (24s) ===
+- single_choice inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors $\begin{bmatrix}1 & -2 & 2\end{bmatrix}^T$ and $\begin{bmatrix}3 & 0 & -1\end{bmatrix}^T$, what is the inner product of $\begin{bmatrix}1 & -2 & 2
+    constraint='valid = True' author='1'  blind='1'  agree=True
+    built options=['$\\sqrt{10}$ [common: calculates the norm of y instead of the inner product]', '7 [random: unrelated value]', '3 [common: calculates the norm of x instead of the inner product]', '1 ✓ [computed: None]'] dropped=[]
+- numeric inputs=[('x', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given the vector $\begin{bmatrix}-7 & -9 & 9\end{bmatrix}^T$, what is its norm?
+    constraint='valid = True' author='sqrt(211)'  blind='14.52583904633395'  agree=True
+- true_false inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors $\begin{bmatrix}-2 & -3 & -1\end{bmatrix}^T$ and $\begin{bmatrix}4 & -5 & 7\end{bmatrix}^T$, are the vectors orthogonal?
+    constraint='valid = x.dot(y) == 0' author='True'  blind='True'  agree=True
+    target=True hit=True
+- concept notation=False classified=None: According to the text, what condition must be met for two vectors to be considered orthogonal?
+
+=== gen-v8/strict7 trial 7 (27s) ===
+- single_choice inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors x = $\begin{bmatrix}1 & -2 & 2\end{bmatrix}^T$ and y = $\begin{bmatrix}3 & 0 & -1\end{bmatrix}^T$, what is their inner product?
+    constraint='valid = x[0] != 0 and y[0] != 0' author='1'  blind='1'  agree=True
+    built options=['7 [random: unrelated value]', '2 [common: multiplies the sum of x by the sum of y]', '1 ✓ [computed: None]', '3 [common: adds the corresponding components of the two vectors instead of multiplying them]'] dropped=[{'whyWrong': 'multiplies the vectors element-wise but forgets to sum the results', 'reason': 'different shape from the answer'}]
+- numeric inputs=[('v', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: For the vector $\begin{bmatrix}6 & -1\end{bmatrix}^T$, what is its norm?
+    constraint='valid = True' author='sqrt(37)' AttributeError: 'Integer' object has no attribute 'sqrt' → repaired: ok blind='6.082762530298219'  agree=True
+- true_false inputs=[('a', 'vector', 'sample', ''), ('b', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors a = $\begin{bmatrix}8 & -4\end{bmatrix}^T$ and b = $\begin{bmatrix}-2 & -5\end{bmatrix}^T$, is the statement 'a and b are orthogonal' true or fals
+    constraint='valid = True' author='False'  blind='False'  agree=True
+    target=False hit=True
+- concept notation=False classified=None: According to the definition, what condition must be met for two vectors to be orthogonal?
+
+=== gen-v8/strict7 trial 8 (24s) ===
+- single_choice inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors $\begin{bmatrix}1 & -2 & 2\end{bmatrix}^T$ and $\begin{bmatrix}3 & 0 & -1\end{bmatrix}^T$, what is their inner product?
+    constraint='valid = True' author='1'  blind='1'  agree=True
+    built options=['7 [random: unrelated value]', '3 [common: adds the corresponding components of the vectors instead of multiplying them]', '1 ✓ [computed: None]', '-1 [common: subtracts the components of y from x]'] dropped=[]
+- numeric inputs=[('x', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: For the vector $\begin{bmatrix}6 & -6\end{bmatrix}^T$, compute its norm ||x||.
+    constraint='valid = True' author='6*sqrt(2)'  blind='8.48528137423857'  agree=True
+- true_false inputs=[('x', 'vector', 'sample', ''), ('y', 'vector', 'sample', '')] placeholders_ok=True stray=[]
+    rendered: Given vectors $\begin{bmatrix}-5 & 0\end{bmatrix}^T$ and $\begin{bmatrix}-2 & 6\end{bmatrix}^T$, are they orthogonal?
+    constraint='valid = True' author='False'  blind='False'  agree=True
+    target=False hit=True
+- concept notation=False classified=None: Which statement correctly describes when two vectors are orthogonal?
+
+=== totals gen-v8/strict7, 8 trials ===
+calc 24: inputs ok 24 fail 0 [] | model said source 0 (verified 0) sample 40 | questions using chunk values 8
+placeholder mismatch 3 | questions with stray numbers 0 | distinct input sets 17/24 | programs AGREE 22/24
+single_choice built 8, 4 options 8 | sources {'computed': 8, 'common': 15, 'random': 8, 'near': 1} | true_false 8: target True 5, target hit 8
+concept 8: ok 8, with notation 0, classified as calculation 0 | exact quotes 31/32

@@ -1,0 +1,49 @@
+
+=== gen-v4/strict/objective trial 1 (30s) ===
+- single_choice copied=[] stated=[] agree=True: Given vectors x = [1, 2] and y = [3, 4], what is the inner product x^T y?
+    options=['11', '14', '7'] author='11'  blind='11'  leak=[]
+- numeric copied=[] stated=[] agree=True: Calculate the Euclidean norm ||x|| for the vector x = [3, 4].
+    options=[] author='5.0'  blind='5.0'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors x = [1, 0] and y = [0, 1] are orthogonal.
+    options=['True', 'False'] author='True'  blind='True'  leak=[]
+- concept ok=True copied=[]: According to the definition provided, what condition must be met for two vectors to be ort
+
+=== gen-v4/strict/objective trial 2 (20s) ===
+- single_choice copied=[] stated=[] agree=True: Let $x = [1, 2]$ and $y = [3, 4]$. What is the inner product $x^T y$?
+    options=['11', '14', '15'] author='11'  blind='11'  leak=[]
+- numeric copied=[] stated=[] agree=True: Calculate the Euclidean norm of the vector $x = [3, 4]$.
+    options=[] author='5.0'  blind='5.0'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors $x = [1, -1]$ and $y = [2, 2]$ are orthogonal.
+    options=['True', 'False'] author='True'  blind='True'  leak=[]
+- concept ok=True copied=[]: Which expression correctly represents the definition of the norm of a vector $x$?
+
+=== gen-v4/strict/objective trial 3 (22s) ===
+- single_choice copied=[] stated=[] agree=True: What is the inner product of the vectors $x = [1, 2]$ and $y = [3, 4]$?
+    options=['11', '10', '7'] author='11'  blind='11'  leak=[]
+- numeric copied=[] stated=[] agree=True: What is the norm of the vector $x = [3, 4]$?
+    options=[] author='5.0'  blind='5.0'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors $x = [1, -1]$ and $y = [2, 2]$ are orthogonal.
+    options=['True', 'False'] author='True'  blind='True'  leak=[]
+- concept ok=True copied=[]: Which statement correctly defines the relationship between the inner product and orthogona
+
+=== gen-v4/strict/objective trial 4 (20s) ===
+- single_choice copied=[] stated=[] agree=True: Given vectors x = [1, 2] and y = [2, -1], what is their inner product?
+    options=['0', '4', '0'] author='0'  blind='0'  leak=[]
+- numeric copied=[] stated=[] agree=True: What is the norm of the vector x = [3, 4]?
+    options=[] author='5'  blind='5.0'  leak=['5']
+- true_false copied=[] stated=[] agree=True: True or false: The vectors x = [1, 1] and y = [-1, 1] are orthogonal.
+    options=['True', 'False'] author='True'  blind='True'  leak=[]
+- concept ok=True copied=[]: Which formula correctly defines the norm of a vector x?
+
+=== gen-v4/strict/objective trial 5 (22s) ===
+- single_choice copied=[] stated=[] agree=True: Calculate the inner product of the vectors x = [1, 2] and y = [3, 4].
+    options=['10', '11', '14'] author='11'  blind='11'  leak=[]
+- numeric copied=[] stated=[] agree=True: Find the Euclidean norm of the vector v = [3, 4].
+    options=[] author='5.0'  blind='5.0'  leak=[]
+- true_false copied=[] stated=[] agree=True: True or false: The vectors a = [1, -1] and b = [2, 2] are orthogonal.
+    options=['True', 'False'] author='True'  blind='True'  leak=[]
+- concept ok=True copied=[]: Which expression correctly represents the norm of a vector x?
+
+=== totals gen-v4/strict/objective, 5 trials ===
+calc 15: STATED 0 | author ran 15 blind ran 15 (after repair) | programs AGREE 15 | copied example 0 | leaks 1
+concept 5: ok 5 copied example 0 | exact quotes 20/20
