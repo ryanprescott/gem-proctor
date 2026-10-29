@@ -1,7 +1,7 @@
 # gem-proctor — Product & Technical Spec (Draft v0.17)
 
 > Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13; planned contingencies and the decision log are in §15.
-> Last updated: 2026-10-29 (v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
+> Last updated: 2026-10-29 (v0.20: the sandbox's security is isolation, not code inspection: no network, no secrets, fresh process per run, gVisor, recycling, an escape test suite; results are text over a Unix socket, §3A.3.1. v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
 
 ---
 
@@ -330,7 +330,7 @@ The values are rendered into the question by the option formatter (step 5). They
 
 1. **Classify.** Imported questions are classified as computable or not by the `verify.solve` model. Hand-edited questions keep their classification. A creator who changes the answer on a computable question can't skip the check. They can only reclassify the question as not computable, with a required note, and that's recorded in its history.
 2. **Blind program** from `verify.solve`, and a sandbox run. (There's no author program on this path.)
-3. **Parse the options.** Each option and the `correctAnswer` are converted to values: plain numbers, fractions, LaTeX (`\frac`, `\sqrt`, `bmatrix`/`pmatrix` vectors and matrices, `^T`), and simple expressions such as `2n - 1`, using SymPy's LaTeX parsing plus our own handling for vectors and matrices.
+3. **Parse the options.** Each option and the `correctAnswer` are converted to values: plain numbers, fractions, LaTeX (`\frac`, `\sqrt`, `bmatrix`/`pmatrix` vectors and matrices, `^T`), and simple expressions such as `2n - 1`, using SymPy's LaTeX parser (Lark backend) plus our own handling for vectors and matrices. Parsing runs inside the sandbox (below).
 4. **Compare and decide:**
 
 | Outcome | Condition | Result |
@@ -346,21 +346,62 @@ The values are rendered into the question by the option formatter (step 5). They
 - The programs, their results and the outcome are stored with the question (`verification`, §4). Reviewers can read both programs. Students see them only on assignments released with `full_review` (§9.2).
 - **Proctored publishing:** an instance setting (default **on**) blocks publishing a proctored test while any `computable` question is not `computed`-verified.
 
-**The sandbox (`apps/verify`):** the one Python component. It's a small worker the API calls over HTTP or through a job queue.
+**The sandbox (`apps/verify`):** the one Python component. It runs programs the model wrote, and those are **untrusted code**. No user ever writes code for it, but users do steer the model that writes it: uploaded sources and creator notes go into the prompt, and a source containing a prompt injection can make the model write hostile code. So security comes from **isolation**, not from inspecting the code. There's no static code check and no `eval` ban. Only two kinds of data cross the boundary: request JSON in, and length-capped result JSON out, as text over a Unix socket. Nothing on the API side ever evaluates them.
 
-- **Tool whitelist (v1, fixed):**
+- **What a hostile program would try, and what stops it:**
 
-  | Module | Allowed | Used for |
-  |---|---|---|
-  | `sympy` | Core, `Matrix`, `Rational`, `sqrt`, `simplify`, `expand`, `factor`, `solve`, `diff`, `integrate`, `limit`, `summation`, `symbols` | Exact and symbolic math, linear algebra |
-  | `numpy` | Array creation, arithmetic, `dot`, `matmul`, `linalg.norm` / `det` / `inv` / `solve` / `eig` / `rank` | Numeric linear algebra |
-  | `fractions`, `math`, `statistics`, `itertools` | All public functions | Exact fractions, basic math, counting |
+  | Goal | What stops it |
+  |---|---|
+  | Steal secrets or data | The runner holds none: no env vars, no credentials, no database access |
+  | Reach the network (Postgres, the API, the internet) | The container has **no network interface** |
+  | **Tamper with answers** (state that makes a later run return a wrong value, or overwriting another program's result) | A **fresh process per run**: the author and blind programs never share a process. Children can't write the socket directory or signal the parent. The container is recycled |
+  | Exhaust resources (fork bomb, memory, infinite loop) | cgroup limits on the container, `rlimit`s on each run, and a wall-clock kill |
+  | Escape to the host kernel | **gVisor** in production (a user-space kernel between the program and the host). The Proxmox VM is the next wall |
+  | Inject through its output (a huge or malformed result, hostile LaTeX) | Output is capped, validated with Zod and never evaluated. LaTeX is rendered by KaTeX with `trust: false` and size limits |
 
-  Anything not on the list is rejected **before** running. Growing the list is a code change with review (§13).
-- **Static check before running:** parse the program's AST and allow only whitelisted imports and attribute paths. No `open`, `exec`, `eval`, `__import__`, `getattr`, dunder access, `globals`, or file/OS/network modules. Size limit (e.g. ≤ 40 lines).
-- **Run limits:** a separate process per run, CPU time limit (e.g. 5 s), memory limit (e.g. 256 MB), no network (the container runs with networking off), read-only filesystem, and a non-root user. `result` must be JSON-serializable after conversion (numbers, rationals as `"p/q"`, matrices as nested lists, SymPy expressions as `srepr` plus LaTeX).
+  Tampering is the subtle one. An escape is loud; a program that quietly makes the *next* answer wrong would break the "computed, so correct" guarantee without anyone noticing.
+
+- **The runner container** (`verify` in Compose, §11.5):
+  - `network_mode: none`;
+  - read-only root filesystem, a small `tmpfs` for `/tmp`, no environment variables or secrets;
+  - `cap_drop: [ALL]` plus `SETUID` and `SETGID` only (see the parent, below), and `no-new-privileges`;
+  - `pids_limit`, memory and CPU limits;
+  - `runtime: runsc` (gVisor) in production. Docker Desktop on WSL can't easily run gVisor, so dev uses the default runtime with the same settings.
+
+  Its one connection is a Unix socket in a shared volume, which the API's job worker mounts.
+- **Parent and children (fork per run).** The parent is small trusted code that never runs a model program.
+  - **Startup:** it pre-imports the libraries, opens the socket in a directory only it can write, and serves requests (newline-delimited JSON, one request per run).
+  - **Each run:** it forks a child, which:
+    1. switches to an unprivileged user (dropping every capability), so it can't touch the socket or signal the parent;
+    2. sets `rlimit`s: 5 s CPU, 512 MB address space, no file writes, no new processes;
+    3. clears its environment, and closes every inherited file descriptor except its own result pipe;
+    4. runs the one program and writes its result to the pipe, then exits.
+  - **Supervision:** the parent kills the child at the wall-clock limit (10 s), caps the result at 64 KB, and replies.
+
+  Forking gives every run a clean copy of the pre-imported state, so the 1–2 s SymPy import isn't paid per run and nothing carries over. Option parsing, value comparison and the distractor build (flow A step 5, flow B step 3) run in children the same way, so imported option texts and program outputs are only ever parsed inside the sandbox.
+- **Recycling.** The container is restarted every 500 runs (instance setting), and immediately after any anomaly: a child killed by a limit, a sandbox denial, or a malformed reply. The API waits for its health reply and retries the job. A compromise therefore doesn't outlive the batch it happened in.
+- **Injection signal.** A program that fails with a **sandbox denial** (blocked network or filesystem access, the process limit, a memory kill), as opposed to an ordinary math error, is suspicious. That can come from a prompt injection in the source text. Its question fails, the event goes to the audit log, and the source chunks it was generated from are flagged for the creator to review.
+- **Libraries (v1, fixed).** The runner image contains only these, so any other import simply fails. Adding one is a code change with review (§13).
+
+  | Module | Used for |
+  |---|---|
+  | `sympy` | Exact and symbolic math, linear algebra (`Matrix`, `Rational`, `sqrt`, `simplify`, `solve`, …) |
+  | `numpy` | Numeric linear algebra (`dot`, `matmul`, `linalg.norm` / `det` / `inv` / `solve` / `eig` / `rank`) |
+  | `fractions`, `math`, `statistics`, `itertools` (stdlib) | Exact fractions, basic math, counting |
+  | `lark` | Backend for SymPy's LaTeX parser (option parsing) |
+
+  The prompt lists the same modules, so the model knows what's available (§3A.2). A program over 4 KB is rejected by the API before it's sent.
+- **Results** are serialized as text: integers and decimals as strings, rationals as `"p/q"`, vectors and matrices as nested lists, other expressions as SymPy's `str` form, plus a LaTeX rendering. Values are compared only inside the runner. The API stores and displays results but never evaluates them, and in particular never passes them to anything like `sympify` or `eval`.
 - **Contract:** request and response schemas are Zod in `packages/shared`, with a generated JSON Schema / Pydantic model on the Python side.
-- **Packaging:** its own container, with pinned versions of the whitelisted libraries. A failed run doesn't affect the API.
+- **Escape test suite** (an acceptance criterion for P2.1; run in CI, and against the production runtime before release). Each hostile program must fail in the expected way, and leave the next run's result unaffected. The programs:
+  - open a socket, or resolve a hostname;
+  - read `/etc/passwd` or the environment, or write a file outside `/tmp`, or over its limit;
+  - fork-bomb, exhaust memory, or loop forever;
+  - load `ctypes` or call `os.system`;
+  - reach `eval` through a library (`sympify` on a string);
+  - unlink or replace the socket, or signal the parent;
+  - leave state behind (patch a SymPy function, write to `/tmp`), followed by a normal run that must give the right value;
+  - emit a 10 MB result or invalid JSON.
 
 ### 3A.4 Review UI (creator)
 
@@ -994,7 +1035,7 @@ Notes (Postgres):
 apps/
   api/        Fastify server (+ pg-boss workers)
   web/        React SPA (Vite)
-  verify/     Python sandbox worker: runs check programs with whitelisted math tools (sympy, numpy, …); option parsing + comparison (§3A.3.1)
+  verify/     Python sandbox runner (no network, fork per run): runs model-written programs with the installed math libraries (sympy, numpy, …); option parsing, comparison, distractors (§3A.3.1)
 packages/
   shared/     Zod schemas (domain + API contracts, generation schema), quiz normalizer (§3D.2), grading + short-answer normalization, JSON-Schema export
   llm/        model-agnostic LLM layer: endpoints, roles, queueing, structured-output modes, repair loop, prompts, evals, call logging
@@ -1045,7 +1086,7 @@ tools/
 | `postgres` | `pgvector/pgvector` (Postgres 17) | Volume for data. Nightly `pg_dump` backup job |
 | `api` | Bun + app | Fastify + pg-boss workers. Runs migrations on start (or a separate `migrate` one-shot) |
 | `web` | Static build | Served by the API, or by a small static server / Caddy |
-| `verify` | Python 3.12 slim + pinned sympy/numpy | **Networking off** except the internal link to `api`, read-only root filesystem, non-root user, CPU and memory limits (§3A.3.1) |
+| `verify` | Python 3.12 slim + pinned sympy/numpy/lark | **No network** (`network_mode: none`); talks to `api` only over a Unix socket in a shared volume. Read-only root filesystem, no secrets, `cap_drop: ALL` (+ `SETUID`/`SETGID`), pids/CPU/memory limits, gVisor (`runsc`) in production (§3A.3.1) |
 | *(optional)* `caddy` | Caddy | TLS + reverse proxy |
 
 - Model servers (vLLM / llama.cpp / embedding model) run **outside** this stack, on the GPU host, and are configured as endpoints (§3B.2). An optional `docker/compose.models.yaml` can be provided for single-host setups.
@@ -1230,7 +1271,7 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 | **P1 – Practice** | Practice attempts (shuffle, immediate feedback, soft timer, flag, autosave, retake missed), grading + short-answer normalization, self-graded override, results, history, Result export |
 | **P1.5 – LLM layer** | `packages/llm`, endpoints + model discovery + probe, role assignment, per-endpoint queue, structured-output modes + normalization/repair loop, eval harness, call logging. Verified against local Qwen on the 3060 box (vLLM and llama.cpp) and at least one cloud model |
 | **P2 – Authoring** | Text/Markdown sources + revisions, **knowledge base** (chunking, embedding jobs, pgvector + full-text hybrid retrieval, retrieval logs), scope picker, objectives from headings, blueprint, generation, L1–L3 validation, review UI, revise loop, publish, provenance trail (question history, `QuestionEvent`). **Computable questions need P2.1**, so P2.1 is built before P2's generation step |
-| **P2.1 – Answer computation & verification** | `apps/verify` sandbox + whitelist, `verify.solve` role, option parsing/comparison and the shared option formatter, L7 flow A (computed answers for generated questions) and flow B (checks for import and edits), suggested-fix flow, proctored publish gate. Test fixture: `tests/engr108_chapter1_new_20q_quiz.json` (Q7 must fail with the fix `-1`) |
+| **P2.1 – Answer computation & verification** | `apps/verify` sandbox (runner, fork per run, recycling, escape test suite), `verify.solve` role, option parsing/comparison and the shared option formatter, L7 flow A (computed answers for generated questions) and flow B (checks for import and edits), suggested-fix flow, proctored publish gate. Test fixture: `tests/engr108_chapter1_new_20q_quiz.json` (Q7 must fail with the fix `-1`) |
 | **P2.5 – Authoring depth** | L4/L5 coverage matrix/heatmap, L6 judge, revision compare view |
 | **P3 – Proctoring** | Groups + join codes, assignments (to groups), single-attempt submissions, time limits, review queue, overrides, release action, cohort view, CSV export |
 | **P3.1 – AI analysis** | Attempt analysis, cohort analysis on top of the cohort view |
