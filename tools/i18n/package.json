@@ -1,0 +1,10 @@
+{
+  "name": "@gem/tools-i18n",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@gem/shared": "workspace:*",
+    "typescript": "5.9.3"
+  }
+}

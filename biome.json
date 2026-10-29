@@ -1,0 +1,80 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "root": true,
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!tools/biome/__fixtures__",
+      "!tools/probes",
+      "!docs",
+      "!**/*.grit",
+      "!packages/db/migrations/meta",
+      "!packages/shared/schema",
+      "!tests/*.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "trailingCommas": "all",
+      "semicolons": "always"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "error"
+      },
+      "style": {
+        "noNonNullAssertion": "error"
+      }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "plugins": [
+    {
+      "path": "./tools/biome/no-literal-ui-string.grit",
+      "includes": [
+        "apps/web/src/**/*.tsx",
+        "apps/web/src/**/*.ts",
+        "!**/*.test.tsx",
+        "!**/*.spec.tsx",
+        "!**/*.stories.tsx",
+        "!apps/web/src/i18n/**",
+        "!apps/web/src/dev/**"
+      ]
+    }
+  ],
+  "overrides": [
+    {
+      "includes": ["apps/web/src/styles/global.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    }
+  ]
+}

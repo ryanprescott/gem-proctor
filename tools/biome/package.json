@@ -1,0 +1,6 @@
+{
+  "name": "@gem/tools-biome",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module"
+}

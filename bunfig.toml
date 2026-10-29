@@ -1,0 +1,3 @@
+[test]
+# Only unit/integration tests; fixtures (tools/biome/__fixtures__) and Playwright specs are not bun tests.
+pathIgnorePatterns = ["tools/biome/__fixtures__/**", "apps/web/e2e/**", "**/node_modules/**"]

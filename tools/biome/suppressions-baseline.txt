@@ -1,0 +1,1 @@
+# no-literal-ui-string suppressions (SPEC §11.6). One line per suppression: file | reason.

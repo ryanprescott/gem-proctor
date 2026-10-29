@@ -1,0 +1,40 @@
+{
+  "name": "gem-proctor",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "ci": "bun scripts/ci.ts",
+    "check": "biome check .",
+    "typecheck": "bun scripts/typecheck.ts",
+    "test": "bun test",
+    "lint:rule:build": "bun tools/biome/build-rule.ts",
+    "lint:rule:stale": "bun tools/biome/build-rule.ts --check",
+    "lint:rule:snapshot": "bun tools/biome/snapshot.ts --check",
+    "lint:suppressions": "bun tools/biome/check-suppressions.ts",
+    "i18n:check": "bun tools/i18n/check-catalogs.ts",
+    "schema:export": "bun packages/shared/scripts/export-json-schema.ts",
+    "db:generate": "drizzle-kit generate --config packages/db/drizzle.config.ts",
+    "db:migrate": "bun packages/db/scripts/migrate.ts",
+    "dev:pg": "bun scripts/dev-pg.ts",
+    "dev:api": "bun --filter @gem/api dev",
+    "dev:web": "bun --filter @gem/web dev",
+    "e2e": "bun scripts/e2e.ts",
+    "verify:lint": "ruff check apps/verify && ruff format --check apps/verify"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@types/bun": "1.4.4",
+    "@types/pg": "8.23.1",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "@gem/db": "workspace:*",
+    "pg": "8.23.1"
+  }
+}

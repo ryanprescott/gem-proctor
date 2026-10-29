@@ -10,3 +10,5 @@ playwright-report/
 test-results/
 __pycache__/
 .venv/
+.dev/
+apps/web/dist/
