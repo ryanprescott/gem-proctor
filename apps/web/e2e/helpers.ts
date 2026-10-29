@@ -89,3 +89,55 @@ export async function tabTo(page: Page, target: Locator, max = 80) {
 export async function liveRegionText(page: Page) {
   return (await page.getByTestId("live-region").textContent()) ?? "";
 }
+
+/** One question of every type (P1 e2e): weights, partial credit, an ignore list, an explanation and evidence. */
+export const PRACTICE_QUIZ = {
+  quiz_title: "Practice e2e quiz",
+  course: "ENGR108",
+  total_questions: 5,
+  topics_covered: ["Vectors", "Complexity"],
+  questions: [
+    {
+      id: 1,
+      topic: "Vectors",
+      question: "Which letter is b?",
+      options: ["a", "b", "c", "d"],
+      correctAnswer: "b",
+      explanation: "Because b is b.",
+    },
+    {
+      id: 2,
+      topic: "Complexity",
+      question: "How many flops does summing n numbers take?",
+      correctAnswer: "n-1",
+      ignoreWords: ["flops"],
+      points: 2,
+    },
+    {
+      id: 3,
+      topic: "Vectors",
+      question: "What is seven halves as a decimal?",
+      type: "numeric",
+      correctAnswer: "3.5",
+    },
+    {
+      id: 4,
+      topic: "Complexity",
+      question: "Pick the vowels.",
+      type: "multi_choice",
+      options: ["e", "x", "i", "z"],
+      correctAnswer: "e",
+      correctAnswers: ["e", "i"],
+      partialCredit: "proportional",
+    },
+    {
+      id: 5,
+      topic: "Sets",
+      question: "The empty set is a subset of every set.",
+      type: "true_false",
+      options: ["True", "False"],
+      correctAnswer: "True",
+      evidence: [{ sourceId: "s1", chunkId: "c1", quote: "The empty set is a subset of every set." }],
+    },
+  ],
+};

@@ -1,0 +1,88 @@
+{
+  "check": "Check answer",
+  "outcome": {
+    "correct": "Correct",
+    "partial": "Partly correct",
+    "incorrect": "Incorrect"
+  },
+  "answer": {
+    "yours": "Your answer",
+    "correct": "Correct answer",
+    "selectAll": "Select all that apply.",
+    "textLabel": "Your answer",
+    "numberLabel": "Your answer (a number)",
+    "numberHelp": "For example -1, 2.5 or 1e-3."
+  },
+  "attempt": {
+    "title": "Practice attempt",
+    "documentTitle": "Practice: {{title}}",
+    "position": "Question {{n}} of {{total}}",
+    "answeredCount": "{{answered}} of {{total}} answered",
+    "meta": "{{topic}} · {{type}}",
+    "previous": "Previous question",
+    "next": "Next question"
+  },
+  "timer": {
+    "label": "Elapsed time"
+  },
+  "flag": {
+    "label": "Flag for review",
+    "flagged": "Flagged for review.",
+    "unflagged": "Flag removed."
+  },
+  "feedback": {
+    "points": "({{points}} of {{max}} points)",
+    "selfGraded": "Self-graded: you marked this answer as right.",
+    "correctAnswer": "Correct answer:",
+    "correctAnswers": "Correct answers:",
+    "explanation": "Explanation"
+  },
+  "selfGrade": {
+    "right": "I was right",
+    "undo": "Undo “I was right”",
+    "marked": "Marked as right (self-graded).",
+    "undone": "Self-grade undone.",
+    "score": "Score: {{score}} of {{max}}."
+  },
+  "nav": {
+    "label": "Questions",
+    "title": "Questions",
+    "item": "Question {{n}}",
+    "answered": "answered",
+    "unanswered": "not answered",
+    "flagged": "flagged for review",
+    "legend": "✓ answered · ⚑ flagged for review · thick border: current question"
+  },
+  "submit": {
+    "open": "Submit attempt",
+    "title": "Submit this attempt?",
+    "unanswered_one": "{{n}} question is unanswered. It will score 0.",
+    "unanswered_other": "{{n}} questions are unanswered. They will score 0.",
+    "allAnswered": "Every question has an answer.",
+    "final": "After submitting you can't change your answers.",
+    "confirm": "Submit",
+    "cancel": "Keep working",
+    "done": "Attempt submitted."
+  },
+  "results": {
+    "title": "Results",
+    "documentTitle": "Results: {{title}}",
+    "heading": "Results: {{title}}",
+    "score": "Score",
+    "scoreValue": "{{score}} of {{max}} points ({{percent}})",
+    "time": "Time taken",
+    "backToTest": "Back to the test"
+  },
+  "section": {
+    "title": "Practice",
+    "take": "Take test",
+    "archived": "This test is archived, so it can't be practised. Its history stays here.",
+    "inProgress": "You have an attempt in progress, started {{date}}.",
+    "resume": "Resume",
+    "discard": "Discard attempt",
+    "discardTitle": "Discard this attempt?",
+    "discardBody": "Its answers are deleted. This can't be undone.",
+    "discardConfirm": "Discard",
+    "discarded": "Attempt discarded."
+  }
+}

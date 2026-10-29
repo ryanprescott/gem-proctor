@@ -1,12 +1,14 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { Layout } from "./Layout.tsx";
 import { AdminAuditLogPage, AdminSettingsPage, AdminUsersPage } from "./routes/Admin.tsx";
+import { AttemptPage } from "./routes/Attempt.tsx";
 import { HomePage, NotFoundPage } from "./routes/Home.tsx";
 import { ImportPage } from "./routes/Import.tsx";
+import { ResultsPage } from "./routes/Results.tsx";
 import { RegisterPage, SignInPage } from "./routes/SignIn.tsx";
 import { TestDetailPage, TestsPage } from "./routes/Tests.tsx";
 
-/** TanStack Router (P0.md §5), code-based routes for the pages in P0.md §6. */
+/** TanStack Router (P0.md §5), code-based routes for the pages in P0.md §6 and P1.md §6. */
 const root = createRootRoute({ component: Layout, notFoundComponent: NotFoundPage });
 
 const routes = [
@@ -23,11 +25,29 @@ const routes = [
       return <TestDetailPage testId={testId} />;
     },
   }),
+  createRoute({
+    getParentRoute: () => root,
+    path: "/practice/attempts/$attemptId",
+    component: function AttemptRoute() {
+      const { attemptId } = attemptRoute.useParams();
+      return <AttemptPage attemptId={attemptId} />;
+    },
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: "/practice/attempts/$attemptId/results",
+    component: function ResultsRoute() {
+      const { attemptId } = resultsRoute.useParams();
+      return <ResultsPage attemptId={attemptId} />;
+    },
+  }),
   createRoute({ getParentRoute: () => root, path: "/admin/users", component: AdminUsersPage }),
   createRoute({ getParentRoute: () => root, path: "/admin/settings", component: AdminSettingsPage }),
   createRoute({ getParentRoute: () => root, path: "/admin/audit-log", component: AdminAuditLogPage }),
 ] as const;
 const testRoute = routes[5];
+const attemptRoute = routes[6];
+const resultsRoute = routes[7];
 
 export const router = createRouter({ routeTree: root.addChildren([...routes]), defaultPreload: false });
 

@@ -10,6 +10,7 @@ import { formatDate, formatNumber } from "../format.ts";
 import { Button, Card, ErrorMessage, errorText, Select, TextField } from "../ui/controls.tsx";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
 import { QuestionList } from "../ui/QuestionList.tsx";
+import { PracticeSection } from "./PracticeSection.tsx";
 import styles from "./Tests.module.css";
 
 type Archived = "exclude" | "include" | "only";
@@ -174,6 +175,8 @@ function TestDetail({ testId }: { testId: string }) {
           {test.archivedAt ? t("tests:detail.restore") : t("tests:detail.archive")}
         </Button>
       </div>
+
+      <PracticeSection testId={testId} archived={!!test.archivedAt} />
 
       <Card title={t("tests:detail.editTitle")}>
         <Form

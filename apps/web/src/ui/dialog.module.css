@@ -1,0 +1,36 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 30;
+}
+
+.modal {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  inline-size: min(32rem, calc(100vw - 2rem));
+  max-block-size: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.dialog {
+  padding: var(--space-6);
+  outline: none;
+}
+
+.title {
+  margin-block-start: 0;
+  font-size: 1.25rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: var(--space-3);
+  margin-block-start: var(--space-4);
+}

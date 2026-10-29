@@ -94,3 +94,33 @@ Built: the eight practice handlers in `apps/api/src/routes/practice.ts` (replaci
 - **In-progress rule** is per test version (the partial unique index), so an in-progress retake on v1 doesn't block a full attempt on v2; the UI offers Resume for any in-progress attempt of the test.
 - **Fix to F2's table:** drizzle's `jsonb` JSON-parses any string it reads back, so a stored answer `"3.505"` came back as a number. `response.answer` now uses a custom `jsonb` type without that second parse (no migration: the SQL type is unchanged); `practice-db.test.ts` checks that `"3.50"`, `"true"`, `"null"` and arrays round-trip. F2's B10 row stays **pass** (its tests didn't store JSON-looking strings); the new test is part of this commit.
 - `check` with an empty answer is `validation_failed` (`params.field: "answer"`) rather than a new code.
+
+## F4 Test-taking UI
+
+Built in `apps/web`: the attempt page `/practice/attempts/:id` (`src/routes/Attempt.tsx`), the feedback block with "I was right" (`src/routes/Feedback.tsx`), the test detail page's Practice section with Take test / Resume / Discard (`src/routes/PracticeSection.tsx`), a first results page (`src/routes/Results.tsx`: score, percentage, time; F5 completes it), a reusable confirmation dialog (`src/ui/ConfirmDialog.tsx`), the draft store and question clock (`src/practice/session.ts`), `Intl` helpers for points, percentages, the clock and durations (`src/format.ts`), and the `practice` catalog namespace. Tests: `apps/web/e2e/practice.e2e.ts` (Playwright + axe) on a five-question quiz with every question type (`PRACTICE_QUIZ` in `e2e/helpers.ts`).
+
+| # | Result | Evidence |
+|---|---|---|
+| B23 | **pass** | `practice.e2e.ts` "B23": Take test on the test detail page opens `/practice/attempts/<id>` at "Question 1 of 5"; stepping through with Next, each question's text matches the API's display order, choice questions are a `radiogroup` (single choice, true/false) or a `group` of checkboxes (multi choice) named by the question, with the input values in the server's shuffled order, and short/numeric answers are a labelled `textbox`. |
+| B24 | **pass** | "B24": a wrong single-choice answer shows "✗ Incorrect (0 of 1 points)" (icon `aria-hidden`, the outcome as text), "Correct answer:", the explanation, and "Your answer" / "Correct answer" labels on the options; the live region says "Incorrect" (A32 pattern, `useLive().announce`). A correct true/false and a correct numeric answer show "Correct" and announce it. The API agrees with what's shown (`autoResult` incorrect / correct). Focus moves to the feedback block after the check. |
+| B25 | **pass** | "B25": "Flag for review" is a React Aria `ToggleButton` (`aria-pressed` false → true) and the change is announced. Navigator buttons are named in text ("Question 3, answered, flagged for review" / "Question 4, not answered"), the current one has `aria-current="step"`, visible marks have a text legend. Tab to a navigator button + Enter moves to that question, focuses its heading and announces "Question n of 5". |
+| B26 | **pass** | "B26": `role="timer"` with `aria-live="off"`, an always-visible "Elapsed time" label, `hh:mm:ss` from `Intl.DateTimeFormat` (`formatClock`), and the text changes as time passes; nothing ends the attempt. After about 1.2 s on a question and moving away, the API reports its `timeSpentMs` > 1000. The clock counts only while the document is visible (`QuestionClock`), and a `pagehide` keepalive request saves the current question's time. |
+| B27 | **pass** | "B27": after typing an unchecked short answer and reloading, the same attempt URL opens at the first unanswered question; the typed text is restored (`sessionStorage`), the checked answer still shows its feedback with the option selected, the flag is still pressed, and the numeric answer is still there. |
+| B28 | **pass** | "B28": Submit attempt opens an `alertdialog` "Submit this attempt?" saying "1 question is unanswered. It will score 0."; focus starts on "Keep working"; Escape closes it and focus returns to the Submit button; confirming submits (the typed short answer is saved first and graded at submit) and shows the results page. Reopening the attempt URL afterwards redirects to the results. |
+| B29 | **pass** | `expectNoAxeViolations` (WCAG 2.0–2.2 A/AA + best practice) on the attempt page unanswered, after incorrect feedback, after correct feedback, flagged, with the submit dialog open, and at 320 px wide (with and without feedback). The existing P0 axe runs on the test detail page (proctor, admin) now include the Practice section. |
+
+**`bun run ci`:** all steps pass.
+
+```
+✔ biome check                       ✔ JSON Schema export is up to date
+✔ lint rule build is up to date     ✔ typecheck (6 projects)
+✔ lint-rule snapshot                ✔ bun test — 373 pass, 0 fail, 16 files
+✔ suppression baseline (0)          ✔ ruff + ruff format, verify unit tests (3)
+✔ i18n catalog check (330 keys)     ✔ Playwright + axe — 15 passed
+```
+
+**Deviations and notes.**
+- **Submit with typed answers.** Before submitting, the UI saves any typed-but-unchecked answer (without `check`), so the server grades it at submit instead of dropping it; the dialog counts such questions as answered.
+- **"I was right" during the attempt** is in F4 already (the feedback block, after a short answer is checked incorrect), as P1.md §5 allows; the results screen gets the same control in F5.
+- The catalog check has a new dynamic key family `practice:outcome.` tied to the shared `GRADE_OUTCOMES` enum (`tools/i18n/check-catalogs.ts`).
+- The results page here only shows score, percentage and time; F5 adds the per-question review, topic breakdown, retake and export.
