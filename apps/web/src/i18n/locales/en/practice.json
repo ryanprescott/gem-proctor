@@ -71,7 +71,10 @@
     "score": "Score",
     "scoreValue": "{{score}} of {{max}} points ({{percent}})",
     "time": "Time taken",
-    "backToTest": "Back to the test"
+    "backToTest": "Back to the test",
+    "kind": "Kind",
+    "submitted": "Submitted",
+    "export": "Export result (JSON)"
   },
   "section": {
     "title": "Practice",
@@ -84,5 +87,50 @@
     "discardBody": "Its answers are deleted. This can't be undone.",
     "discardConfirm": "Discard",
     "discarded": "Attempt discarded."
+  },
+  "kind": {
+    "full": "Full test",
+    "retake_missed": "Retake missed"
+  },
+  "retake": {
+    "full": "Retake",
+    "missed_one": "Retake missed ({{n}} question)",
+    "missed_other": "Retake missed ({{n}} questions)",
+    "missedNone": "Retake missed (nothing missed)"
+  },
+  "history": {
+    "title": "History",
+    "empty": "No attempts yet.",
+    "caption_one": "{{count}} attempt, newest first",
+    "caption_other": "{{count}} attempts, newest first",
+    "colDate": "Started",
+    "colKind": "Kind",
+    "colScore": "Score",
+    "colDuration": "Duration",
+    "colActions": "Open",
+    "inProgress": "In progress",
+    "scoreValue": "{{score}} of {{max}} ({{percent}})",
+    "questionCount_one": "({{n}} question)",
+    "questionCount_other": "({{n}} questions)",
+    "viewResults": "Results of {{date}}",
+    "resume": "Resume attempt of {{date}}"
+  },
+  "topics": {
+    "title": "By topic",
+    "covered": "Topics covered:",
+    "caption": "Questions answered correctly and points, by question topic",
+    "colTopic": "Topic",
+    "colCorrect": "Correct",
+    "colPoints": "Points",
+    "correctValue": "{{correct}} of {{total}}",
+    "pointsValue": "{{points}} of {{max}}"
+  },
+  "review": {
+    "title": "Questions",
+    "heading": "Question {{n}} of {{total}}",
+    "yourAnswer": "Your answer:",
+    "yourAnswers": "Your answers:",
+    "notAnswered": "Not answered",
+    "evidence": "From the source:"
   }
 }

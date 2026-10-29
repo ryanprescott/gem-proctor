@@ -1,8 +1,46 @@
+import { practiceList } from "@gem/shared/contracts";
+import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { api } from "../api/client.ts";
 import { atLeast, useMe } from "../auth.tsx";
-import { Card } from "../ui/controls.tsx";
+import { formatDateTime } from "../format.ts";
+import { Card, ErrorMessage } from "../ui/controls.tsx";
 import { useDocumentTitle } from "../ui/live.tsx";
+import { scoreText } from "./PracticeSection.tsx";
+
+/** The five most recent practice attempts, across tests (P1.md §6). */
+function RecentAttempts() {
+  const { t } = useTranslation();
+  const query = useQuery({
+    queryKey: ["practice", "recent"],
+    queryFn: () => api.call(practiceList, { query: { limit: 5 } }),
+  });
+  return (
+    <Card title={t("common:home.recentTitle")}>
+      <ErrorMessage error={query.error} />
+      {query.data && query.data.attempts.length === 0 ? <p>{t("common:home.recentEmpty")}</p> : null}
+      {query.data && query.data.attempts.length > 0 ? (
+        <ul>
+          {query.data.attempts.map((a) => (
+            <li key={a.id}>
+              {a.status === "submitted" ? (
+                <Link to="/practice/attempts/$attemptId/results" params={{ attemptId: a.id }}>
+                  {a.testTitle}
+                </Link>
+              ) : (
+                <Link to="/practice/attempts/$attemptId" params={{ attemptId: a.id }}>
+                  {a.testTitle}
+                </Link>
+              )}{" "}
+              {t("common:home.recentItem", { date: formatDateTime(a.startedAt), score: scoreText(t, a) })}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Card>
+  );
+}
 
 export function HomePage() {
   const { t } = useTranslation();
@@ -28,6 +66,9 @@ export function HomePage() {
             </li>
           </ul>
         </Card>
+      ) : null}
+      {isProctor ? (
+        <RecentAttempts />
       ) : (
         <Card title={t("common:home.studentTitle")}>
           <p>{t("common:home.studentBody")}</p>

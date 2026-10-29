@@ -23,12 +23,15 @@
     "welcome": "Welcome, {{name}}",
     "role": "Your role: {{role}}.",
     "proctorTitle": "Your tests",
-    "proctorBody": "Import a quiz JSON file, check and fix it, and save it as a test. You can export it again at any time.",
+    "proctorBody": "Import a quiz JSON file, check and fix it, and save it as a test. Practise your tests and export them again at any time.",
     "importLink": "Import a quiz",
     "testsLink": "See your tests",
     "studentTitle": "Nothing to take yet",
-    "studentBody": "Practice tests and assignments from your proctors will appear here.",
-    "adminTitle": "Administration"
+    "studentBody": "Practice tests appear here once a proctor shares one with you.",
+    "adminTitle": "Administration",
+    "recentTitle": "Recent practice",
+    "recentEmpty": "No practice attempts yet. Open one of your tests and choose Take test.",
+    "recentItem": "· {{date}} · {{score}}"
   },
   "forbidden": {
     "title": "Not available",

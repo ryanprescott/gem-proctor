@@ -8,6 +8,7 @@ import {
   Result,
   recomputeScore,
   serializeResult,
+  topicBreakdown,
   toResult,
 } from "../src/index.ts";
 import { fixedFixture, fixture } from "./fixture.ts";
@@ -329,5 +330,28 @@ describe("toResult with stored grades (practice export, P1.md §5)", () => {
     expect(result.questions[1]).not.toHaveProperty("selfGraded");
     expect(result.score).toBe(2);
     expect(Result.safeParse(result).success).toBe(true);
+  });
+});
+
+describe("B31: topicBreakdown", () => {
+  test("groups by topic in order of first appearance, with correct / total and points", () => {
+    const qs = [
+      { id: 1, topic: "Vectors" },
+      { id: 2, topic: "Complexity", points: 2 },
+      { id: 3, topic: "Vectors" },
+      { id: 4, topic: "Complexity" },
+      { id: 5, topic: "Sets" },
+    ];
+    const awarded = new Map([
+      [1, 1],
+      [2, 2], // self-graded: full points
+      [3, 0],
+      [4, 0.5],
+    ]);
+    expect(topicBreakdown(qs, awarded)).toEqual([
+      { topic: "Vectors", correct: 1, total: 2, points: 1, maxPoints: 2 },
+      { topic: "Complexity", correct: 1, total: 2, points: 2.5, maxPoints: 3 },
+      { topic: "Sets", correct: 0, total: 1, points: 0, maxPoints: 1 },
+    ]);
   });
 });

@@ -124,3 +124,34 @@ Built in `apps/web`: the attempt page `/practice/attempts/:id` (`src/routes/Atte
 - **"I was right" during the attempt** is in F4 already (the feedback block, after a short answer is checked incorrect), as P1.md §5 allows; the results screen gets the same control in F5.
 - The catalog check has a new dynamic key family `practice:outcome.` tied to the shared `GRADE_OUTCOMES` enum (`tools/i18n/check-catalogs.ts`).
 - The results page here only shows score, percentage and time; F5 adds the per-question review, topic breakdown, retake and export.
+- *Note added in F5:* F5 extends `PracticeSection.tsx` and `Results.tsx` (history, Retake missed, the full results screen) and moves the start mutation to `src/practice/useStartAttempt.ts`; the F4 rows above still hold (`practice.e2e.ts` passes unchanged in F5's `bun run ci`).
+
+## F5 Results, retake & history UI
+
+Built in `apps/web`: the full results screen (`src/routes/Results.tsx`: score, percentage, time, kind, Retake / Retake missed / Export, topics covered and the per-topic table, per-question review with your answer, the correct answer, explanation, evidence quotes, points and "I was right" / undo), the history table and Retake missed on the test detail page (`src/routes/PracticeSection.tsx`), the shared start hook (`src/practice/useStartAttempt.ts`), recent attempts on the proctor home page and the student message (`src/routes/Home.tsx`); `topicBreakdown` in `packages/shared/src/result.ts`. Tests: `apps/web/e2e/results.e2e.ts` (an attempt with known answers made through the API), `packages/shared/test/grading.test.ts` "B31".
+
+| # | Result | Evidence |
+|---|---|---|
+| B30 | **pass** | `results.e2e.ts` "B30": "1.5 of 6 points (25%)" (points and percent through `Intl.NumberFormat`), "Time taken" (`formatDuration`, `Intl` units + list format); five questions in the test's order, each with the question, "Your answer:" (or "Not answered"), the outcome in text ("Correct", "Partly correct", "Incorrect"), points ("(0.5 of 1 points)"), the correct answer(s), the explanation, and for q5 the evidence quote in a `blockquote` under "From the source:". axe: zero violations. |
+| B31 | **pass** | `results.e2e.ts` "B31": the topic table rows are exactly Vectors 1 of 2 / 1 of 2, Complexity 0 of 2 / 0.5 of 3, Sets 0 of 1 / 0 of 1 for the known answers (order of first appearance), under "Topics covered:". `grading.test.ts` "B31" checks `topicBreakdown` on the same data with a self-graded question. |
+| B32 | **pass** | `results.e2e.ts` "B32": "I was right" on the wrong short answer changes the score to "3.5 of 6 points (58.3%)", the Complexity row to 2.5 of 3, shows "Self-graded: you marked this answer as right.", and the live region says "Marked as right (self-graded). Score: 3.5 of 6."; "Undo “I was right”" returns to 25 % and announces "Self-grade undone."; redone, the test detail history shows "3.5 of 6 (58.3%)". |
+| B33 | **pass** | `results.e2e.ts` "B33": "Retake missed (3 questions)" opens "Question 1 of 3" and the API shows a `retake_missed` attempt over exactly `[3, 4, 5]` (q2 was self-graded right); after a perfect retake, "Retake missed (nothing missed)" is disabled; "Retake" opens a full attempt ("Question 1 of 5"). |
+| B34 | **pass** | `results.e2e.ts` "B34": the downloaded file has `score` 3.5, `maxScore` 6, `percentage` 58.33, `mode`, `attemptId`, questions 1–5, q2 `selfGraded: true`; the screen shows the same score, and each question's `userAnswer` (or "Not answered") and correct/incorrect outcome match what's on screen. |
+| B35 | **pass** | `results.e2e.ts` "B35": the history table ("3 attempts, newest first") lists the in-progress attempt (date via `Intl`, "In progress", a "Resume attempt of …" link), the retake ("Retake missed (3 questions)", "3 of 3 (100%)") and the first attempt ("3.5 of 6 (58.3%)", a duration in `Intl` units), with "Results of …" links to `/practice/attempts/<id>/results`; Resume and Discard are shown for the in-progress one; Discard opens an `alertdialog`, deletes it, announces "Attempt discarded." and the table drops to 2 rows. axe: zero violations on the test detail page with history, with the discard dialog open, and on the results page (B30). |
+
+Home page (P1.md §6), `results.e2e.ts` "home": the proctor home lists recent attempts (five at most, `GET /practice/attempts?limit=5`) with links and scores, axe clean; the student home says "Practice tests appear here once a proctor shares one with you." and has no practice list.
+
+**`bun run ci`:** all steps pass.
+
+```
+✔ biome check                       ✔ JSON Schema export is up to date
+✔ lint rule build is up to date     ✔ typecheck (6 projects)
+✔ lint-rule snapshot                ✔ bun test — 374 pass, 0 fail, 16 files
+✔ suppression baseline (0)          ✔ ruff + ruff format, verify unit tests (3)
+✔ i18n catalog check (371 keys)     ✔ Playwright + axe — 22 passed
+```
+
+**Deviations and notes.**
+- The per-question review and the topic breakdown use the test's own order (`quizOrder`), like the export, not the shuffled order of the attempt.
+- "Retake missed" on any results page retakes the misses of the **most recent** submitted attempt of the test (P1.md §5), which is the attempt shown unless an older result is opened; the button shows how many questions it will include.
+- New dynamic catalog family `practice:kind.` tied to `PRACTICE_KINDS`.

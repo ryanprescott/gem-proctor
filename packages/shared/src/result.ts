@@ -217,3 +217,34 @@ export function resultWarnings(result: Pick<Result, "questions" | "score" | "per
   }
   return issues;
 }
+
+export interface TopicBreakdownRow {
+  topic: string;
+  /** Questions with full points (self-grades included). */
+  correct: number;
+  total: number;
+  points: number;
+  maxPoints: number;
+}
+
+/**
+ * Per-topic breakdown for the results screen (SPEC §6, P1.md §5): grouped by question `topic` in order of
+ * first appearance, from the stored points of each question (missing = 0).
+ */
+export function topicBreakdown(
+  questions: readonly Pick<Question, "id" | "topic" | "points">[],
+  pointsAwarded: ReadonlyMap<number, number>,
+): TopicBreakdownRow[] {
+  const rows = new Map<string, TopicBreakdownRow>();
+  for (const q of questions) {
+    const max = q.points ?? 1;
+    const got = pointsAwarded.get(q.id) ?? 0;
+    const row = rows.get(q.topic) ?? { topic: q.topic, correct: 0, total: 0, points: 0, maxPoints: 0 };
+    row.total += 1;
+    if (got >= max) row.correct += 1;
+    row.points = round2(row.points + got);
+    row.maxPoints = round2(row.maxPoints + max);
+    rows.set(q.topic, row);
+  }
+  return [...rows.values()];
+}
