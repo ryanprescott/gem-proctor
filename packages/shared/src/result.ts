@@ -13,6 +13,10 @@ export interface QuestionResponse {
   questionId: number;
   /** A single answer, or the selected options for `multi_choice`. */
   answer: string | string[];
+  /** A stored grade (practice export, P1.md §5): used as is instead of grading again. */
+  grade?: Pick<Grade, "outcome" | "pointsAwarded">;
+  /** "I was right" on a short answer: counts as correct with full points (SPEC §7.2). */
+  selfGraded?: boolean;
 }
 
 const UNIFY: [RegExp, string][] = [
@@ -130,22 +134,26 @@ export function gradeQuestion(q: Question, answer: string | readonly string[]): 
 
 /**
  * Build a `Result` (SPEC §2.2): the same quiz plus one attempt. `score` and `percentage` are always
- * recomputed here. Questions without a response get an empty answer and are marked incorrect.
+ * recomputed here. Questions without a response get an empty answer and are marked incorrect. Responses
+ * are graded with `gradeResponse` unless they carry a stored `grade`.
  */
 export function toResult(
   quiz: Quiz,
   responses: readonly QuestionResponse[],
   meta: Pick<Result, "attemptId" | "mode" | "startedAt" | "submittedAt"> = {},
 ): Result {
-  const byId = new Map(responses.map((r) => [r.questionId, r.answer]));
+  const byId = new Map(responses.map((r) => [r.questionId, r]));
   let score = 0;
   let maxScore = 0;
   const weighted = quiz.questions.some((q) => (q.points ?? 1) !== 1);
   const questions: AnsweredQuestion[] = quiz.questions.map((q) => {
     const points = q.points ?? 1;
     maxScore += points;
-    const answer = byId.get(q.id);
-    const grade = gradeResponse(q, answer);
+    const response = byId.get(q.id);
+    const answer = response?.answer;
+    const grade = response?.selfGraded
+      ? { outcome: "correct" as const, pointsAwarded: points }
+      : (response?.grade ?? gradeResponse(q, answer));
     const correct = grade.outcome === "correct";
     const awarded = grade.pointsAwarded;
     score += awarded;
@@ -155,6 +163,7 @@ export function toResult(
       userIsCorrect: correct,
     };
     if (Array.isArray(answer)) out.userAnswers = [...answer];
+    if (response?.selfGraded) out.selfGraded = true;
     // Partial credit can't be read from `userIsCorrect`, so it's always written out.
     if (weighted || grade.outcome === "partial") out.pointsAwarded = awarded;
     return out;

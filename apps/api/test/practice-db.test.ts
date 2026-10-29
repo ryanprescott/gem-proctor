@@ -96,6 +96,23 @@ describe.skipIf(!hasDb)("practice tables", () => {
     expect(resp?.pointsAwarded).toBe(0.33);
   });
 
+  test("B10: answers round-trip unchanged, including strings that look like JSON", async () => {
+    const a = attempt({ submittedAt: new Date(), score: 0, durationMs: 1 });
+    await db.insert(PracticeAttempt).values(a);
+    const answers = ["3.50", "true", "null", '"quoted"', "[1]", ["a", "2"], null];
+    for (const [i, answer] of answers.entries()) {
+      await db.insert(Response).values({ id: newId(), attemptId: a.id, questionId: i + 1, answer });
+    }
+    const rows = await db.select().from(Response).where(eq(Response.attemptId, a.id));
+    const back = [...rows].sort((x, y) => x.questionId - y.questionId).map((r) => r.answer);
+    expect(back).toEqual(answers);
+    const raw = await pool.query(
+      "SELECT jsonb_typeof(answer) AS t FROM response WHERE attempt_id = $1 ORDER BY question_id",
+      [a.id],
+    );
+    expect(raw.rows.map((r) => r.t)).toEqual(["string", "string", "string", "string", "string", "array", null]);
+  });
+
   test("B10: unique (attemptId, questionId) and cascade delete of responses", async () => {
     const a = attempt({ submittedAt: new Date(), score: 0, durationMs: 1 });
     await db.insert(PracticeAttempt).values(a);

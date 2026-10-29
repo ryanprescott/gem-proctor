@@ -173,7 +173,8 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
         method: "POST",
         url: () => "/practice/attempts",
         body: () => ({ testId, kind: "full" }),
-        expect: proctor,
+        // The handler also checks `test` / `practice`: the test's owner, or an admin (P1.md §6).
+        expect: ownerOnly,
       },
       { id: "practice.list", method: "GET", url: () => `/practice/attempts?testId=${testId}`, expect: proctor },
       { id: "practice.get", method: "GET", url: () => `/practice/attempts/${attemptId}`, expect: ownAttempt },
@@ -251,6 +252,38 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
     const res = await p.get(`${API}/tests/${missing}`);
     expect(res.statusCode).toBe(404);
     expect(res.json().code).toBe("test_not_found");
+  });
+
+  test("B21: starting on a test that doesn't exist is 404 for a proctor and 403 for a student", async () => {
+    const missing = "01890000-0000-7000-8000-000000000000";
+    const { client: p } = await signIn(t.app, "other@example.com");
+    const res = await p.post(`${API}/practice/attempts`, { testId: missing, kind: "full" });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe("test_not_found");
+    const { client: s } = await signIn(t.app, "student@example.com");
+    expect((await s.post(`${API}/practice/attempts`, { testId: missing, kind: "full" })).statusCode).toBe(403);
+  });
+
+  test("B21: another user's attempt is 404 for every route, admins included, and a missing id is 404 too", async () => {
+    const missing = "01890000-0000-7000-8000-000000000000";
+    for (const email of ["other@example.com", "admin@example.com"]) {
+      const { client } = await signIn(t.app, email);
+      for (const id of [attemptId, missing]) {
+        for (const [method, url] of [
+          ["GET", `/practice/attempts/${id}`],
+          ["GET", `/practice/attempts/${id}/export`],
+          ["POST", `/practice/attempts/${id}/submit`],
+          ["DELETE", `/practice/attempts/${id}`],
+        ] as const) {
+          const res = await client.request({ method, url: `${API}${url}` });
+          expect(res.statusCode).toBe(404);
+          expect(res.json().code).toBe("not_found");
+        }
+      }
+      // Their own history doesn't include it either.
+      const list = (await client.get(`${API}/practice/attempts?testId=${testId}`)).json();
+      expect(list.attempts.map((a: { id: string }) => a.id)).not.toContain(attemptId);
+    }
   });
 
   test("proctors only list their own tests; admins see all", async () => {

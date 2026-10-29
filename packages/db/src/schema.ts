@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   index,
   integer,
   jsonb,
@@ -156,6 +157,16 @@ export const AuditLog = pgTable(
 const points = (name: string) => numeric(name, { precision: 10, scale: 2, mode: "number" });
 const ms = (name: string) => bigint(name, { mode: "number" });
 
+/**
+ * jsonb without drizzle's second parse: its `jsonb` runs `JSON.parse` on any string it reads back, so a
+ * stored answer `"3.505"` would come back as the number 3.505. pg already parses jsonb.
+ */
+const jsonValue = customType<{ data: unknown; driverData: unknown }>({
+  dataType: () => "jsonb",
+  toDriver: (value) => JSON.stringify(value),
+  fromDriver: (value) => value,
+});
+
 /** One practice attempt. Private to its user: every lookup is scoped by `user_id` (P1.md §5). */
 export const PracticeAttempt = pgTable(
   "practice_attempt",
@@ -211,7 +222,7 @@ export const Response = pgTable(
     /** The question's `id` within the attempt's test version (SPEC §2.3). */
     questionId: integer("question_id").notNull(),
     /** A string, or a string array for `multi_choice`; null while only flagged or visited. */
-    answer: jsonb("answer"),
+    answer: jsonValue("answer"),
     /** Set when the answer is checked (or graded at submit); the answer is then locked. */
     autoResult: text("auto_result", { enum: ["correct", "partial", "incorrect"] }),
     pointsAwarded: points("points_awarded").notNull().default(0),

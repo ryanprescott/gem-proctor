@@ -153,6 +153,9 @@ export class Client {
   patch(url: string, payload?: unknown) {
     return this.request({ method: "PATCH", url, payload: payload as InjectOptions["payload"] });
   }
+  delete(url: string) {
+    return this.request({ method: "DELETE", url });
+  }
 }
 
 export const API = "/api/v1";

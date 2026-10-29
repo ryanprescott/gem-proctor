@@ -308,3 +308,26 @@ describe("B9: Result with selfGraded", () => {
     expect(serializeResult(self)).toContain('"selfGraded": true');
   });
 });
+
+describe("toResult with stored grades (practice export, P1.md §5)", () => {
+  test("a stored grade is used as is, and selfGraded counts as correct with full points", () => {
+    const quiz = Quiz.parse({
+      quiz_title: "T",
+      total_questions: 2,
+      questions: [
+        { ...base, correctAnswer: "2n-1", points: 2 },
+        { ...base, id: 2, options: ["x", "y"], correctAnswer: "x" },
+      ],
+    });
+    const result = toResult(quiz, [
+      { questionId: 1, answer: "two n minus one", grade: { outcome: "incorrect", pointsAwarded: 0 }, selfGraded: true },
+      // Stored as incorrect even though re-grading would say correct: the stored grade wins.
+      { questionId: 2, answer: "x", grade: { outcome: "incorrect", pointsAwarded: 0 } },
+    ]);
+    expect(result.questions[0]).toMatchObject({ userIsCorrect: true, selfGraded: true, pointsAwarded: 2 });
+    expect(result.questions[1]).toMatchObject({ userIsCorrect: false, pointsAwarded: 0 });
+    expect(result.questions[1]).not.toHaveProperty("selfGraded");
+    expect(result.score).toBe(2);
+    expect(Result.safeParse(result).success).toBe(true);
+  });
+});

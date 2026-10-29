@@ -60,3 +60,37 @@ Built: `PracticeAttempt` and `Response` in `packages/db/src/schema.ts`, migratio
 - A missing or someone else's attempt is `not_found` (the generic code); P1.md §6 lists no `practice_attempt_not_found`. Callers who couldn't act on an attempt even if it were theirs (students) get 403, like P0's tests.
 - Extra columns and checks beyond P1.md §4: `practice_attempt (user_id, started_at)` and `(test_version_id)` indexes for history; check constraints tying `question_ids` to `kind` and `score` / `duration_ms` to `submitted_at`. `user_id` cascades on user delete (attempts are private data); `test_version_id` doesn't.
 - `0002_grants.sql` granted on the tables that existed then, so P1's tables get an explicit grant in `0004_p1_grants.sql`.
+
+## F3 Practice API
+
+Built: the eight practice handlers in `apps/api/src/routes/practice.ts` (replacing F2's placeholder), `toResult` with stored grades and `selfGraded` (`packages/shared/src/result.ts`), and a `jsonb` column type for `response.answer` that doesn't re-parse strings (`packages/db/src/schema.ts`). Tests: `apps/api/test/practice.test.ts` (real Postgres, a test clock through `ctx.now`), the matrix and B21 tests in `apps/api/test/authz.test.ts`, `practice-db.test.ts` (answer round-trip), `packages/shared/test/grading.test.ts` (stored grades).
+
+| # | Result | Evidence |
+|---|---|---|
+| B13 | **pass** | `practice.test.ts` "B13" (5 tests): `full` pins the latest version (v1, and v2 once a second version exists), stores a 32-hex seed, `question_ids` null and `maxScore` 6 (weights 1+2+1+1+1); a second start → 409 `{ code: "practice_attempt_in_progress", params: { attemptId } }`; archived → 409 `test_archived`; `retake_missed` with no submitted attempt, and after an all-correct one → 409 `practice_nothing_to_retake`; after an attempt with q2 self-graded and q3 correct it stores exactly `[1, 4, 5]` (unanswered q5 included), `maxScore` 3, and pins **v1** although v2 is the latest. A concurrent start that loses the partial unique index is mapped to the same 409. |
+| B14 | **pass** | `practice.test.ts` "B14": `GET` returns questions in `shuffleAttempt(storedSeed, …)` order with each option list in its shuffled order (`true_false` kept), responses in the same order, `quizOrder` in the test's order; two requests return identical bodies. Second test: two attempts on the 20-question fixture have different seeds and different question orders over the same ids. |
+| B15 | **pass** | `practice.test.ts` "B15" (4 tests): `check: true` returns `{ outcome, pointsAwarded, maxPoints, correctAnswer, explanation }` (and `correctAnswers` for multi_choice, partial 0.5); a second check, an answer change, or both → 409 `practice_answer_locked`; `flagged` and `timeSpentMs` update after the check; question 99 → 404 `practice_question_not_in_attempt` (also a question outside a retake's subset); `check` with no answer → 400 `validation_failed` `{ field: "answer" }`; after submit, `PUT`, `submit` and `DELETE` → 409 `practice_attempt_submitted`. |
+| B16 | **pass** | `practice.test.ts` "B16": 10 000 000 ms sent 5 s after the start is stored as 5 000; a smaller value later keeps 5 000; after another second 5 800 is accepted; negative → 400. "B17 + B16": `durationMs` = 66 000 = `submittedAt − startedAt` on the test clock, computed by the server (the request carries no time). |
+| B17 | **pass** | `practice.test.ts` "B17 + B16": submit stores `submittedAt` and `score` 3.5 / 6 = q1 0 + q2 2 (self-graded) + q3 1 (an unchecked draft, graded at submit) + q4 0.5 (partial) + q5 0 (unanswered). No `audit_log` rows are written by practice actions. |
+| B18 | **pass** | `practice.test.ts` "B18" (2 tests): on an incorrect short answer, `right: true` → `selfGraded`, 2 points (score stays null before submit), `right: false` undoes it; single_choice, numeric, multi_choice and unanswered questions → 409 `practice_self_grade_not_allowed`. After submit, undo → stored score 1.5, redo → 3.5 (checked in the response and in the row). |
+| B19 | **pass** | `practice.test.ts` "B19": `GET /practice/attempts?testId=` returns the owner's two attempts newest first (retake, then full) with kind, status, score, `maxScore`, `durationMs`, `questionCount`; the admin's attempt on the same test is in neither the owner's list nor vice versa; `missedCount` is 0 after a perfect retake and null without a submitted attempt; `?limit=1` without `testId` returns the newest attempt across tests (for the home page). |
+| B20 | **pass** | `practice.test.ts` "B20" (2 tests): the export passes `Result`, has `mode: "practice"`, `attemptId`, `startedAt`, `submittedAt`, `score` 3.5, `maxScore` 6, questions in order 1–5 with unshuffled options, q2 `selfGraded: true, userIsCorrect: true`, q4 `pointsAwarded: 0.5`, q5 `userAnswer: ""`, `userIsCorrect: false`; it re-imports through `POST /imports/preview` with no errors. Before submit → 409 `practice_attempt_not_submitted`. The retake's export has only questions 1, 4, 5 and `total_questions: 3`. `grading.test.ts`: a stored grade wins over re-grading. |
+| B21 | **pass** | `authz.test.ts` matrix: every practice route × anonymous (401), student (403), owner (allowed), proctor non-owner, admin. `practice.start` is owner-only for proctors (non-owner 403) and allowed for an admin; on a missing test 404 `test_not_found` for a proctor, 403 for a student. For someone's attempt, every attempt route is 404 `not_found` for another proctor **and an admin** (matrix rows plus "B21: another user's attempt is 404 for every route, admins included"), the same as a missing id, and it never shows in their history. |
+| B22 | **pass** | `practice.test.ts`: `DELETE` on an in-progress attempt → `{ ok: true }`, the row and its responses are gone, `GET` is then 404; on a submitted attempt → 409 `practice_attempt_submitted`. |
+
+**`bun run ci`:** all steps pass.
+
+```
+✔ biome check                       ✔ JSON Schema export is up to date
+✔ lint rule build is up to date     ✔ typecheck (6 projects)
+✔ lint-rule snapshot                ✔ bun test — 373 pass, 0 fail, 16 files
+✔ suppression baseline              ✔ ruff + ruff format, verify unit tests (3)
+✔ i18n catalog check (266 keys)     ✔ Playwright + axe — 8 passed
+```
+
+**Deviations and notes.**
+- **Unchecked answers.** `PUT` with `answer` and no `check` stores the answer ungraded (still changeable); submit grades it. The UI keeps typed-but-unchecked text in `sessionStorage` as P1.md §5 says, but the API doesn't lose such an answer either.
+- **Who may start.** P1.md §5 says "the test's owner (proctor) and admins, on tests they own", §6 says "test owner, or admin". Built as §6: the admin policy line reaches `test` / `practice` on any test. The attempt itself is still private to whoever started it.
+- **In-progress rule** is per test version (the partial unique index), so an in-progress retake on v1 doesn't block a full attempt on v2; the UI offers Resume for any in-progress attempt of the test.
+- **Fix to F2's table:** drizzle's `jsonb` JSON-parses any string it reads back, so a stored answer `"3.505"` came back as a number. `response.answer` now uses a custom `jsonb` type without that second parse (no migration: the SQL type is unchanged); `practice-db.test.ts` checks that `"3.50"`, `"true"`, `"null"` and arrays round-trip. F2's B10 row stays **pass** (its tests didn't store JSON-looking strings); the new test is part of this commit.
+- `check` with an empty answer is `validation_failed` (`params.field: "answer"`) rather than a new code.
