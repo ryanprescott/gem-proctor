@@ -1,0 +1,3 @@
+# `docker compose up --build` from the repo root brings up postgres, api, web and verify (P0.md A2).
+include:
+  - docker/compose.yaml

@@ -1,0 +1,91 @@
+# gem-proctor stack (SPEC §11.5, P0.md S2). From the repo root: `docker compose up --build`
+# (the root compose.yaml includes this file; values come from the root .env).
+name: gem-proctor
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gem_proctor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      GEM_OWNER_PASSWORD: ${GEM_OWNER_PASSWORD:?set GEM_OWNER_PASSWORD in .env}
+      GEM_APP_PASSWORD: ${GEM_APP_PASSWORD:?set GEM_APP_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql.tpl:ro
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build: { context: .., dockerfile: docker/web.Dockerfile }
+    volumes:
+      - web-dist:/web-dist
+    restart: "no"
+
+  api:
+    build: { context: .., dockerfile: docker/api.Dockerfile }
+    depends_on:
+      postgres: { condition: service_healthy }
+      web: { condition: service_completed_successfully }
+      verify: { condition: service_started }
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      API_PORT: ${API_PORT:-3000}
+      DATABASE_URL: postgres://gem_app:${GEM_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:-gem_proctor}
+      DATABASE_URL_OWNER: postgres://gem_owner:${GEM_OWNER_PASSWORD}@postgres:5432/${POSTGRES_DB:-gem_proctor}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ENDPOINT_SECRET_KEY: ${ENDPOINT_SECRET_KEY:-}
+      VERIFY_SOCKET: /run/verify/verify.sock
+      WEB_DIST: /web-dist
+      MIGRATE_ON_START: "true"
+    volumes:
+      - verify-socket:/run/verify
+      - web-dist:/web-dist:ro
+    ports:
+      - "${API_PORT:-3000}:${API_PORT:-3000}"
+    restart: unless-stopped
+
+  # Runs model-written programs from P2.1 on; isolation is the security (SPEC §3A.3.1).
+  verify:
+    build: { context: .., dockerfile: docker/verify.Dockerfile }
+    network_mode: none # no interface besides loopback
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 1g
+    cpus: 1.0
+    # No environment variables and no secrets: nothing is passed in, and the entrypoint runs under `env -i`.
+    volumes:
+      - verify-socket:/run/verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/python",
+          "-I",
+          "-B",
+          "-c",
+          "import socket; s = socket.socket(socket.AF_UNIX); s.connect('/run/verify/verify.sock'); s.sendall(b'{\"kind\":\"health\"}\\n'); assert b'\"ok\":true' in s.recv(4096)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  verify-socket:
+  web-dist:

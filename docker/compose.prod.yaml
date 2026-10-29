@@ -1,0 +1,6 @@
+# Production override: run the verify sandbox under gVisor (SPEC §3A.3.1). Docker Desktop on WSL can't
+# easily run gVisor, so dev uses the default runtime with the same settings.
+#   docker compose -f compose.yaml -f docker/compose.prod.yaml up -d
+services:
+  verify:
+    runtime: runsc

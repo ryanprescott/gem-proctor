@@ -1,0 +1,11 @@
+**/node_modules
+.dev
+.git
+.env
+.env.*
+!.env.example
+**/dist
+**/test-results
+**/playwright-report
+**/__pycache__
+tools/probes

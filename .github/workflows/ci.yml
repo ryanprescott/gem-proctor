@@ -1,0 +1,73 @@
+# CI (P0.md S19). Everything runs through `bun run ci`, the same command as locally; here Postgres and the
+# end-to-end target are the Compose stack. Any failing step (including axe) blocks the merge.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python tools (ruff; pinned verify libraries for the skeleton tests)
+        run: pip install ruff==0.17.3 -r apps/verify/requirements.txt
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Playwright browser
+        run: bunx --cwd apps/web playwright install --with-deps chromium
+
+      - name: .env for Compose (generated secrets)
+        run: |
+          cp .env.example .env
+          rand() { openssl rand -base64 32 | tr -d '\n'; }
+          pw() { openssl rand -hex 16; }
+          OWNER=$(pw); APP=$(pw); SUPER=$(pw)
+          # development: the e2e run talks plain http://localhost (Secure cookies are covered by the API tests, A13).
+          sed -i "s|^NODE_ENV=.*|NODE_ENV=development|" .env
+          sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$SUPER|" .env
+          sed -i "s|^GEM_OWNER_PASSWORD=.*|GEM_OWNER_PASSWORD=$OWNER|" .env
+          sed -i "s|^GEM_APP_PASSWORD=.*|GEM_APP_PASSWORD=$APP|" .env
+          sed -i "s|^DATABASE_URL_OWNER=.*|DATABASE_URL_OWNER=postgres://gem_owner:$OWNER@localhost:5432/gem_proctor|" .env
+          sed -i "s|^DATABASE_URL=.*|DATABASE_URL=postgres://gem_app:$APP@localhost:5432/gem_proctor|" .env
+          sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$(rand)|" .env
+          echo "TEST_PG_ADMIN_URL=postgres://postgres:$SUPER@127.0.0.1:5432/postgres" >> "$GITHUB_ENV"
+          echo "GEM_OWNER_PASSWORD=$OWNER" >> "$GITHUB_ENV"
+          echo "GEM_APP_PASSWORD=$APP" >> "$GITHUB_ENV"
+
+      - name: Compose up (postgres, web, api, verify)
+        run: docker compose up --build --detach
+
+      - name: Compose checks (A2 health, A33 verify isolation)
+        run: bun scripts/check-compose.ts http://localhost:3000
+
+      - name: bun run ci
+        env:
+          E2E_BASE_URL: http://localhost:3000
+          CI: "true"
+        run: bun run ci
+
+      - name: Compose logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
