@@ -1,7 +1,7 @@
-# gem-proctor — Product & Technical Spec (Draft v0.15)
+# gem-proctor — Product & Technical Spec (Draft v0.16)
 
 > Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13; planned contingencies and the decision log are in §15.
-> Last updated: 2026-10-28 (v0.15: lint-rule contingency plans; contingencies & decision log, §15)
+> Last updated: 2026-10-28 (v0.16: the model never decides computable answers; they are computed locally, §3A.3.1)
 
 ---
 
@@ -144,7 +144,7 @@ The model assigned to each authoring role (§3B) writes questions in our schema 
 1. **Sources & scope.** The creator picks text sources from their **source library** (§3C), or adds new ones by pasting or uploading `.md`/`.txt`. They then narrow the **scope** to particular sections (from the Markdown headings), e.g. "§1.1–1.4 only". Only chunks inside the scope go on to the next steps. The stored text is what the local grounding check (§3A.3) compares against.
 2. **Learning objectives.** The model reads the in-scope chunks from the knowledge base (§3C; section by section for long sources, then merged) and proposes a list of learning objectives / topics. Each one cites the chunks it comes from. The creator edits, merges, removes or adds objectives. This list becomes the **coverage target**.
 3. **Blueprint.** The creator picks a **test type** (§3A.1.1), which fills in the defaults: question count, question-type mix, how questions are spread across the selected sections, and style guidance for the model. The creator can then change any number and add constraints ("no questions on §1.4", "include 3 applied word problems"). Together with the **scope** from step 1, this is what sets how hard the test is. There's no separate difficulty setting.
-4. **Generate.** The model writes questions that follow the blueprint, in the **generation schema** (§3A.2). Each question includes its objective id(s), source chunk id(s), and a verbatim supporting quote.
+4. **Generate.** The model writes questions that follow the blueprint, in the **generation schema** (§3A.2). Each question includes its objective id(s), source chunk id(s), and a verbatim supporting quote. For a **computable** question the model leaves the answer blank: it writes the question, the distractors and a program, and the answer is computed locally (§3A.3.1).
 5. **Validate.** The local pipeline (§3A.3) checks every question and builds a **coverage matrix** (objectives × questions, plus source sections that no question touches).
 6. **Review.** The creator sees each question with its validation results and source passage next to it. Per-question actions: **accept / edit / reject / regenerate with a note** ("too easy", "distractor B is also correct", "test the concept, not the definition"). Whole-test actions: "more on objective 3", "fill coverage gaps".
 7. **Revise.** Only the affected questions go back to the model, along with the creator's notes and the validation failures. Accepted questions are **locked**: they're sent as context so the model avoids duplicating them, but the model can't change them. Steps 5–7 repeat until the creator is satisfied.
@@ -180,7 +180,7 @@ A test type is a **preset for the blueprint**. It only provides defaults, and ev
 ### 3A.2 Generation schema & model integration
 
 - **Structured outputs.** Generation calls the LLM layer's `generateObject(GenerationBatch)`. The backend enforces the schema as well as it can (§3B.3), and the result is **always** re-validated with Zod on our side, whatever the backend claims.
-- **Generation schema ≠ extended quiz schema.** The schema the model fills in is kept simple: no deep unions, and options are given as objects with an `isCorrect` flag instead of a separate answer field. A deterministic mapper in `packages/shared` converts it to the extended `Question` (§4): it fills `options` and sets `correctAnswer` from the correct one, assigns `id`s 1..n, fills `topics_covered` from the objectives, and so on. This keeps the generation schema within what constrained decoding handles well and keeps model-facing changes separate from storage changes.
+- **Generation schema ≠ extended quiz schema.** The schema the model fills in is kept simple: no deep unions, and options are given as objects with an `isCorrect` flag instead of a separate answer field. A deterministic mapper in `packages/shared` converts it to the extended `Question` (§4): it fills `options` and sets `correctAnswer` from the correct one (for computable questions, from the computed value, §3A.3.1), assigns `id`s 1..n, fills `topics_covered` from the objectives, and so on. This keeps the generation schema within what constrained decoding handles well and keeps model-facing changes separate from storage changes.
 
 ```ts
 // Sketch
@@ -191,14 +191,18 @@ GeneratedQuestion = z.object({
   topic: z.string(),
   question: z.string(),
   options: z.array(z.object({ text: z.string(), isCorrect: z.boolean(), whyWrong: z.string().optional() })).optional(),
-  acceptedAnswers: z.array(z.string()).optional(),     // short_answer
-  numericAnswer: z.object({ value: z.number(), tolerance: z.number() }).optional(),
-  explanation: z.string(),
-  computable: z.boolean(),                             // L7: can the answer be computed? (§3A.3.1)
+                                                       // computable: distractors only, every isCorrect false
+  acceptedAnswers: z.array(z.string()).optional(),     // short_answer; omitted when computable
+  numericAnswer: z.object({ value: z.number(), tolerance: z.number() }).optional(),   // omitted when computable
+  explanation: z.string(),                             // computable: explains the method, never states the value
+  computable: z.boolean(),                             // the model decides *whether* it's computable, never the answer (§3A.3.1)
+  answerProgram: z.string().optional(),                // required when computable: Python setting `result`, whitelisted tools
   evidence: z.array(z.object({ chunkId: z.string(), quote: z.string() })).min(1),
 })
 GenerationBatch = z.object({ questions: z.array(GeneratedQuestion), notes: z.string().optional() })
 ```
+
+- **Computable questions carry no answer from the model.** If `computable` is true, the model marks no option correct, gives no `numericAnswer` or `acceptedAnswers`, and supplies `answerProgram` instead. L1 fails a question that breaks this. The answer is filled in by L7 (§3A.3.1).
 
 - **Citations, done our way.** The schema asks for `evidence: { chunkId, quote }`, and we verify those locally (§3A.3). No server-side citation feature is needed.
 - **How sources are sent.** For each objective, our server **retrieves** the relevant chunks from the knowledge base (§3C.3) and sends their text, each chunk tagged with its id. The model never queries the knowledge base itself, and only sees what we send. So ids and quotes always match stored text, and we always know exactly what the model was shown (recorded with the revision).
@@ -209,9 +213,10 @@ GenerationBatch = z.object({ questions: z.array(GeneratedQuestion), notes: z.str
 
 ### 3A.2.1 Why the local checks matter
 
-The checks are the same for every model, but they matter most for small ones. A 7–14B model running on one consumer GPU (e.g. Qwen on an RTX 3060 12 GB) produces valid JSON fairly reliably when decoding is constrained. It is noticeably weaker than a frontier model at **faithful quoting, plausible distractors, and making sure exactly one answer is correct**. The design accounts for that:
+The checks are the same for every model, but they matter most for small ones. A 7–14B model running on one consumer GPU (e.g. Qwen on an RTX 3060 12 GB) produces valid JSON fairly reliably when decoding is constrained. It is noticeably weaker than a frontier model at **faithful quoting, plausible distractors, and making sure exactly one answer is correct**. Arithmetic is unreliable too: in a test on the reference setup (Qwen2.5 7B on Ollama), the model wrote out sample Q7 as $10 - 8 - 3$ and then answered $-14$. The design accounts for that:
 
 - L2 grounding and L3 leakage checks (§3A.3) catch the most common failures without any extra model calls.
+- Computable answers never come from the model at all (§3A.3.1).
 - Roles can point at **different models** (§3B.2). For example, a local model generates and a stronger model (local or cloud) runs the L6 judge, only on questions that already pass L1–L5.
 - With all roles on local endpoints, source material and student answers stay on your own infrastructure.
 
@@ -221,35 +226,67 @@ Structured outputs already guarantee that the JSON has the right **shape**, so t
 
 | Layer | Check | How (all local) |
 |---|---|---|
-| **L1 Structure** | Parses as `GeneratedQuestion`. Cross-field rules: single_choice has exactly one correct option; options are unique; `objectiveIds` and `chunkId`s exist. | Zod + `superRefine` |
+| **L1 Structure** | Parses as `GeneratedQuestion`. Cross-field rules: a non-computable single_choice has exactly one correct option; options are unique; `objectiveIds` and `chunkId`s exist. Computable questions: no option marked correct, no `numericAnswer`/`acceptedAnswers`, `answerProgram` present, and the type is one that can be computed (§3A.3.1). | Zod + `superRefine` |
 | **L2 Grounding** | Each `evidence.quote` actually appears in the cited chunk. | Normalized exact match, then fuzzy match (token-level similarity ≥ threshold). A **fail** means a missing chunk or a quote that isn't there, which is a likely hallucination. |
 | **L3 Answer leakage & form** | The correct answer isn't given away by the question text; the longest choice isn't always the correct one; no "all of the above"/"none of the above" unless allowed; the text is reasonably short. | Heuristics |
 | **L4 Duplicates** | Near-duplicate questions within the test, or against locked questions. | Question embeddings (same `embeddings` role as the knowledge base) + cosine threshold, plus n-gram overlap. |
 | **L5 Coverage** | Each question maps to its claimed objective; finds in-scope chunks, sections and objectives that no question covers. | Citations (`evidence.chunkId`) plus embedding similarity between questions, objectives and knowledge-base chunks → coverage matrix and source heatmap. A question whose claimed objective doesn't match its content gets a **warn**. |
 | **L6 Judge (optional)** | Is it really answerable from the evidence? Is exactly one answer correct? Are any distractors also defensible? | A separate model call (the `authoring.judge` role, ideally a different model from the generator) that grades one question at a time against its evidence. **Off by default** (it roughly doubles the model calls per question). Turned on per authoring session. Computable answers are covered by L7 regardless. |
-| **L7 Answer verification** | For computable questions: the stated answer is the value an **independent computation** produces, and exactly one option equals it. | The model writes a check program **without seeing the options or the answer**. A sandboxed Python worker runs it with whitelisted math libraries and compares the result to the options. See §3A.3.1. |
+| **L7 Answer computation & verification** | Generated computable questions: the answer is **computed**, never stated by the model. Imported or hand-edited computable questions: the stated answer equals an **independent computation**. | Two programs (the generator's `answerProgram` and a blind one from `verify.solve`, which never sees options or answer) run in a sandboxed Python worker with whitelisted math libraries. They must agree, and their result becomes (or is compared with) the answer. See §3A.3.1. |
 
 - L1–L3 run entirely in-process. L4/L5 use vectors already stored in the knowledge base (plus one embedding per new question). All five are fast, deterministic (apart from the embedding model version) and cheap to re-run.
-- L7 needs one model call per computable question, to write the check (cached with the question), plus a local sandbox run. Re-running it with the same check is deterministic and free.
+- L7 needs one model call per computable question, to write the blind check (cached with the question), plus two local sandbox runs. Re-running it with the same check is deterministic and free.
 - A question with any **fail** can't be accepted until it's fixed or regenerated. **Warn**s are shown but don't block.
 - Validation results are saved per question per revision, so the creator can see what changed between rounds.
 
-### 3A.3.1 Answer verification (L7)
+### 3A.3.1 Answer computation & verification (L7)
 
-**Principle:** the model may *state* a math answer, but for anything computable the answer has to be **verified by a local library**, never by a model's opinion.
+**Principle:** for anything computable, **the model never decides the answer.** It decides *whether* a question is computable, and writes the question, the distractors and a program. The answer is whatever a local library computes. Generated computable questions have no model-stated answer at all, and a stated answer on an imported or edited question is only ever checked against the computation, never trusted.
 
-**Flow (per question):**
+There are two paths:
+- **Generated questions: the answer is computed.** The generator leaves the answer blank, and L7 fills it in (flow A).
+- **Imported or hand-edited questions: the answer is checked.** These already have a `correctAnswer`, and L7 compares it with an independent computation (flow B, sample Q7).
 
-1. **Classify.** Generation marks each question `computable: true|false` (e.g. "compute $x^T y$" is computable; "which statement defines orthogonality" isn't). Imported questions are classified by the `verify.solve` model.
-2. **Blind check program.** The `verify.solve` role (§3B) gets the question text and, for context, the source passage. It does **not** see the options or the stated answer. It returns a short **check program**: a few lines of Python that set `result` using whitelisted tools only. Example for sample Q7:
-   ```python
-   from sympy import Matrix
-   x = Matrix([2, 4, -3]); y = Matrix([5, -2, 1])
-   result = x.dot(y)
-   ```
-3. **Run in the sandbox** (`apps/verify`, below) and get back a value: a number, rational, vector, matrix, symbolic expression or boolean.
-4. **Parse the options.** Each option and the `correctAnswer` are converted to values: plain numbers, fractions, LaTeX (`\frac`, `\sqrt`, `bmatrix`/`pmatrix` vectors and matrices, `^T`), and simple expressions such as `2n - 1`, using SymPy's LaTeX parsing plus our own handling for vectors and matrices.
-5. **Compare:** exact or symbolic equality (`simplify(a - b) == 0`), or within a tolerance for floats. Then decide:
+**Which questions can be computable (v1):** `single_choice`, `true_false`, `numeric` and `short_answer`. `multi_choice` is never computable in v1 (§13), because its answer depends on evaluating each option.
+
+**Check programs.** A check program is a few lines of Python that set `result` using whitelisted tools only (sandbox, below). Example for sample Q7:
+```python
+from sympy import Matrix
+x = Matrix([2, 4, -3]); y = Matrix([5, -2, 1])
+result = x.dot(y)
+```
+Every computable question gets **two independent programs**, so a single buggy program can't silently produce a wrong answer:
+- the **author program** (`answerProgram`), written by the generator together with the question;
+- the **blind program**, written by the `verify.solve` role (§3B) from the question text and the source passage only. It does **not** see the options, the author program, or any stated answer.
+
+Both run in the sandbox (`apps/verify`). Each returns a value: a number, rational, vector, matrix, symbolic expression or boolean. Two values are **equal** if they are exactly or symbolically equal (`simplify(a - b) == 0`), or within a tolerance for floats.
+
+**Flow A: generated computable question (answer computed)**
+
+1. **Classify.** The generator sets `computable: true`, writes the question and (for choice questions) **distractors only**, and supplies `answerProgram` (§3A.2).
+2. **Blind program.** `verify.solve` writes the blind program.
+3. **Run both** in the sandbox.
+4. **Agree?**
+
+   | Outcome | Condition | Result |
+   |---|---|---|
+   | **Computed** | Both programs succeed and their values are equal | The value becomes the answer (step 5). **pass**, `verification.status = "computed"` |
+   | **Programs disagree** | Both succeed, values differ | **fail**. The creator sees both programs and values. They can pick one (recorded as `fix_accepted`, with a note), or regenerate |
+   | **Couldn't compute** | Either program fails or times out | **warn**, `status = "unverified"`. The question has **no answer** and can't be accepted until it's re-run, regenerated, or the creator supplies the answer by hand (`provenance: "human"`, re-checked by flow B) |
+
+5. **Build the answer** from the computed value:
+   - **`single_choice`:** parse every distractor (same parsing as flow B, step 3). If any distractor **equals** the computed value, or can't be parsed, the question **fails** and goes back for regeneration with that reason. Otherwise **all options are rendered by one formatter** (integers and decimals as plain text; rationals as `$\frac{p}{q}$`; vectors and matrices as `$\begin{bmatrix}…\end{bmatrix}$`, with `^T` for column vectors written inline; other expressions through `sympy.latex` in `$…$`). The formatted value is inserted at a position chosen by a seeded random draw, and becomes `correctAnswer`. Using one formatter for every option means the correct one can't stand out by its formatting (an L3 concern).
+   - **`true_false`:** the value must be a boolean, and becomes `"True"` or `"False"`.
+   - **`numeric`:** `correctAnswer` is the value as a decimal string. Exact values get `numericTolerance: 0`. Floats get a default relative tolerance of 1e-6 (instance setting; the creator can change it per question).
+   - **`short_answer`:** `correctAnswer` is the formatted value. It is graded per §7.
+6. **Record** both programs, the value and the outcome in `verification` (§4), and a `QuestionEvent` of kind `answer_computed`.
+
+**Flow B: imported or hand-edited question (answer checked)**
+
+1. **Classify.** Imported questions are classified as computable or not by the `verify.solve` model. Hand-edited questions keep their classification. A creator who changes the answer on a computable question can't skip the check. They can only reclassify the question as not computable, with a required note, and that's recorded in its history.
+2. **Blind program** from `verify.solve`, and a sandbox run. (There's no author program on this path.)
+3. **Parse the options.** Each option and the `correctAnswer` are converted to values: plain numbers, fractions, LaTeX (`\frac`, `\sqrt`, `bmatrix`/`pmatrix` vectors and matrices, `^T`), and simple expressions such as `2n - 1`, using SymPy's LaTeX parsing plus our own handling for vectors and matrices.
+4. **Compare and decide:**
 
 | Outcome | Condition | Result |
 |---|---|---|
@@ -260,8 +297,8 @@ Structured outputs already guarantee that the JSON has the right **shape**, so t
 | **Couldn't check** | The program failed, timed out, or an option couldn't be parsed | **warn**, `status = "unverified"`; goes to human review |
 | **Not computable** | `computable: false` | Optional: the solver model picks an option blind; disagreeing with the stated answer is a **warn** (`status = "model_agreed"` if it agrees). Never a pass by computation |
 
-- Short-answer and numeric questions are checked the same way, comparing `result` with `correctAnswer` (and `acceptedAnswers`) instead of the options.
-- The check program, its result and the outcome are stored with the question (`verification`, §4). Reviewers can read the program. Students see it only on assignments released with `full_review` (§9.2).
+- In flow B, short-answer and numeric questions are checked the same way, comparing `result` with `correctAnswer` (and `acceptedAnswers`) instead of the options.
+- The programs, their results and the outcome are stored with the question (`verification`, §4). Reviewers can read both programs. Students see them only on assignments released with `full_review` (§9.2).
 - **Proctored publishing:** an instance setting (default **on**) blocks publishing a proctored test while any `computable` question is not `computed`-verified.
 
 **The sandbox (`apps/verify`):** the one Python component. It's a small worker the API calls over HTTP or through a job queue.
@@ -562,7 +599,9 @@ Question = BaseQuestion.extend({
   computable: z.boolean().optional(),
   verification: z.object({
     status: z.enum(["computed", "model_agreed", "unverified", "failed"]),
-    program: z.string().optional(),              // the check program (Python, whitelisted tools)
+    answerSource: z.enum(["computed", "stated"]).optional(), // computed: answer came from flow A; stated: checked by flow B
+    program: z.string().optional(),              // the blind check program (Python, whitelisted tools)
+    authorProgram: z.string().optional(),        // flow A only: the generator's answerProgram
     result: z.string().optional(),               // serialized value (LaTeX)
     matchedOption: z.string().optional(),
     checkedAt: z.string().datetime().optional(),
@@ -821,7 +860,7 @@ Objective(id, sessionId, label, description, evidence JSON, origin: llm|human)
 Revision(id, sessionId, number, trigger: generate|revise, request JSON, usage JSON, createdAt)
 DraftQuestion(id, sessionId, revisionId, tempId, content JSON (generation schema), status: proposed|accepted|rejected|locked,
               creatorNote?, supersedesId?, editedBy?, editedAt?)
-QuestionEvent(id, draftQuestionId, kind: generated|regenerated|edited|accepted|rejected|locked|fix_accepted, actorId?, revisionId?, before JSON?, after JSON?, note?, at)   // provenance trail
+QuestionEvent(id, draftQuestionId, kind: generated|regenerated|edited|accepted|rejected|locked|fix_accepted|answer_computed|reclassified, actorId?, revisionId?, before JSON?, after JSON?, note?, at)   // provenance trail
 ValidationResult(id, draftQuestionId, layer, outcome: pass|warn|fail, detail JSON)
 Test(id, ownerId, title, description, tags[], createdAt, archivedAt?, authoringSessionId?)
 TestVersion(id, testId, versionNumber, content JSON (extended Quiz, §4), provenance JSON (frozen trail, §3A.1), publishedAt?, createdAt)
@@ -839,7 +878,7 @@ GradeOverride(id, responseId, proctorId, fromPoints, toPoints, comment, createdA
 AnalysisReport(id, ownerId, kind, subjectRef, endpointId, model, promptVersion, result JSON, createdAt)
 Endpoint(id, label, provider, baseUrl?, apiKeyCiphertext?, location, server?, concurrency, timeoutMs, createdBy)
 RoleAssignment(role, endpointId, model, capabilities JSON, params JSON)
-VerificationRun(id, testVersionId? | draftQuestionId?, questionId, program TEXT, status, result JSON, matchedOption?, durationMs, sandboxVersion, at)
+VerificationRun(id, testVersionId? | draftQuestionId?, questionId, programKind: author|blind, program TEXT, status, result JSON, matchedOption?, durationMs, sandboxVersion, at)
 LlmCallLog(id, endpointId, model, role, promptVersion, mode, finishReason, repairAttempts, usage JSON, latencyMs, at,
            requestBody JSON?, responseBody JSON?)   // bodies stored for authoring + verify.solve calls (provenance); metadata only for analysis
 AuditLog(id, actorId, action, targetType, targetId, before JSON?, after JSON?, ip?, userAgent?, at)   // append-only; app DB user has INSERT/SELECT only
@@ -1111,6 +1150,7 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 12. **Unverified questions in proctored tests:** block publishing by default (current proposal), or warn only?
 13. **Casbin adapter:** use an existing Postgres adapter for role grants, or a small custom adapter on Drizzle (only `g` lines live in the DB, so it's tiny)?
 14. **UI string-function list (F4, §11.6):** confirm the names of our notification and live-region helpers once the component library is chosen, so the rule covers them from the start.
+15. **Computable `multi_choice`:** excluded in v1 (§3A.3.1). Later, a program could return the set of correct options, e.g. by evaluating a predicate on each one?
 
 ---
 
@@ -1121,8 +1161,8 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 | **P0 – Foundations** | Bun monorepo, Docker Compose (Postgres + pgvector, api, web, verify skeleton), Drizzle schema + migrations, pg-boss, auth (bcrypt, cached sessions), Casbin roles + route enforcement, first-admin bootstrap, base + extended Zod schemas, quiz normalizer + import preview/edit, Quiz/Result export. Test run: Fastify plugins on Bun. Cross-cutting from day one: audit log, i18n scaffolding (string catalogs, error codes), accessibility CI (axe), component library. `no-literal-ui-string` Biome plugin + fixtures + catalog check (§11.6), with its test run |
 | **P1 – Practice** | Practice attempts (shuffle, immediate feedback, soft timer, flag, autosave, retake missed), grading + short-answer normalization, self-graded override, results, history, Result export |
 | **P1.5 – LLM layer** | `packages/llm`, endpoints + model discovery + probe, role assignment, per-endpoint queue, structured-output modes + normalization/repair loop, eval harness, call logging. Verified against local Qwen on the 3060 box (vLLM and llama.cpp) and at least one cloud model |
-| **P2 – Authoring** | Text/Markdown sources + revisions, **knowledge base** (chunking, embedding jobs, pgvector + full-text hybrid retrieval, retrieval logs), scope picker, objectives from headings, blueprint, generation, L1–L3 validation, review UI, revise loop, publish, provenance trail (question history, `QuestionEvent`) |
-| **P2.1 – Answer verification** | `apps/verify` sandbox + whitelist, `verify.solve` role, option parsing/comparison, L7 in authoring and import, suggested-fix flow, proctored publish gate. Test fixture: `tests/engr108_chapter1_new_20q_quiz.json` (Q7 must fail with the fix `-1`) |
+| **P2 – Authoring** | Text/Markdown sources + revisions, **knowledge base** (chunking, embedding jobs, pgvector + full-text hybrid retrieval, retrieval logs), scope picker, objectives from headings, blueprint, generation, L1–L3 validation, review UI, revise loop, publish, provenance trail (question history, `QuestionEvent`). **Computable questions need P2.1**, so P2.1 is built before P2's generation step |
+| **P2.1 – Answer computation & verification** | `apps/verify` sandbox + whitelist, `verify.solve` role, option parsing/comparison and the shared option formatter, L7 flow A (computed answers for generated questions) and flow B (checks for import and edits), suggested-fix flow, proctored publish gate. Test fixture: `tests/engr108_chapter1_new_20q_quiz.json` (Q7 must fail with the fix `-1`) |
 | **P2.5 – Authoring depth** | L4/L5 coverage matrix/heatmap, L6 judge, revision compare view |
 | **P3 – Proctoring** | Groups + join codes, assignments (to groups), single-attempt submissions, time limits, review queue, overrides, release action, cohort view, CSV export |
 | **P3.1 – AI analysis** | Attempt analysis, cohort analysis on top of the cohort view |
