@@ -1,8 +1,23 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 /**
- * P0 tables only (P0.md §4, SPEC §10). Postgres names are snake_case; TypeScript names follow SPEC §10.
+ * P0 tables (P0.md §4) and P1's practice tables (P1.md §4), from SPEC §10. Postgres names are snake_case; TypeScript names follow SPEC §10.
  * Ids are UUID v7, generated in the app.
  */
 
@@ -132,5 +147,82 @@ export const AuditLog = pgTable(
     index("audit_log_at_idx").on(t.at),
     index("audit_log_actor_idx").on(t.actorId),
     index("audit_log_action_idx").on(t.action),
+  ],
+);
+
+// ── Practice (P1.md §4) ──────────────────────────────────────────────
+
+/** Points are stored as numeric(10,2), so they round-trip exactly at two decimals (the same rounding as `toResult`). */
+const points = (name: string) => numeric(name, { precision: 10, scale: 2, mode: "number" });
+const ms = (name: string) => bigint(name, { mode: "number" });
+
+/** One practice attempt. Private to its user: every lookup is scoped by `user_id` (P1.md §5). */
+export const PracticeAttempt = pgTable(
+  "practice_attempt",
+  {
+    id: uuid("id").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => User.id, { onDelete: "cascade" }),
+    testVersionId: uuid("test_version_id")
+      .notNull()
+      .references(() => TestVersion.id),
+    kind: text("kind", { enum: ["full", "retake_missed"] }).notNull(),
+    /** 128 random bits as 32 hex digits (`shuffleAttempt`). */
+    shuffleSeed: text("shuffle_seed").notNull(),
+    /** Null for `full`; the question ids of a `retake_missed` attempt. */
+    questionIds: integer("question_ids").array(),
+    startedAt: ts("started_at").notNull().defaultNow(),
+    submittedAt: ts("submitted_at"),
+    durationMs: ms("duration_ms"),
+    /** Null until submit. */
+    score: points("score"),
+    /** Sum of `points ?? 1` over the attempt's questions, set at start. */
+    maxScore: points("max_score").notNull(),
+  },
+  (t) => [
+    index("practice_attempt_user_idx").on(t.userId, t.startedAt),
+    index("practice_attempt_version_idx").on(t.testVersionId),
+    // At most one in-progress attempt per user per test version.
+    uniqueIndex("practice_attempt_in_progress_unique")
+      .on(t.userId, t.testVersionId)
+      .where(sql`${t.submittedAt} IS NULL`),
+    check("practice_attempt_kind_check", sql`${t.kind} IN ('full', 'retake_missed')`),
+    check("practice_attempt_seed_check", sql`${t.shuffleSeed} ~ '^[0-9a-f]{32}$'`),
+    check("practice_attempt_question_ids_check", sql`(${t.kind} = 'full') = (${t.questionIds} IS NULL)`),
+    check(
+      "practice_attempt_submitted_check",
+      sql`(${t.submittedAt} IS NULL) = (${t.score} IS NULL) AND (${t.submittedAt} IS NULL) = (${t.durationMs} IS NULL)`,
+    ),
+  ],
+);
+
+/**
+ * One answer to one question of an attempt (SPEC §10). P3 adds `submission_id` (and makes `attempt_id`
+ * nullable, with a check that exactly one is set) and `needs_review`.
+ */
+export const Response = pgTable(
+  "response",
+  {
+    id: uuid("id").primaryKey(),
+    attemptId: uuid("attempt_id")
+      .notNull()
+      .references(() => PracticeAttempt.id, { onDelete: "cascade" }),
+    /** The question's `id` within the attempt's test version (SPEC §2.3). */
+    questionId: integer("question_id").notNull(),
+    /** A string, or a string array for `multi_choice`; null while only flagged or visited. */
+    answer: jsonb("answer"),
+    /** Set when the answer is checked (or graded at submit); the answer is then locked. */
+    autoResult: text("auto_result", { enum: ["correct", "partial", "incorrect"] }),
+    pointsAwarded: points("points_awarded").notNull().default(0),
+    selfGraded: boolean("self_graded").notNull().default(false),
+    flagged: boolean("flagged").notNull().default(false),
+    answeredAt: ts("answered_at"),
+    timeSpentMs: ms("time_spent_ms").notNull().default(0),
+  },
+  (t) => [
+    unique("response_attempt_question_unique").on(t.attemptId, t.questionId),
+    check("response_auto_result_check", sql`${t.autoResult} IN ('correct', 'partial', 'incorrect')`),
+    check("response_time_spent_check", sql`${t.timeSpentMs} >= 0`),
   ],
 );

@@ -22,5 +22,13 @@
   "test_not_found": "That test doesn't exist.",
   "user_not_found": "That user doesn't exist.",
   "admin_last_admin": "This is the last active admin, so the change isn't allowed.",
-  "service_unavailable": "A required service is unavailable. Try again shortly."
+  "service_unavailable": "A required service is unavailable. Try again shortly.",
+  "test_archived": "This test is archived, so it can't be practised.",
+  "practice_attempt_in_progress": "You already have an attempt in progress on this test. Resume it or discard it first.",
+  "practice_attempt_submitted": "This attempt has been submitted, so it can't be changed.",
+  "practice_attempt_not_submitted": "This attempt hasn't been submitted yet.",
+  "practice_answer_locked": "This answer has already been checked, so it can't be changed.",
+  "practice_nothing_to_retake": "Nothing was missed in the last attempt, so there's nothing to retake.",
+  "practice_question_not_in_attempt": "That question isn't part of this attempt.",
+  "practice_self_grade_not_allowed": "Only a short answer marked incorrect can be self-graded."
 }

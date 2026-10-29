@@ -5,10 +5,14 @@ import type { ContractId } from "@gem/shared/contracts";
  * declaration fails the startup check. `resource` names how the preHandler finds the caller's
  * relationship to the target (`owner` / `none`).
  */
-export type ObjType = "session" | "import" | "test" | "user" | "settings" | "audit_log";
-export type Act = "read" | "delete" | "preview" | "create" | "list" | "update" | "export";
+export type ObjType = "session" | "import" | "test" | "user" | "settings" | "audit_log" | "practice_attempt";
+export type Act = "read" | "delete" | "preview" | "create" | "list" | "update" | "export" | "submit";
 
-export type RoutePermission = { public: true } | { objType: ObjType; act: Act; resource?: "test" };
+/**
+ * `resource: "practice_attempt"` loads the attempt by `(id, userId = caller)` (P1.md §5): someone else's
+ * attempt is not found, for every caller, admins included.
+ */
+export type RoutePermission = { public: true } | { objType: ObjType; act: Act; resource?: "test" | "practice_attempt" };
 
 export const ROUTE_PERMISSIONS = {
   health: { public: true },
@@ -36,6 +40,16 @@ export const ROUTE_PERMISSIONS = {
   "admin.settings.put": { objType: "settings", act: "update" },
   "admin.auditLog": { objType: "audit_log", act: "list" },
   "admin.auditLog.csv": { objType: "audit_log", act: "export" },
+
+  // Starting also checks `test` / `practice` on the test in the body (its owner, or an admin).
+  "practice.start": { objType: "practice_attempt", act: "create" },
+  "practice.list": { objType: "practice_attempt", act: "list" },
+  "practice.get": { objType: "practice_attempt", act: "read", resource: "practice_attempt" },
+  "practice.saveResponse": { objType: "practice_attempt", act: "update", resource: "practice_attempt" },
+  "practice.selfGrade": { objType: "practice_attempt", act: "update", resource: "practice_attempt" },
+  "practice.submit": { objType: "practice_attempt", act: "submit", resource: "practice_attempt" },
+  "practice.discard": { objType: "practice_attempt", act: "delete", resource: "practice_attempt" },
+  "practice.export": { objType: "practice_attempt", act: "export", resource: "practice_attempt" },
 } as const satisfies Record<ContractId, RoutePermission>;
 
 export function permissionFor(id: string): RoutePermission | undefined {

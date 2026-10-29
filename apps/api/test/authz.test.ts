@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { newId, PracticeAttempt } from "@gem/db";
 import { CONTRACTS } from "@gem/shared/contracts";
 import { API, Client, createTestApp, hasDb, registerUser, signIn, type TestApp } from "./helpers.ts";
 
@@ -12,13 +13,15 @@ const FIXED = FIXTURE.replace('"correctAnswer": "1"', '"correctAnswer": "-1"');
 
 type Who = "anonymous" | "student" | "owner" | "other" | "admin";
 const WHO: Who[] = ["anonymous", "student", "owner", "other", "admin"];
-type Expect = "allow" | "deny";
+/** `missing`: 404 `not_found`, for a resource that exists but is private to someone else (P1.md §5). */
+type Expect = "allow" | "deny" | "missing";
 
-describe.skipIf(!hasDb)("A17: authz matrix — every P0 route × role", () => {
+describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () => {
   let t: TestApp;
   const clients = {} as Record<Who, Client>;
   let testId = "";
   let targetId = "";
+  let attemptId = "";
 
   beforeAll(async () => {
     t = await createTestApp();
@@ -37,6 +40,15 @@ describe.skipIf(!hasDb)("A17: authz matrix — every P0 route × role", () => {
     const created = await clients.owner.post(`${API}/imports`, { originalText: FIXED, text: FIXED });
     expect(created.statusCode).toBe(200);
     testId = created.json().testId;
+    attemptId = newId();
+    await t.db.insert(PracticeAttempt).values({
+      id: attemptId,
+      userId: owner.user.id,
+      testVersionId: created.json().versionId,
+      kind: "full",
+      shuffleSeed: "0123456789abcdef0123456789abcdef",
+      maxScore: 20,
+    });
   });
   afterAll(async () => t?.close());
 
@@ -61,6 +73,14 @@ describe.skipIf(!hasDb)("A17: authz matrix — every P0 route × role", () => {
     owner: "allow",
     other: "deny",
     admin: "allow",
+  };
+  // Someone's own practice attempt: everyone else gets 404, admins included (P1.md §5).
+  const ownAttempt: Record<Who, Expect> = {
+    anonymous: "deny",
+    student: "deny",
+    owner: "allow",
+    other: "missing",
+    admin: "missing",
   };
   const adminOnly: Record<Who, Expect> = {
     anonymous: "deny",
@@ -148,6 +168,47 @@ describe.skipIf(!hasDb)("A17: authz matrix — every P0 route × role", () => {
       },
       { id: "admin.auditLog", method: "GET", url: () => "/admin/audit-log", expect: adminOnly },
       { id: "admin.auditLog.csv", method: "GET", url: () => "/admin/audit-log.csv", expect: adminOnly },
+      {
+        id: "practice.start",
+        method: "POST",
+        url: () => "/practice/attempts",
+        body: () => ({ testId, kind: "full" }),
+        expect: proctor,
+      },
+      { id: "practice.list", method: "GET", url: () => `/practice/attempts?testId=${testId}`, expect: proctor },
+      { id: "practice.get", method: "GET", url: () => `/practice/attempts/${attemptId}`, expect: ownAttempt },
+      {
+        id: "practice.saveResponse",
+        method: "PUT",
+        url: () => `/practice/attempts/${attemptId}/responses/1`,
+        body: () => ({ flagged: true }),
+        expect: ownAttempt,
+      },
+      {
+        id: "practice.selfGrade",
+        method: "POST",
+        url: () => `/practice/attempts/${attemptId}/responses/1/self-grade`,
+        body: () => ({ right: true }),
+        expect: ownAttempt,
+      },
+      {
+        id: "practice.submit",
+        method: "POST",
+        url: () => `/practice/attempts/${attemptId}/submit`,
+        expect: ownAttempt,
+      },
+      {
+        id: "practice.export",
+        method: "GET",
+        url: () => `/practice/attempts/${attemptId}/export`,
+        expect: ownAttempt,
+      },
+      {
+        id: "practice.discard",
+        method: "DELETE",
+        url: () => `/practice/attempts/${attemptId}`,
+        expect: ownAttempt,
+      },
       // Last: it ends each session.
       { id: "auth.logout", method: "POST", url: () => "/auth/logout", expect: signedIn },
     ];
@@ -167,7 +228,10 @@ describe.skipIf(!hasDb)("A17: authz matrix — every P0 route × role", () => {
         });
         const code = res.statusCode >= 400 ? (res.json() as { code: string }).code : undefined;
         if (want === "allow") {
-          expect(["unauthenticated", "forbidden"]).not.toContain(code);
+          expect(["unauthenticated", "forbidden", "not_found"]).not.toContain(code);
+        } else if (want === "missing") {
+          expect(res.statusCode).toBe(404);
+          expect(code).toBe("not_found");
         } else if (who === "anonymous") {
           expect(res.statusCode).toBe(401);
           expect(res.json().code).toBe("unauthenticated");

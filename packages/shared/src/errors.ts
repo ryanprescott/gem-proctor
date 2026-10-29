@@ -28,6 +28,14 @@ export const ERROR_CODES = [
   "user_not_found",
   "admin_last_admin",
   "service_unavailable",
+  "test_archived",
+  "practice_attempt_in_progress",
+  "practice_attempt_submitted",
+  "practice_attempt_not_submitted",
+  "practice_answer_locked",
+  "practice_nothing_to_retake",
+  "practice_question_not_in_attempt",
+  "practice_self_grade_not_allowed",
 ] as const;
 
 export const ErrorCode = z.enum(ERROR_CODES);
@@ -67,6 +75,14 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   user_not_found: 404,
   admin_last_admin: 409,
   service_unavailable: 503,
+  test_archived: 409,
+  practice_attempt_in_progress: 409,
+  practice_attempt_submitted: 409,
+  practice_attempt_not_submitted: 409,
+  practice_answer_locked: 409,
+  practice_nothing_to_retake: 409,
+  practice_question_not_in_attempt: 404,
+  practice_self_grade_not_allowed: 409,
 };
 
 /** The only error type route handlers throw (SPEC §11.6, companion check). */

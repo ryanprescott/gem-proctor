@@ -1,8 +1,8 @@
 import { permissionFor, type RoutePermission } from "@gem/authz";
-import { Test } from "@gem/db";
-import { AppError } from "@gem/shared";
+import { PracticeAttempt, Test } from "@gem/db";
+import { AppError, type ErrorCode } from "@gem/shared";
 import type { Contract, Role } from "@gem/shared/contracts";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteShorthandOptions } from "fastify";
 import type { z } from "zod";
 import type { SessionUser } from "../auth/sessions.ts";
@@ -90,11 +90,25 @@ async function relationship(ctx: AppContext, permission: RoutePermission, reques
   if (!("resource" in permission) || permission.resource === undefined) return { rel: "none" as const, found: true };
   const id = (request.params as { id?: string }).id;
   if (!id) return { rel: "none" as const, found: false };
+  if (permission.resource === "practice_attempt") {
+    // Private to the user (P1.md §5): looked up by (id, caller), so anyone else's attempt is not found.
+    const rows = await ctx.db
+      .select({ id: PracticeAttempt.id })
+      .from(PracticeAttempt)
+      .where(and(eq(PracticeAttempt.id, id), eq(PracticeAttempt.userId, user.userId)))
+      .limit(1);
+    return rows[0] ? { rel: "owner" as const, found: true } : { rel: "none" as const, found: false };
+  }
   const rows = await ctx.db.select({ ownerId: Test.ownerId }).from(Test).where(eq(Test.id, id)).limit(1);
   const row = rows[0];
   if (!row) return { rel: "none" as const, found: false };
   return { rel: row.ownerId === user.userId ? ("owner" as const) : ("none" as const), found: true };
 }
+
+const NOT_FOUND: Record<NonNullable<Extract<RoutePermission, { objType: string }>["resource"]>, ErrorCode> = {
+  test: "test_not_found",
+  practice_attempt: "not_found",
+};
 
 /**
  * Session resolution + Casbin enforcement in a preHandler on every route (SPEC §5.2), and the startup
@@ -131,7 +145,8 @@ export function installAuthz(app: FastifyInstance, ctx: AppContext, cookieName: 
     if (!found) {
       // Only reveal that a resource doesn't exist to callers who could act on it if it did.
       const couldOwn = await ctx.authz.can(user.userId, permission.objType, permission.act, "owner");
-      throw new AppError(couldOwn ? "test_not_found" : "forbidden");
+      const resource = "resource" in permission && permission.resource ? permission.resource : "test";
+      throw new AppError(couldOwn ? NOT_FOUND[resource] : "forbidden");
     }
     if (!(await ctx.authz.can(user.userId, permission.objType, permission.act, rel))) {
       throw new AppError("forbidden");

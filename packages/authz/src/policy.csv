@@ -1,5 +1,5 @@
 # Policy (SPEC §5.2): sub, objType, act, cond (any | owner | member). Code review only.
-# P0 rows; later phases add sources, assignments, practice, groups, ...
+# P0 and P1 rows; later phases add sources, assignments, groups, ...
 
 # Any signed-in user: their own session.
 p, student, session, read, any
@@ -12,6 +12,17 @@ p, proctor, test, list, any
 p, proctor, test, read, owner
 p, proctor, test, update, owner
 p, proctor, test, export, owner
+
+# Practice (P1): proctors practise their own tests. Attempts are private: the API loads an attempt by
+# (id, caller), so `owner` here is always the caller, and admins' `*` line can't reach anyone else's.
+p, proctor, test, practice, owner
+p, proctor, practice_attempt, create, any
+p, proctor, practice_attempt, list, any
+p, proctor, practice_attempt, read, owner
+p, proctor, practice_attempt, update, owner
+p, proctor, practice_attempt, submit, owner
+p, proctor, practice_attempt, delete, owner
+p, proctor, practice_attempt, export, owner
 
 # Admins: everything, on all resources.
 p, admin, *, *, any

@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { ImportReport } from "../import.ts";
-import { QuizShape, TestType } from "../quiz.ts";
+import { QuestionShape, QuizShape, TestType } from "../quiz.ts";
+import { GRADE_OUTCOMES } from "../result.ts";
 
 /**
- * API contracts for every P0 route (P0 §6). The server registers routes from these, the web client
+ * API contracts for every route (P0 §6, P1 §6). The server registers routes from these, the web client
  * calls them through `api.call(contract, input)`. All paths are under `/api/v1`.
  */
 
@@ -375,6 +376,172 @@ export const adminAuditLogCsv = contract({
   responseKind: "text",
 });
 
+// ── Practice (proctor+, own attempts only; P1 §6) ────────────────────
+
+export const PRACTICE_KINDS = ["full", "retake_missed"] as const;
+export const PracticeKind = z.enum(PRACTICE_KINDS);
+export type PracticeKind = z.infer<typeof PracticeKind>;
+
+export const GradeOutcome = z.enum(GRADE_OUTCOMES);
+
+/** Upper bounds keep a single response small; real answers are far shorter. */
+export const PRACTICE_ANSWER_MAX_LENGTH = 10_000;
+export const PracticeAnswer = z.union([
+  z.string().max(PRACTICE_ANSWER_MAX_LENGTH),
+  z.array(z.string().max(PRACTICE_ANSWER_MAX_LENGTH)).max(100),
+]);
+export type PracticeAnswer = z.infer<typeof PracticeAnswer>;
+
+export const PracticeAttemptSummary = z.object({
+  id: Uuid,
+  testId: Uuid,
+  testTitle: z.string(),
+  testVersionId: Uuid,
+  versionNumber: z.number().int(),
+  kind: PracticeKind,
+  status: z.enum(["in_progress", "submitted"]),
+  startedAt: Iso,
+  submittedAt: Iso.nullable(),
+  durationMs: z.number().int().nullable(),
+  /** Null until submit. Includes self-graded points. */
+  score: z.number().nullable(),
+  maxScore: z.number(),
+  questionCount: z.number().int(),
+});
+export type PracticeAttemptSummary = z.infer<typeof PracticeAttemptSummary>;
+
+export const PracticeResponse = z.object({
+  questionId: z.number().int(),
+  answer: PracticeAnswer.nullable(),
+  /** Null until the answer is checked (or graded at submit); a checked answer is locked. */
+  autoResult: GradeOutcome.nullable(),
+  pointsAwarded: z.number(),
+  maxPoints: z.number(),
+  selfGraded: z.boolean(),
+  flagged: z.boolean(),
+  answeredAt: Iso.nullable(),
+  timeSpentMs: z.number().int(),
+});
+export type PracticeResponse = z.infer<typeof PracticeResponse>;
+
+/** The server's grade for a checked answer, with what the feedback shows (SPEC §6). */
+export const PracticeFeedback = z.object({
+  outcome: GradeOutcome,
+  pointsAwarded: z.number(),
+  maxPoints: z.number(),
+  correctAnswer: z.string(),
+  correctAnswers: z.array(z.string()).optional(),
+  explanation: z.string().optional(),
+});
+export type PracticeFeedback = z.infer<typeof PracticeFeedback>;
+
+export const PracticeAttemptDetail = z.object({
+  attempt: PracticeAttemptSummary,
+  quiz: z.object({
+    title: z.string(),
+    course: z.string().optional(),
+    chapter: z.number().int().optional(),
+    topicsCovered: z.array(z.string()),
+  }),
+  /** In display (seeded) order, options shuffled; practice includes answers and explanations (SPEC §6). */
+  questions: z.array(QuestionShape),
+  /** The same question ids in the test's own order (for the topic breakdown and the export). */
+  quizOrder: z.array(z.number().int()),
+  /** One per question of the attempt, in display order. */
+  responses: z.array(PracticeResponse),
+});
+export type PracticeAttemptDetail = z.infer<typeof PracticeAttemptDetail>;
+
+const AttemptParams = z.object({ id: Uuid });
+const ResponseParams = z.object({ id: Uuid, questionId: z.coerce.number().int().positive() });
+
+export const practiceStart = contract({
+  id: "practice.start",
+  method: "POST",
+  path: "/practice/attempts",
+  body: z.object({ testId: Uuid, kind: PracticeKind }),
+  response: z.object({ attempt: PracticeAttemptSummary }),
+});
+
+export const practiceList = contract({
+  id: "practice.list",
+  method: "GET",
+  path: "/practice/attempts",
+  query: z.object({
+    testId: Uuid.optional(),
+    limit: z.coerce.number().int().min(1).max(500).optional(),
+  }),
+  response: z.object({
+    /** Newest first. */
+    attempts: z.array(PracticeAttemptSummary),
+    /**
+     * With `testId`: how many questions "Retake missed" would include (from the most recent submitted
+     * attempt); null when there is no submitted attempt.
+     */
+    missedCount: z.number().int().nullable(),
+  }),
+});
+
+export const practiceGet = contract({
+  id: "practice.get",
+  method: "GET",
+  path: "/practice/attempts/:id",
+  params: AttemptParams,
+  response: PracticeAttemptDetail,
+});
+
+export const practiceSaveResponse = contract({
+  id: "practice.saveResponse",
+  method: "PUT",
+  path: "/practice/attempts/:id/responses/:questionId",
+  params: ResponseParams,
+  body: z
+    .object({
+      answer: PracticeAnswer.optional(),
+      /** Grade the answer now and lock it (immediate feedback). */
+      check: z.literal(true).optional(),
+      flagged: z.boolean().optional(),
+      /** Cumulative time on this question; the server keeps the maximum, capped at the time since start. */
+      timeSpentMs: z.number().int().min(0).optional(),
+    })
+    .refine((b) => Object.keys(b).length > 0),
+  response: z.object({ response: PracticeResponse, feedback: PracticeFeedback.nullable() }),
+});
+
+export const practiceSelfGrade = contract({
+  id: "practice.selfGrade",
+  method: "POST",
+  path: "/practice/attempts/:id/responses/:questionId/self-grade",
+  params: ResponseParams,
+  body: z.object({ right: z.boolean() }),
+  response: z.object({ response: PracticeResponse, attempt: PracticeAttemptSummary }),
+});
+
+export const practiceSubmit = contract({
+  id: "practice.submit",
+  method: "POST",
+  path: "/practice/attempts/:id/submit",
+  params: AttemptParams,
+  response: z.object({ attempt: PracticeAttemptSummary }),
+});
+
+export const practiceDiscard = contract({
+  id: "practice.discard",
+  method: "DELETE",
+  path: "/practice/attempts/:id",
+  params: AttemptParams,
+  response: Ok,
+});
+
+export const practiceExport = contract({
+  id: "practice.export",
+  method: "GET",
+  path: "/practice/attempts/:id/export",
+  params: AttemptParams,
+  response: z.string(),
+  responseKind: "text",
+});
+
 export const CONTRACTS = [
   health,
   register,
@@ -398,6 +565,14 @@ export const CONTRACTS = [
   adminPutSettings,
   adminAuditLog,
   adminAuditLogCsv,
+  practiceStart,
+  practiceList,
+  practiceGet,
+  practiceSaveResponse,
+  practiceSelfGrade,
+  practiceSubmit,
+  practiceDiscard,
+  practiceExport,
 ] as const;
 
 export type AnyContract = (typeof CONTRACTS)[number];
