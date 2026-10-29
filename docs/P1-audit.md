@@ -4,6 +4,24 @@ Audit of P1.md §8, feature by feature, each section written when its feature wa
 
 **Environment.** As in P0: WSL2 without Docker. Postgres 17 + pgvector from the local binaries (`scripts/pg-local.ts`), the real Python 3.12 verify parent, Playwright's Chromium. Anything that needs Compose is **blocked** (P1.md §9).
 
+## Summary
+
+| | pass | partial | blocked | fail |
+|---|---|---|---|---|
+| Count (B1–B38) | 38 | 0 | 0 | 0 |
+
+**Blocked:** none for P1. P0's open items (A1's Compose half, A2, A33: Compose checks not yet seen passing on a GitHub runner) are still open and don't block P1 (P1.md §9); P0's criteria keep passing in every `bun run ci` run below.
+
+**Deviations** (details in each section; logged in SPEC §15.2 where they change SPEC behaviour):
+- F2 registered the practice routes with a placeholder handler so the startup checks and the matrix covered them from F2; F3 replaced it.
+- A saved but unchecked answer is graded at submit (the UI saves typed answers before submitting).
+- Admins can start practice on any test (P1.md §6's route table; §5's wording fixed in P1.md).
+- Missing or someone else's attempt is the generic `not_found`.
+- `parsesAsNumber` is stricter than in P0 (the P1 numeric forms only).
+- `ignoreWords` strips whitespace-separated words only.
+- Review and topic breakdown use the test's own order, like the export.
+- F3 fixed F2's `response.answer` column type (drizzle re-parsed JSON-looking strings); no migration needed.
+
 ## F1 Grading & shuffle
 
 Built in `packages/shared`: `gradeResponse` (`src/result.ts`), `parseNumericAnswer` (`src/quiz.ts`), the seeded shuffle (`src/shuffle.ts`), and the optional fields `Question.partialCredit`, `Question.ignoreWords`, `AnsweredQuestion.selfGraded` (`src/quiz.ts`). Tests: `test/grading.test.ts`, `test/shuffle.test.ts`, `test/json-schema.test.ts` (B8).
@@ -155,3 +173,23 @@ Home page (P1.md §6), `results.e2e.ts` "home": the proctor home lists recent at
 - The per-question review and the topic breakdown use the test's own order (`quizOrder`), like the export, not the shuffled order of the attempt.
 - "Retake missed" on any results page retakes the misses of the **most recent** submitted attempt of the test (P1.md §5), which is the attempt shown unless an older result is opened; the button shows how many questions it will include.
 - New dynamic catalog family `practice:kind.` tied to `PRACTICE_KINDS`.
+
+## F6 Phase close
+
+| # | Result | Evidence |
+|---|---|---|
+| B36 | **pass** | `apps/web/e2e/practice-keyboard.e2e.ts`, keyboard only: sign in (typing + Enter) → Tab to Tests → the test → Take test → each question answered by keyboard (Space + arrow keys in radio groups, Space on checkboxes, typing in text fields) and checked with Enter (q2 short answer wrong, q4 half right, the rest right; outcomes visible and announced) → first question flagged with Space → Submit attempt, Tab to Submit in the dialog, Enter → "I was right" with Enter (score 3.5 → 5.5 of 6) → "Retake missed (1 question)" → answer, check, submit → Export with Enter: the downloaded Result has only question 4, score 1 / 100 %. Passed in three consecutive runs and in both CI runs below. `tabTo` (`e2e/helpers.ts`) now re-resolves its locator on each Tab instead of holding an element handle across re-renders (one flaky run before the change). |
+| B37 | **pass** | `no-literal-ui-string` passes with an **empty** suppression baseline (`tools/biome/suppressions-baseline.txt` has only its header; no `biome-ignore lint/plugin` in the code). The catalog check passes with 371 keys: every new literal key, the dynamic families `practice:outcome.` / `practice:kind.` (tied to shared enums) and every error code including the eight P1 codes. A fresh `git clone` of the repo (plus this commit's changes) with no `.env` and no `node_modules`, `bun install --frozen-lockfile && bun run ci` (own Postgres on another port): all steps pass, 374 bun tests, 23 Playwright tests. |
+| B38 | **pass** | SPEC v0.23: header label fixed ("Draft v0.17" → "Draft v0.23"), "Last updated" entry; §4 sketch has `partialCredit`, `ignoreWords`, `selfGraded` and the numeric-check wording; §6 has an "As built (P1)" list of the P1.md §5 decisions; §7.1–7.2 partial-credit formula, numeric parsing, exact comparison, per-question `ignoreWords`; §10 `PracticeAttempt.questionIds`, nullable `score`, the in-progress index, the P1 `Response` shape, points as `numeric(10,2)`; §12 self-grade and discard routes, `limit`; §15.2 nine P1 rows. P1.md points at v0.23 and its "who can practise" row matches §6. README status and `docs/DEVELOPMENT.md` (grants for new tables) updated. |
+
+Earlier criteria touched by later features were re-run: every test from F1–F5 is part of the CI run below (F4's `practice.e2e.ts` after F5's changes, F2's matrix after F3's handlers).
+
+**`bun run ci`:** all steps pass.
+
+```
+✔ biome check                       ✔ JSON Schema export is up to date
+✔ lint rule build is up to date     ✔ typecheck (6 projects)
+✔ lint-rule snapshot                ✔ bun test — 374 pass, 0 fail, 16 files
+✔ suppression baseline (0)          ✔ ruff + ruff format, verify unit tests (3)
+✔ i18n catalog check (371 keys)     ✔ Playwright + axe — 23 passed
+```

@@ -53,4 +53,4 @@ On CI (`.github/workflows/ci.yml`) the stack is brought up with Compose, `script
 ## Database
 
 - Schema: `packages/db/src/schema.ts`. Migrations: `packages/db/migrations` (`bun run db:generate` for table changes; extension and grants are hand-written migrations).
-- Roles (P0.md §4): `gem_owner` owns the schema and runs migrations; `gem_app` is the API's user, with `SELECT, INSERT` only on `audit_log`. The roles are created by `docker/postgres/init.sql` (Compose init script; also run by `dev:pg` and the tests).
+- Roles (P0.md §4): `gem_owner` owns the schema and runs migrations; `gem_app` is the API's user, with `SELECT, INSERT` only on `audit_log`. A new table needs its own grant in a hand-written migration (`0002_grants.sql` only covered the P0 tables; P1's are in `0004_p1_grants.sql`). The roles are created by `docker/postgres/init.sql` (Compose init script; also run by `dev:pg` and the tests).

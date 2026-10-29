@@ -76,11 +76,10 @@ export async function newSignedInPage(browser: Browser, userEmail: string, passw
   return page;
 }
 
-/** Keyboard only: press Tab until `target` has focus. */
+/** Keyboard only: press Tab until `target` has focus. The locator is re-resolved each time (React may re-render it). */
 export async function tabTo(page: Page, target: Locator, max = 80) {
-  const handle = await target.elementHandle();
   for (let i = 0; i < max; i++) {
-    if (await page.evaluate((el) => el === document.activeElement, handle)) return;
+    if (await target.evaluate((el) => el === document.activeElement).catch(() => false)) return;
     await page.keyboard.press("Tab");
   }
   throw new Error(`could not reach ${target} with Tab`);

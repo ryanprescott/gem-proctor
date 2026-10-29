@@ -1,7 +1,7 @@
-# gem-proctor — Product & Technical Spec (Draft v0.17)
+# gem-proctor — Product & Technical Spec (Draft v0.23)
 
 > Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13; planned contingencies and the decision log are in §15.
-> Last updated: 2026-10-29 (v0.22: P0 built; the GritQL lint rule passed its test run and is the active implementation, its message quotes the key with single quotes, §11.6; the Casbin request carries the caller's relationship to the resource as a string, §5.2; decisions logged in §15.2. v0.21: the standard library is present in the runner; only third-party packages are limited; `operator` added to the prompt's module list, §3A.3.1. v0.20: the sandbox's security is isolation, not code inspection: no network, no secrets, fresh process per run, gVisor, recycling, an escape test suite; results are text over a Unix socket, §3A.3.1. v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
+> Last updated: 2026-10-29 (v0.23: P1 built (practice): partial credit, numeric parsing and per-question `ignoreWords` in grading, §7.1–7.2; `partialCredit`, `ignoreWords`, `selfGraded` in the schema, §4; practice rules as built (owner or admin practises, private attempts, check-then-lock, retake-missed definition, export), §6; `PracticeAttempt.questionIds` and the P1 `Response` columns, §10; self-grade and discard routes, §12; decisions logged in §15.2. v0.22: P0 built; the GritQL lint rule passed its test run and is the active implementation, its message quotes the key with single quotes, §11.6; the Casbin request carries the caller's relationship to the resource as a string, §5.2; decisions logged in §15.2. v0.21: the standard library is present in the runner; only third-party packages are limited; `operator` added to the prompt's module list, §3A.3.1. v0.20: the sandbox's security is isolation, not code inspection: no network, no secrets, fresh process per run, gVisor, recycling, an escape test suite; results are text over a Unix socket, §3A.3.1. v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
 
 ---
 
@@ -691,8 +691,10 @@ QuestionType = z.enum(["short_answer", "single_choice", "multi_choice", "numeric
 Question = BaseQuestion.extend({
   type: QuestionType.optional(),                 // inferred if absent: options → single_choice, else short_answer
   correctAnswers: z.array(z.string()).optional(),// multi_choice only; correctAnswer = first, for base compatibility
+  partialCredit: z.enum(["all_or_nothing", "proportional"]).optional(), // multi_choice only; default all_or_nothing (§7.1)
   acceptedAnswers: z.array(z.string()).optional(),// short_answer alternatives besides correctAnswer
   caseSensitive: z.boolean().optional(),
+  ignoreWords: z.array(z.string()).optional(),   // short_answer: trailing words/units stripped before comparing (§7.2)
   numericTolerance: z.number().optional(),       // numeric: correctAnswer parsed as a number
   explanation: z.string().optional(),
   points: z.number().positive().optional(),      // default 1
@@ -732,6 +734,7 @@ AnsweredQuestion = Question.extend({
   userAnswers: z.array(z.string()).optional(),
   userIsCorrect: z.boolean(),
   pointsAwarded: z.number().optional(),
+  selfGraded: z.boolean().optional(),            // practice: "I was right" on an incorrect short answer (§7.2)
   needsReview: z.boolean().optional(),
   graderComment: z.string().optional(),
 })
@@ -754,7 +757,7 @@ Cross-field checks (`superRefine`):
 - `single_choice` / `multi_choice` / `true_false` require `options` (`true_false` exactly `["True", "False"]`). `short_answer` / `numeric` must not have them.
 - If both `chapter` and `chapters` are present, `chapters` must be `[chapter]`.
 - `single_choice` has exactly one correct answer, `multi_choice` at least one.
-- `numeric` needs a `correctAnswer` that parses as a number.
+- `numeric` needs a `correctAnswer` that parses as a number, in the forms the grader accepts (§7.1).
 - `total_questions` (and, on results, `score` / `percentage`) must match the recomputed values; otherwise a warning on import, and the recomputed values are used.
 
 ---
@@ -851,12 +854,26 @@ g, admin,   proctor
 
 ---
 
+**As built (P1).** Decisions from `docs/P1.md` §5 (logged in §15.2):
+- **Who practises:** until groups exist (P3), a test's owner and admins can practise it; students have nothing to practise yet. Archived tests can't be started; their history stays.
+- **Privacy:** attempts are loaded by `(id, caller)`, so anyone else's attempt is "not found", **admins included**. This is how "admins see everything" (§5.1) and "private to the user" fit together.
+- **Versions:** "Take test" pins the latest `TestVersion`; "Retake missed" pins the version of the attempt it retakes. At most one in-progress attempt per user and version; starting another returns the in-progress one's id, and the UI offers Resume or Discard (discard only while in progress).
+- **Feedback and locking:** an answer is **checked** once ("Check answer"): the server grades it, returns the feedback, and the answer is locked. Flag and time stay writable until submit. An answer saved without a check is graded at submit. The attempt DTO still carries the answer key and explanations.
+- **Shuffle:** a 128-bit seed (hex) per attempt; question order and each question's option order, with `true_false` kept as `True, False`; applied by the server, so the DOM order is the display order.
+- **Time:** the client counts time per question while it's shown and the page is visible and sends the cumulative value; the server keeps the maximum, capped at the time since the start. `durationMs` is computed by the server at submit.
+- **Self-grade:** only on a short answer graded incorrect, during the attempt or on the results screen, and it can be undone; it sets full points and the score follows. Exported as `selfGraded: true` with `userIsCorrect: true`.
+- **Retake missed:** every question of the most recent submitted attempt of the test (either kind) without full points after self-grading, unanswered ones included. None → nothing to retake.
+- **Results:** the per-topic breakdown groups by question `topic` in order of first appearance, under the quiz's `topics_covered` (no fuzzy mapping). The cited passage is `evidence[].quote` when present. Unanswered questions score 0 and export with `userAnswer: ""`.
+- **Export:** `toResult` over the attempt's questions in the test's own order, with `mode`, `attemptId`, `startedAt`, `submittedAt` and the stored grades (not re-graded); a retake-missed export holds only its subset.
+- **Not audited:** practice actions aren't admin actions, so they write no `AuditLog` rows.
+
 ## 7. Grading
 
 ### 7.1 Auto-grading (server-side, authoritative)
 
-- `single_choice` / `true_false`: `userAnswer` equals `correctAnswer`. `multi_choice`: the set of `userAnswers` equals the set of `correctAnswers`. Partial credit for `multi_choice` is configurable per question: `all_or_nothing` (default) or `proportional`.
-- `numeric`: `|given − correctAnswer| ≤ numericTolerance` (default 0).
+- `single_choice` / `true_false`: `userAnswer` equals `correctAnswer`. `multi_choice`: the set of `userAnswers` equals the set of `correctAnswers`. Partial credit for `multi_choice` is configurable per question (`partialCredit`): `all_or_nothing` (default) or `proportional`, which awards `points × max(0, (correctSelected − wrongSelected) / |correctAnswers|)`, rounded to 2 decimals. A response is `correct`, `partial` (0 < points < max) or `incorrect`.
+- `numeric`: `|given − correctAnswer| ≤ numericTolerance` (default 0; the boundary counts as correct). Both sides are parsed the same way: trim, NFKC, unify minus signs, strip one pair of surrounding `$`, then a plain decimal or exponent number (`-1`, `+2.5`, `1e-3`, `.5`). No thousands separators, fractions or units: anything else is incorrect, not an error.
+- Grading compares exactly and never snaps an answer to a nearby option.
 - `short_answer`: compare after normalization (§7.2) against `correctAnswer` and each `acceptedAnswers` value.
 
 ### 7.2 Short-answer normalization
@@ -866,7 +883,7 @@ Needed because answers look like `[4, 2, 3]^T` or `2n - 1 flops`:
 - trim, collapse whitespace, fold case (unless `caseSensitive`)
 - strip whitespace around `[ ] , ( ) ^ _ + - * /`
 - unicode normalize (NFKC), unify minus signs and quotes
-- optionally strip trailing units/words listed in an ignore list (e.g. "flops")
+- optionally strip trailing units/words listed in the question's `ignoreWords` (e.g. "flops"); a word is stripped only when separated from the answer by whitespace, and the list is normalized the same way. No instance-wide list in v1
 
 Anything that doesn't match exactly is flagged **`needs_review`** in proctored mode. In practice mode it is marked incorrect, and the user gets a "I was right" self-override that changes their score but is recorded as self-graded.
 
@@ -977,13 +994,15 @@ TestVersion(id, testId, versionNumber, content JSON (extended Quiz, §4), proven
 TestImportRecord(id, testVersionId, originalFilename?, sourceRaw TEXT, report JSON)   // report includes normalization fixes
 PracticeAvailability(testVersionId, groupId, addedBy, addedAt)   // test versions students in a group may practise
 
-PracticeAttempt(id, userId, testVersionId, kind: full|retake_missed, shuffleSeed, startedAt, submittedAt?, durationMs?, score, maxScore)
+PracticeAttempt(id, userId, testVersionId, kind: full|retake_missed, shuffleSeed, questionIds int[]?, startedAt, submittedAt?, durationMs?, score?, maxScore,
+                UNIQUE(userId, testVersionId) where submittedAt is null)   // questionIds: the retake-missed subset; score set at submit
 Assignment(id, proctorId, testVersionId, title, rules JSON, resultVisibility: outcome_only|full_review, opensAt, closesAt, releasedAt?)
 AssignmentGroup(assignmentId, groupId)
 Submission(id, assignmentId, studentId, status, shuffleSeed, startedAt, deadlineAt?, submittedAt?, score?, maxScore, archivedAt?,
            UNIQUE(assignmentId, studentId) where not archived)
 
-Response(id, attemptId | submissionId, questionId (int, §2.3), answer JSON, autoResult, pointsAwarded, needsReview, selfGraded, flagged, answeredAt, timeSpentMs)
+Response(id, attemptId | submissionId, questionId (int, §2.3), answer JSON, autoResult, pointsAwarded, needsReview, selfGraded, flagged, answeredAt, timeSpentMs,
+         UNIQUE(attemptId, questionId))   // as built in P1: attemptId only (NOT NULL, cascade) and no needsReview; P3 adds submissionId + needsReview
 GradeOverride(id, responseId, proctorId, fromPoints, toPoints, comment, createdAt)
 AnalysisReport(id, ownerId, kind, subjectRef, endpointId, model, promptVersion, result JSON, createdAt)
 Endpoint(id, label, provider, baseUrl?, apiKeyCiphertext?, location, server?, concurrency, timeoutMs, createdBy)
@@ -1000,6 +1019,7 @@ Notes (Postgres):
 - `SourceChunk.embedding` is a pgvector column with an **HNSW** index (cosine). `tsv` is a generated `tsvector` with a **GIN** index. The vector dimension is fixed by the embedding model; changing models means migrating the column and re-embedding.
 - Enum-like fields use Postgres enums or `text` + check constraints, mirrored by Zod enums.
 - `TestVersion.content` is the source of truth for questions. Responses refer to `questionId` within that version.
+- Points (`score`, `maxScore`, `pointsAwarded`) are `numeric(10,2)`, so they round-trip exactly at two decimals, like `toResult`.
 
 ---
 
@@ -1226,9 +1246,10 @@ Tests       GET/POST /tests   GET/PATCH/DELETE /tests/:id
             PUT  /tests/:id/versions/:v/practice-groups   (make available for practice to groups)
             GET /tests/:id/export          (Quiz JSON, §4)   GET /practice/attempts/:id/export   (Result JSON)
             GET /schema/quiz.json   GET /schema/result.json   (JSON Schemas generated from §4)
-Practice    POST /practice/attempts   GET /practice/attempts?testId=
-            GET /practice/attempts/:id   PUT /practice/attempts/:id/responses/:questionId
-            POST /practice/attempts/:id/submit
+Practice    POST /practice/attempts   GET /practice/attempts?testId=&limit=
+            GET /practice/attempts/:id   PUT /practice/attempts/:id/responses/:questionId   (answer, check, flagged, timeSpentMs)
+            POST /practice/attempts/:id/responses/:questionId/self-grade   POST /practice/attempts/:id/submit
+            DELETE /practice/attempts/:id   (in progress only)
 Groups      CRUD /groups   POST /groups/:id/join-code:regenerate   POST /groups/join   CRUD /groups/:id/members
 Assignments CRUD /assignments   GET /assignments/:id/dashboard   GET /assignments/:id/export.csv
 Student     GET /me/assignments   POST /me/assignments/:id/start
@@ -1305,3 +1326,12 @@ Several choices in this spec carry a known risk and have a planned fallback. Whe
 | 2026-10-29 | pg-boss schema | The grants migration creates schema `pgboss` owned by `gem_app`; pg-boss runs with `createSchema: false` | pg-boss's `CREATE SCHEMA IF NOT EXISTS` needs database-level `CREATE`, which `gem_app` shouldn't have | P0 |
 | 2026-10-29 | pgvector extension | Created by the Compose init script (superuser); migration 0000 keeps `CREATE EXTENSION IF NOT EXISTS vector` as a no-op check | `vector` isn't a trusted extension, so `gem_owner` can't create it | P0 |
 | 2026-10-29 | Roles API (§12) | `PUT /admin/users/:id/roles` takes one `{ role }` (the hierarchy makes a single grant enough); audited as `role.grant` (promotion) or `role.revoke` (demotion) | One user, one effective role (§5.1) | P0 |
+| 2026-10-29 | Who practises (§5.1, §6) | Until P3, a test's owner and admins can practise it (`test` / `practice`, owner; admins through `*`); students have nothing to practise yet | Practice availability needs groups (P3) | P1 |
+| 2026-10-29 | Attempt privacy (§5.1, §6) | Attempts are loaded by `(id, caller)`: another user's attempt is 404 for everyone, admins included | Reconciles "admins see everything" with "private to the user" | P1 |
+| 2026-10-29 | Practice versions and conflicts (§6) | Take test pins the latest version, Retake missed the retaken attempt's version; one in-progress attempt per user and version (409 with its id; Resume or Discard); archived tests can't be started | A stable question set per attempt | P1 |
+| 2026-10-29 | Check-then-lock (§6) | An answer is checked once, graded by the server and locked; flag and time stay writable; an unchecked saved answer is graded at submit | Immediate feedback would otherwise make the score meaningless | P1 |
+| 2026-10-29 | Grading details (§7.1, §7.2) | `multi_choice` `partialCredit` (proportional: right minus wrong selections over the number of correct answers, floored at 0); numeric answers parsed strictly (decimal / exponent, optional `$…$`), also for the `numeric_not_a_number` check; `ignoreWords` per question, whitespace-separated words only | Settles what §7 left open; P0 accepted anything `Number()` took | P1 |
+| 2026-10-29 | Schema (§4) | Optional `Question.partialCredit`, `Question.ignoreWords`, `AnsweredQuestion.selfGraded` | Needed by grading and the export | P1 |
+| 2026-10-29 | Practice tables (§10) | `PracticeAttempt.questionIds` (retake subset), `score` null until submit, partial unique in-progress index; `Response` without `submissionId` / `needsReview` until P3; points `numeric(10,2)` | Deriving the subset later would be fragile; proctored columns come with P3 | P1 |
+| 2026-10-29 | Practice routes (§12) | Added `POST /practice/attempts/:id/responses/:questionId/self-grade` and `DELETE /practice/attempts/:id`; `GET /practice/attempts` takes an optional `limit` (home page) and returns `missedCount` | Self-grade and discard need routes | P1 |
+| 2026-10-29 | Retake missed, results, export (§6) | Missed = no full points after self-grade in the most recent submitted attempt (unanswered included); topic breakdown by `topic` in first-appearance order; export in the test's order with stored grades | `docs/P1.md` §5 | P1 |
