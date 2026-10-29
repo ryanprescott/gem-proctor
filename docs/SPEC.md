@@ -1,7 +1,7 @@
 # gem-proctor — Product & Technical Spec (Draft v0.17)
 
 > Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13; planned contingencies and the decision log are in §15.
-> Last updated: 2026-10-29 (v0.21: the standard library is present in the runner; only third-party packages are limited; `operator` added to the prompt's module list, §3A.3.1. v0.20: the sandbox's security is isolation, not code inspection: no network, no secrets, fresh process per run, gVisor, recycling, an escape test suite; results are text over a Unix socket, §3A.3.1. v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
+> Last updated: 2026-10-29 (v0.22: P0 built; the GritQL lint rule passed its test run and is the active implementation, its message quotes the key with single quotes, §11.6; the Casbin request carries the caller's relationship to the resource as a string, §5.2; decisions logged in §15.2. v0.21: the standard library is present in the runner; only third-party packages are limited; `operator` added to the prompt's module list, §3A.3.1. v0.20: the sandbox's security is isolation, not code inspection: no network, no secrets, fresh process per run, gVisor, recycling, an escape test suite; results are text over a Unix socket, §3A.3.1. v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
 
 ---
 
@@ -815,6 +815,7 @@ g, proctor, student
 g, admin,   proctor
 ```
 
+- **As built (P0):** the API's `preHandler` loads the resource's owner (or, later, groups) and passes the caller's **relationship** as a fourth request value, `r = sub, obj, act, rel` with `rel` ∈ `owner | member | none`, and the matcher compares `p.cond` with it (`p.cond == "any" || p.cond == r.rel`). Every request value is then a string, which Casbin's `CachedEnforcer` can cache (it skips caching for object arguments). The model is `packages/authz/src/model.conf`; see §15.2.
 - **Where things live:** the **policy** (`p` lines and role inheritance) is a file in the repo (`packages/authz`), changed only by code review. **User → role grants** (`g, <userId>, proctor`) are stored in Postgres through a Casbin adapter, managed by admins in the UI.
 - **Enforcement:** every Fastify route declares its `{ objType, act }`. A `preHandler` hook loads the resource's owner or groups and calls the enforcer. A route without a declaration fails a startup check, so nothing is accidentally left public.
 - **Caching:** Casbin's cached enforcer keeps decisions in memory, and the cache is cleared whenever role grants change.
@@ -1133,11 +1134,11 @@ A string counts as **UI text** if, after trimming, it contains **at least one le
 
 #### Escape hatch
 
-Biome's standard suppression comment for plugin diagnostics, **with a mandatory reason**, e.g. `// biome-ignore lint/plugin: brand wordmark rendered as SVG title`. The exact suppression syntax is confirmed in the P0 test run. A CI script counts suppressions and fails if the count grows beyond the committed baseline, without a matching update to `tools/biome/suppressions-baseline.txt`, so every new exception is visible in review.
+Biome's standard suppression comment for plugin diagnostics, **with a mandatory reason**, e.g. `// biome-ignore lint/plugin: brand wordmark rendered as SVG title` (confirmed in the P0 test run; before a JSX child it's `{/* biome-ignore lint/plugin: <reason> */}`). A CI script counts suppressions and fails if the count grows beyond the committed baseline, without a matching update to `tools/biome/suppressions-baseline.txt`, so every new exception is visible in review.
 
 #### Message and fix
 
-- Message: `User-facing text must come from the i18n catalog: use t("…") (see SPEC §1.3).`
+- Message: `User-facing text must come from the i18n catalog: use t('…') (see SPEC §1.3).` (single quotes: Biome's GritQL strings unescape only the first `\"`, P0 test run.) The generated message ends with the case id, e.g. `[F3]`, which the snapshot adapter reads.
 - **No autofix.** The rule can't choose a catalog key or namespace. A fix would need a human to pick the key and add the string to `en` catalogs.
 
 #### Tests
@@ -1189,7 +1190,7 @@ If the primary implementation (the GritQL plugin) fails its test run, or breaks 
 5. Mark this section **"Active implementation: Contingency X since YYYY-MM-DD"** and add a row to the decision log (§15) with the trigger and evidence (Biome version, the failing case).
 6. Commit the switch as one commit, referencing the §15 row.
 
-**Active implementation:** primary (GritQL plugin), pending the P0 test run.
+**Active implementation:** primary (GritQL plugin), since 2026-10-29: the P0 test run passed (Biome 2.6.4; [`docs/P0-test-runs.md`](P0-test-runs.md)).
 
 ---
 
@@ -1298,3 +1299,9 @@ Several choices in this spec carry a known risk and have a planned fallback. Whe
 | Date | Area | Decision | Reason / evidence | Commit |
 |---|---|---|---|---|
 | — | — | *(no contingencies activated yet)* | — | — |
+| 2026-10-29 | i18n lint rule | Primary (GritQL) confirmed; message uses `t('…')` | P0 test run passed on Biome 2.6.4; a second `\"` in a GritQL string keeps its backslash ([`P0-test-runs.md`](P0-test-runs.md)) | P0 |
+| 2026-10-29 | API runtime | Bun confirmed (no Node fallback) | All six Fastify plugins + the Zod type provider pass on Bun 1.4.4 ([`P0-test-runs.md`](P0-test-runs.md)) | P0 |
+| 2026-10-29 | Casbin request (§5.2) | `r = sub, obj, act, rel` with a string relationship instead of `r.sub` / `r.obj` objects and an `isMember()` function | `CachedEnforcer` only caches string requests; the relationship is computed by the preHandler that loads the owner anyway | P0 |
+| 2026-10-29 | pg-boss schema | The grants migration creates schema `pgboss` owned by `gem_app`; pg-boss runs with `createSchema: false` | pg-boss's `CREATE SCHEMA IF NOT EXISTS` needs database-level `CREATE`, which `gem_app` shouldn't have | P0 |
+| 2026-10-29 | pgvector extension | Created by the Compose init script (superuser); migration 0000 keeps `CREATE EXTENSION IF NOT EXISTS vector` as a no-op check | `vector` isn't a trusted extension, so `gem_owner` can't create it | P0 |
+| 2026-10-29 | Roles API (§12) | `PUT /admin/users/:id/roles` takes one `{ role }` (the hierarchy makes a single grant enough); audited as `role.grant` (promotion) or `role.revoke` (demotion) | One user, one effective role (§5.1) | P0 |
