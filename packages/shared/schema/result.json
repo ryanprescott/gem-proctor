@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "quiz_title": {
+      "type": "string"
+    },
+    "course": {
+      "type": "string"
+    },
+    "chapter": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "total_questions": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "topics_covered": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "questions": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "1-based, unique within the quiz"
+          },
+          "topic": {
+            "type": "string",
+            "description": "Per-question topic"
+          },
+          "question": {
+            "type": "string",
+            "description": "Markdown with $...$ LaTeX"
+          },
+          "options": {
+            "description": "Answer options; present on choice questions",
+            "minItems": 2,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "correctAnswer": {
+            "type": "string",
+            "description": "Choice questions: exactly one of `options`"
+          },
+          "type": {
+            "description": "Inferred if absent: options → single_choice, else short_answer",
+            "type": "string",
+            "enum": [
+              "short_answer",
+              "single_choice",
+              "multi_choice",
+              "numeric",
+              "true_false"
+            ]
+          },
+          "correctAnswers": {
+            "description": "multi_choice only; correctAnswer = first",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acceptedAnswers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "caseSensitive": {
+            "type": "boolean"
+          },
+          "numericTolerance": {
+            "type": "number"
+          },
+          "explanation": {
+            "type": "string"
+          },
+          "points": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "objectiveIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string"
+                },
+                "chunkId": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sourceId",
+                "chunkId",
+                "quote"
+              ]
+            }
+          },
+          "provenance": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "human",
+              "imported",
+              "llm_edited"
+            ]
+          },
+          "computable": {
+            "type": "boolean"
+          },
+          "verification": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "computed",
+                  "model_agreed",
+                  "unverified",
+                  "failed"
+                ]
+              },
+              "answerSource": {
+                "type": "string",
+                "enum": [
+                  "computed",
+                  "stated"
+                ]
+              },
+              "program": {
+                "type": "string"
+              },
+              "authorProgram": {
+                "type": "string"
+              },
+              "modelClaim": {
+                "type": "string"
+              },
+              "inputs": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "seed": {
+                "type": "string"
+              },
+              "distractors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "common",
+                        "near",
+                        "random"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "program": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "source",
+                    "reason"
+                  ]
+                }
+              },
+              "result": {
+                "type": "string"
+              },
+              "matchedOption": {
+                "type": "string"
+              },
+              "checkedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "userAnswer": {
+            "type": "string"
+          },
+          "userAnswers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "userIsCorrect": {
+            "type": "boolean"
+          },
+          "pointsAwarded": {
+            "type": "number"
+          },
+          "needsReview": {
+            "type": "boolean"
+          },
+          "graderComment": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "topic",
+          "question",
+          "correctAnswer",
+          "userAnswer",
+          "userIsCorrect"
+        ]
+      }
+    },
+    "chapters": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": -9007199254740991,
+        "maximum": 9007199254740991
+      }
+    },
+    "description": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "testType": {
+      "type": "string",
+      "enum": [
+        "chapter_quiz",
+        "homework",
+        "unit_test",
+        "midterm",
+        "final",
+        "custom"
+      ]
+    },
+    "formatVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "score": {
+      "type": "number"
+    },
+    "percentage": {
+      "type": "number"
+    },
+    "maxScore": {
+      "type": "number"
+    },
+    "attemptId": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "practice",
+        "proctored"
+      ]
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    },
+    "submittedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+    }
+  },
+  "required": [
+    "quiz_title",
+    "total_questions",
+    "questions",
+    "score",
+    "percentage"
+  ],
+  "$id": "https://gem-proctor.local/schema/result.json",
+  "title": "gem-proctor Result"
+}
