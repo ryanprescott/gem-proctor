@@ -1,0 +1,5 @@
+# Third-party packages in the runner image (SPEC §3A.3.1, "Libraries (v1, fixed)"). Pinned; adding one is a reviewed change.
+sympy==1.13.3
+mpmath==1.3.0
+numpy==2.1.3
+lark==1.2.2
