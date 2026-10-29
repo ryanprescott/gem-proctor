@@ -74,6 +74,14 @@
               "type": "string"
             }
           },
+          "partialCredit": {
+            "description": "multi_choice only; default all_or_nothing (SPEC §7.1)",
+            "type": "string",
+            "enum": [
+              "all_or_nothing",
+              "proportional"
+            ]
+          },
           "acceptedAnswers": {
             "type": "array",
             "items": {
@@ -82,6 +90,13 @@
           },
           "caseSensitive": {
             "type": "boolean"
+          },
+          "ignoreWords": {
+            "description": "short_answer: trailing words/units stripped before comparing",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "numericTolerance": {
             "type": "number"

@@ -32,6 +32,10 @@ export const QUESTION_TYPES = ["short_answer", "single_choice", "multi_choice", 
 export const QuestionType = z.enum(QUESTION_TYPES);
 export type QuestionType = z.infer<typeof QuestionType>;
 
+export const PARTIAL_CREDIT = ["all_or_nothing", "proportional"] as const;
+export const PartialCredit = z.enum(PARTIAL_CREDIT);
+export type PartialCredit = z.infer<typeof PartialCredit>;
+
 export const TEST_TYPES = ["chapter_quiz", "homework", "unit_test", "midterm", "final", "custom"] as const;
 export const TestType = z.enum(TEST_TYPES);
 export type TestType = z.infer<typeof TestType>;
@@ -67,8 +71,10 @@ export const questionShape = {
   ...baseQuestionShape,
   type: QuestionType.optional().describe("Inferred if absent: options → single_choice, else short_answer"),
   correctAnswers: z.array(z.string()).optional().describe("multi_choice only; correctAnswer = first"),
+  partialCredit: PartialCredit.optional().describe("multi_choice only; default all_or_nothing (SPEC §7.1)"),
   acceptedAnswers: z.array(z.string()).optional(),
   caseSensitive: z.boolean().optional(),
+  ignoreWords: z.array(z.string()).optional().describe("short_answer: trailing words/units stripped before comparing"),
   numericTolerance: z.number().optional(),
   explanation: z.string().optional(),
   points: z.number().positive().optional(),
@@ -100,6 +106,7 @@ export const answeredQuestionShape = {
   userAnswers: z.array(z.string()).optional(),
   userIsCorrect: z.boolean(),
   pointsAwarded: z.number().optional(),
+  selfGraded: z.boolean().optional().describe("Practice: the user overrode an incorrect short answer (SPEC §7.2)"),
   needsReview: z.boolean().optional(),
   graderComment: z.string().optional(),
 };
@@ -177,9 +184,25 @@ export function isChoiceType(t: QuestionType): boolean {
   return CHOICE_TYPES.has(t);
 }
 
+const NUMBER_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
+
+/**
+ * Parse a numeric answer (P1 §5): trim, NFKC, unify minus signs, strip one pair of surrounding `$`, then a
+ * plain decimal or exponent number. No thousands separators, fractions or units: anything else is null.
+ */
+export function parseNumericAnswer(s: string): number | null {
+  let t = s
+    .normalize("NFKC")
+    .replace(/[\u2212\u2012\u2013\u2014]/g, "-")
+    .trim();
+  if (t.length >= 2 && t.startsWith("$") && t.endsWith("$")) t = t.slice(1, -1).trim();
+  if (!NUMBER_RE.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function parsesAsNumber(s: string): boolean {
-  const t = s.trim();
-  return t !== "" && Number.isFinite(Number(t));
+  return parseNumericAnswer(s) !== null;
 }
 
 type CheckableQuestion = Pick<Question, "id" | "type" | "options" | "correctAnswer" | "correctAnswers">;

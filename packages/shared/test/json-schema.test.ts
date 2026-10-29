@@ -39,3 +39,30 @@ describe("A10: generated JSON Schema, checked with an independent validator (Ajv
     expect(s.required).toEqual(expect.arrayContaining(["quiz_title", "total_questions", "questions"]));
   });
 });
+
+describe("B8: P1 schema fields are optional and exported", () => {
+  test("base files still parse; partialCredit, ignoreWords and selfGraded validate", () => {
+    expect(Quiz.safeParse(fixedFixture()).success).toBe(true);
+    const f = fixedFixture();
+    const q = f.questions[0] as Record<string, unknown>;
+    q.ignoreWords = ["flops"];
+    q.partialCredit = "proportional";
+    expect(Quiz.safeParse(f).success).toBe(true);
+    expect(validator(quizJsonSchema())(f)).toBe(true);
+    q.partialCredit = "half";
+    expect(Quiz.safeParse(f).success).toBe(false);
+    expect(validator(quizJsonSchema())(f)).toBe(false);
+  });
+
+  test("quiz.json and result.json include the new fields", () => {
+    const question = (s: Record<string, unknown>) =>
+      (s.properties as { questions: { items: { properties: Record<string, unknown> } } }).questions.items.properties;
+    expect(Object.keys(question(quizJsonSchema()))).toEqual(expect.arrayContaining(["partialCredit", "ignoreWords"]));
+    expect(Object.keys(question(resultJsonSchema()))).toEqual(
+      expect.arrayContaining(["partialCredit", "ignoreWords", "selfGraded"]),
+    );
+    const result = toResult(Quiz.parse(fixedFixture()), [{ questionId: 1, answer: "6" }]);
+    const withSelf = { ...result, questions: result.questions.map((x) => ({ ...x, selfGraded: true })) };
+    expect(validator(resultJsonSchema())(JSON.parse(serializeResult(withSelf)))).toBe(true);
+  });
+});

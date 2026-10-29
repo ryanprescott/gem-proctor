@@ -1,4 +1,12 @@
-import { type AnsweredQuestion, effectiveType, type Question, type Quiz, type QuizIssue, type Result } from "./quiz.ts";
+import {
+  type AnsweredQuestion,
+  effectiveType,
+  parseNumericAnswer,
+  type Question,
+  type Quiz,
+  type QuizIssue,
+  type Result,
+} from "./quiz.ts";
 
 /** One response to one question, keyed by the question's `id` (SPEC §2.3). */
 export interface QuestionResponse {
@@ -7,53 +15,117 @@ export interface QuestionResponse {
   answer: string | string[];
 }
 
-/** Short-answer normalization (SPEC §7.2). */
-export function normalizeShortAnswer(s: string, caseSensitive = false, ignoreWords: readonly string[] = []): string {
-  let t = s
-    .normalize("NFKC")
-    .replace(/[−‒–—]/g, "-")
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
+const UNIFY: [RegExp, string][] = [
+  [/[\u2212\u2012\u2013\u2014\u2010\u2011]/g, "-"],
+  [/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"'],
+  [/[\u2018\u2019\u201A\u201B\u2032]/g, "'"],
+];
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** NFKC, minus signs and quotes unified, whitespace collapsed and stripped around operators. */
+function canonicalText(s: string): string {
+  let t = s.normalize("NFKC");
+  for (const [re, to] of UNIFY) t = t.replace(re, to);
+  return t
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\s*([[\](),^_+\-*/])\s*/g, "$1");
-  if (!caseSensitive) t = t.toLowerCase();
-  for (const w of ignoreWords) {
-    const re = new RegExp(`\\s*\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, caseSensitive ? "" : "i");
-    t = t.replace(re, "");
+}
+
+/**
+ * Short-answer normalization (SPEC §7.2): NFKC; minus signs and quotes unified; whitespace trimmed, collapsed
+ * and removed around `[ ] , ( ) ^ _ + - * /`; case folded unless `caseSensitive`; then trailing words from
+ * `ignoreWords` (each separated from the answer by whitespace, normalized the same way) stripped.
+ */
+export function normalizeShortAnswer(s: string, caseSensitive = false, ignoreWords: readonly string[] = []): string {
+  const fold = (x: string) => (caseSensitive ? x : x.toLowerCase());
+  let t = fold(canonicalText(s));
+  const words = ignoreWords.map((w) => fold(canonicalText(w))).filter((w) => w !== "");
+  if (words.length === 0) return t;
+  const re = new RegExp(`\\s(?:${words.map(escapeRegExp).join("|")})$`, "u");
+  // Strip repeatedly, so "3 m s" with ["m", "s"] loses both.
+  for (let prev = ""; prev !== t; ) {
+    prev = t;
+    t = t.replace(re, "").trimEnd();
   }
   return t;
 }
 
-/** Auto-grade one question (SPEC §7.1). Returns whether the answer is correct. */
-export function gradeQuestion(q: Question, answer: string | string[]): boolean {
-  const type = effectiveType(q);
-  const answers = Array.isArray(answer) ? answer : [answer];
-  switch (type) {
+export const GRADE_OUTCOMES = ["correct", "partial", "incorrect"] as const;
+export type GradeOutcome = (typeof GRADE_OUTCOMES)[number];
+
+export interface Grade {
+  outcome: GradeOutcome;
+  /** Rounded to two decimals, like `score` (SPEC §2.2). */
+  pointsAwarded: number;
+  maxPoints: number;
+}
+
+export function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function numericMatch(given: number, expected: number, tolerance: number): boolean {
+  const diff = Math.abs(given - expected);
+  if (tolerance <= 0) return diff === 0;
+  // |Δ| = tolerance is correct; allow for the binary representation of decimals (0.4 − 0.3 > 0.1).
+  return diff - tolerance <= 4 * Number.EPSILON * Math.max(Math.abs(given), Math.abs(expected), tolerance);
+}
+
+/** The fraction of the points an answer earns, 0–1. Only `multi_choice` with proportional credit has values in between. */
+function fraction(q: Question, answers: readonly string[]): number {
+  switch (effectiveType(q)) {
     case "single_choice":
     case "true_false":
-      return answers.length === 1 && answers[0] === q.correctAnswer;
+      return answers.length === 1 && answers[0] === q.correctAnswer ? 1 : 0;
     case "multi_choice": {
       const expected = new Set(q.correctAnswers ?? [q.correctAnswer]);
       const given = new Set(answers);
-      return expected.size === given.size && [...expected].every((a) => given.has(a));
+      const correctSelected = [...given].filter((a) => expected.has(a)).length;
+      const wrongSelected = given.size - correctSelected;
+      if (correctSelected === expected.size && wrongSelected === 0) return 1;
+      if ((q.partialCredit ?? "all_or_nothing") === "all_or_nothing") return 0;
+      return Math.max(0, (correctSelected - wrongSelected) / expected.size);
     }
     case "numeric": {
-      const given = Number(answers[0]?.trim());
-      const expected = Number(q.correctAnswer.trim());
-      if (!Number.isFinite(given) || !Number.isFinite(expected)) return false;
-      return Math.abs(given - expected) <= (q.numericTolerance ?? 0);
+      const given = parseNumericAnswer(answers[0] ?? "");
+      const expected = parseNumericAnswer(q.correctAnswer);
+      if (answers.length !== 1 || given === null || expected === null) return 0;
+      return numericMatch(given, expected, q.numericTolerance ?? 0) ? 1 : 0;
     }
     case "short_answer": {
+      if (answers.length !== 1) return 0;
       const cs = q.caseSensitive ?? false;
-      const given = normalizeShortAnswer(answers[0] ?? "", cs);
-      return [q.correctAnswer, ...(q.acceptedAnswers ?? [])].some((a) => normalizeShortAnswer(a, cs) === given);
+      const ignore = q.ignoreWords ?? [];
+      const given = normalizeShortAnswer(answers[0] ?? "", cs, ignore);
+      if (given === "") return 0;
+      return [q.correctAnswer, ...(q.acceptedAnswers ?? [])].some((a) => normalizeShortAnswer(a, cs, ignore) === given)
+        ? 1
+        : 0;
     }
   }
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+/**
+ * Auto-grade one response (SPEC §7.1, P1 §5). Exact comparison per type: an answer is never snapped to a
+ * nearby option. `multi_choice` with `partialCredit: "proportional"` earns
+ * `points × max(0, (correctSelected − wrongSelected) / |correctAnswers|)`. No answer scores 0.
+ */
+export function gradeResponse(q: Question, answer: string | readonly string[] | null | undefined): Grade {
+  const maxPoints = q.points ?? 1;
+  const answers = answer === null || answer === undefined ? [] : typeof answer === "string" ? [answer] : answer;
+  const f = answers.length === 0 ? 0 : fraction(q, answers);
+  const pointsAwarded = f >= 1 ? maxPoints : round2(maxPoints * f);
+  const outcome: GradeOutcome = pointsAwarded >= maxPoints ? "correct" : pointsAwarded > 0 ? "partial" : "incorrect";
+  return { outcome, pointsAwarded, maxPoints };
+}
+
+/** Auto-grade one question (SPEC §7.1). Returns whether the answer is fully correct. */
+export function gradeQuestion(q: Question, answer: string | readonly string[]): boolean {
+  return gradeResponse(q, answer).outcome === "correct";
 }
 
 /**
@@ -73,8 +145,9 @@ export function toResult(
     const points = q.points ?? 1;
     maxScore += points;
     const answer = byId.get(q.id);
-    const correct = answer !== undefined && gradeQuestion(q, answer);
-    const awarded = correct ? points : 0;
+    const grade = gradeResponse(q, answer);
+    const correct = grade.outcome === "correct";
+    const awarded = grade.pointsAwarded;
     score += awarded;
     const out: AnsweredQuestion = {
       ...q,
@@ -82,7 +155,8 @@ export function toResult(
       userIsCorrect: correct,
     };
     if (Array.isArray(answer)) out.userAnswers = [...answer];
-    if (weighted) out.pointsAwarded = awarded;
+    // Partial credit can't be read from `userIsCorrect`, so it's always written out.
+    if (weighted || grade.outcome === "partial") out.pointsAwarded = awarded;
     return out;
   });
   const result: Result = {
