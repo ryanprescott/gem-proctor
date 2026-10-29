@@ -1,0 +1,65 @@
+{
+  "list": {
+    "title": "Tests",
+    "show": "Show",
+    "active": "Active tests",
+    "all": "All tests",
+    "archived": "Archived tests",
+    "import": "Import a quiz",
+    "empty": "No tests here yet.",
+    "caption_one": "{{count}} test",
+    "caption_other": "{{count}} tests",
+    "colTitle": "Title",
+    "colQuestions": "Questions",
+    "colOwner": "Owner",
+    "colCreated": "Created",
+    "colStatus": "Status"
+  },
+  "status": {
+    "active": "Active",
+    "archived": "Archived",
+    "archivedOn": "Archived on {{date}}"
+  },
+  "detail": {
+    "title": "Test",
+    "status": "Status",
+    "version": "Version",
+    "versionValue": "{{n}}, created {{date}}",
+    "questions": "Questions",
+    "course": "Course",
+    "chapter": "Chapter",
+    "owner": "Owner",
+    "created": "Created",
+    "export": "Export quiz JSON",
+    "archive": "Archive",
+    "restore": "Restore from archive",
+    "editTitle": "Details",
+    "fieldTitle": "Title",
+    "fieldDescription": "Description",
+    "fieldTags": "Tags",
+    "tagsHelp": "Separate tags with commas.",
+    "save": "Save details",
+    "topics": "Topics covered",
+    "questionsTitle": "Questions"
+  },
+  "question": {
+    "heading": "Question {{id}}",
+    "topic": "· {{topic}}",
+    "options": "Options for question {{id}}",
+    "correct": "Correct answer",
+    "answer": "Answer:",
+    "answerNotInOptions": "Stated answer, not one of the options:"
+  },
+  "types": {
+    "short_answer": "Short answer",
+    "single_choice": "Single choice",
+    "multi_choice": "Multiple choice",
+    "numeric": "Numeric",
+    "true_false": "True or false"
+  },
+  "announce": {
+    "saved": "Test details saved.",
+    "archived": "Test archived.",
+    "restored": "Test restored."
+  }
+}

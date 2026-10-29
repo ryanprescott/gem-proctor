@@ -1,0 +1,91 @@
+{
+  "title": "Import a quiz",
+  "previewing": "Checking the quiz…",
+  "save": "Save as a test",
+  "source": {
+    "title": "1. Choose the quiz",
+    "help": "Upload a quiz JSON file, or paste quiz JSON (for example, a model's answer). Nothing is saved until you choose Save.",
+    "upload": "Upload a .json file",
+    "paste": "Or paste the quiz text",
+    "preview": "Preview"
+  },
+  "report": {
+    "title": "2. Report",
+    "canSave": "No errors: the quiz can be saved.",
+    "blocked_one": "{{count}} error must be fixed before saving.",
+    "blocked_other": "{{count}} errors must be fixed before saving.",
+    "summary": "{{questions}} questions · {{errors}} errors · {{warnings}} warnings · {{fixes}} automatic fixes",
+    "errors_one": "{{count}} error",
+    "errors_other": "{{count}} errors",
+    "warnings_one": "{{count}} warning",
+    "warnings_other": "{{count}} warnings",
+    "fixes_one": "{{count}} automatic fix",
+    "fixes_other": "{{count}} automatic fixes",
+    "noFixes": "No automatic fixes were needed.",
+    "warningLabel": "Warning:",
+    "question": "Question {{id}}",
+    "questionField": "Question {{id}}, {{field}}",
+    "wholeQuiz": "Quiz"
+  },
+  "editor": {
+    "title": "3. Fix and save",
+    "label": "Quiz JSON",
+    "help": "Edit the JSON below ({{lines}} lines), then run the preview again.",
+    "rerun": "Run preview again",
+    "dirty": "You changed the JSON. Run the preview again before saving.",
+    "fixFirst": "Fix the errors above in the JSON, then run the preview again."
+  },
+  "questions": {
+    "title_one": "{{count}} question",
+    "title_other": "{{count}} questions",
+    "none": "No questions could be read yet."
+  },
+  "announce": {
+    "previewOk": "Preview finished: {{questions}} questions, {{fixes}} automatic fixes, {{warnings}} warnings. The quiz can be saved.",
+    "previewBlocked": "Preview finished: {{errors}} errors. Fix them before saving.",
+    "saved": "Quiz saved as a test."
+  },
+  "issues": {
+    "duplicate_question_id": "Question id {{id}} is used more than once.",
+    "answer_not_in_options": "The correct answer “{{answer}}” is not one of the options.",
+    "correct_answers_not_in_options": "The correct answer “{{answer}}” is not one of the options.",
+    "duplicate_options": "The option “{{option}}” appears more than once.",
+    "options_required": "A {{type}} question needs options.",
+    "options_not_allowed": "A {{type}} question can't have options.",
+    "true_false_options": "A true/false question's options must be exactly True and False.",
+    "chapters_mismatch": "The chapters list must be just chapter {{chapter}}.",
+    "single_choice_one_answer": "A single-choice question has exactly one correct answer.",
+    "multi_choice_needs_answer": "A multiple-choice question needs at least one correct answer, starting with the correct answer.",
+    "numeric_not_a_number": "The answer “{{answer}}” of a numeric question is not a number.",
+    "total_questions_mismatch": "total_questions says {{stated}}, but there are {{actual}} questions. The counted number is used.",
+    "score_mismatch": "The score says {{stated}}, but the answers give {{actual}}. The recomputed score is used.",
+    "percentage_mismatch": "The percentage says {{stated}}, but the answers give {{actual}}. The recomputed percentage is used.",
+    "schema_invalid_type": "This field has the wrong type (expected {{expected}}).",
+    "schema_too_small": "Too few items or too short (at least {{minimum}}).",
+    "schema_too_big": "Too many items or too long (at most {{maximum}}).",
+    "schema_invalid_value": "This value isn't allowed (expected one of {{expected}}).",
+    "schema_invalid_format": "This value isn't a valid {{format}}.",
+    "schema_unrecognized_keys": "Unknown fields: {{keys}}.",
+    "schema_other": "This field isn't valid.",
+    "parse_failed": "No quiz JSON could be found in the text."
+  },
+  "fixes": {
+    "think_stripped": "Removed the model's thinking block.",
+    "extracted_json": "Took the JSON out of the surrounding text or code fence.",
+    "tolerant_parse": "Read JSON with small syntax errors (trailing commas, single quotes, unquoted keys or comments).",
+    "smart_quotes": "Replaced curly quotes around JSON strings.",
+    "truncated": "The output was cut off: kept the complete questions and dropped the partial last one.",
+    "wrapped_array": "Wrapped a bare list of questions in a quiz.",
+    "key_alias": "Renamed the field “{{from}}” to “{{to}}”.",
+    "number_coerced": "Read “{{field}}” as a number or text, as the format expects.",
+    "option_to_string": "Turned a number option into text.",
+    "option_prefix_stripped": "Removed letter prefixes such as “A)” from the options.",
+    "answer_letter_resolved": "Answer “{{from}}” was a letter: it is now the option “{{to}}”.",
+    "answer_index_resolved": "Answer {{from}} was an option number: it is now the option “{{to}}”.",
+    "answer_prefix_resolved": "Answer “{{from}}” had a letter prefix: it is now the option “{{to}}”.",
+    "answer_snapped": "Answer “{{from}}” differed only in case or spacing: it is now the option “{{to}}”.",
+    "ids_renumbered": "Question ids were missing or repeated: renumbered 1 to {{count}}.",
+    "total_questions_recomputed": "Set total_questions to {{to}} (it said “{{from}}”).",
+    "type_inferred": "Set the question type to {{type}}."
+  }
+}

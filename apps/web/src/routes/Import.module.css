@@ -1,0 +1,109 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block: var(--space-3);
+}
+
+.ok {
+  color: var(--color-success);
+  font-weight: 700;
+}
+
+.ok::before {
+  content: "✓ ";
+}
+
+.blocked {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.blocked::before {
+  content: "✕ ";
+}
+
+.errors li,
+.warnings li {
+  margin-block-end: var(--space-1);
+}
+
+.errors li::marker {
+  content: "✕ ";
+  color: var(--color-danger);
+}
+
+.warnings li::marker {
+  content: "! ";
+  color: var(--color-warning);
+}
+
+.fixDetails summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fixes {
+  font-size: 0.925rem;
+}
+
+.fixWarning {
+  color: var(--color-warning);
+}
+
+.fixPath {
+  color: var(--color-text-muted);
+}
+
+.editor {
+  margin-block-end: var(--space-3);
+}
+
+.editorLabel {
+  font-weight: 600;
+  display: block;
+}
+
+.editorHelp,
+.hint {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin-block: var(--space-1) var(--space-2);
+}
+
+.editorBody {
+  display: flex;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  block-size: 28rem;
+  max-block-size: 70vh;
+  overflow: hidden;
+}
+
+.gutter {
+  margin: 0;
+  padding: var(--space-2);
+  text-align: end;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border-inline-end: 1px solid var(--color-border);
+  overflow: hidden;
+  user-select: none;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  min-inline-size: 3.5rem;
+}
+
+.code {
+  flex: 1;
+  border: none;
+  resize: none;
+  padding: var(--space-2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: transparent;
+  white-space: pre;
+  overflow: auto;
+}

@@ -1,0 +1,78 @@
+{
+  "users": {
+    "title": "Users",
+    "caption_one": "{{count}} user",
+    "caption_other": "{{count}} users",
+    "colUser": "User",
+    "colRole": "Role",
+    "colStatus": "Status",
+    "colCreated": "Created",
+    "colActions": "Actions",
+    "roleFor": "Role for {{email}}",
+    "roleChanged": "{{email}} is now {{role}}.",
+    "statusActive": "Active",
+    "statusDisabled": "Disabled on {{date}}",
+    "locked": "Locked until {{date}}",
+    "disable": "Disable",
+    "enable": "Enable",
+    "disabledDone": "{{email}} is disabled.",
+    "enabledDone": "{{email}} is enabled.",
+    "reset": "Reset password",
+    "resetTitle": "Reset the password for {{email}}",
+    "resetHelp": "This also unlocks the account and signs the user out everywhere.",
+    "newPassword": "New password",
+    "resetSubmit": "Set password",
+    "resetDone": "Password reset for {{email}}."
+  },
+  "settings": {
+    "title": "Instance settings",
+    "selfRegistration": "Self-registration",
+    "selfRegistrationOn": "Anyone can create an account. New accounts are students.",
+    "selfRegistrationOff": "Only existing accounts can sign in.",
+    "save": "Save settings",
+    "saved": "Settings saved."
+  },
+  "audit": {
+    "title": "Audit log",
+    "filters": "Filter",
+    "actor": "Actor",
+    "anyActor": "Any actor",
+    "action": "Action",
+    "anyAction": "Any action",
+    "from": "From",
+    "to": "To",
+    "exportCsv": "Export as CSV",
+    "results_one": "{{count}} audit entry matches.",
+    "results_other": "{{count}} audit entries match.",
+    "showing": "Showing {{from}}–{{to}} of {{total}}",
+    "caption": "Audit entries, newest first",
+    "colAt": "When",
+    "colActor": "Actor",
+    "colAction": "Action",
+    "colTarget": "Target",
+    "colChange": "Before → after",
+    "colOrigin": "IP and user agent",
+    "system": "System",
+    "prev": "Previous page",
+    "next": "Next page"
+  },
+  "actions": {
+    "user": {
+      "create": "User created",
+      "password_reset": "Password reset",
+      "disable": "User disabled",
+      "enable": "User enabled"
+    },
+    "role": {
+      "grant": "Role granted",
+      "revoke": "Role revoked"
+    },
+    "settings": {
+      "update": "Settings changed"
+    }
+  },
+  "targets": {
+    "user": "User",
+    "settings": "Instance settings"
+  }
+}

@@ -1,0 +1,134 @@
+/* Design tokens (CSS custom properties). Text/background pairs meet WCAG 2.2 AA contrast (≥ 4.5:1). */
+:root {
+  color-scheme: light dark;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius-sm: 4px;
+  --radius: 8px;
+
+  --color-bg: #ffffff;
+  --color-surface: #f6f7f9;
+  --color-surface-raised: #ffffff;
+  --color-text: #1b1f24;
+  --color-text-muted: #4a5360;
+  --color-border: #c9ced6;
+  --color-border-strong: #6b7380;
+  --color-accent: #1d4ed8;
+  --color-accent-text: #ffffff;
+  --color-accent-hover: #1e40af;
+  --color-danger: #b42318;
+  --color-danger-bg: #fdecea;
+  --color-warning: #8a4b00;
+  --color-warning-bg: #fff4e0;
+  --color-success: #146c2e;
+  --color-success-bg: #e7f6ec;
+  --color-focus: #c2410c;
+  --shadow: 0 2px 10px rgb(0 0 0 / 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #111418;
+    --color-surface: #1a1e24;
+    --color-surface-raised: #222831;
+    --color-text: #e8ebef;
+    --color-text-muted: #b3bac4;
+    --color-border: #3a424d;
+    --color-border-strong: #8b94a1;
+    --color-accent: #8fb3ff;
+    --color-accent-text: #0b1220;
+    --color-accent-hover: #b3cbff;
+    --color-danger: #ff9b91;
+    --color-danger-bg: #3a1714;
+    --color-warning: #ffc46b;
+    --color-warning-bg: #3a2a10;
+    --color-success: #7ed79a;
+    --color-success-bg: #12301c;
+    --color-focus: #ffb86b;
+    --shadow: 0 2px 10px rgb(0 0 0 / 0.5);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-body);
+  font-size: 100%;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-inline-size: 320px;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+}
+
+a {
+  color: var(--color-accent);
+  text-underline-offset: 0.15em;
+}
+
+a:hover {
+  color: var(--color-accent-hover);
+}
+
+/* Visible focus on every interactive element (WCAG 2.4.7 / 2.4.11). */
+:focus-visible,
+[data-focus-visible] {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+code,
+pre,
+textarea {
+  font-family: var(--font-mono);
+}
+
+table {
+  border-collapse: collapse;
+  inline-size: 100%;
+}
+
+th,
+td {
+  text-align: start;
+  padding: var(--space-2) var(--space-3);
+  border-block-end: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+/* Reflow at 320 px / 200 % zoom: wide content scrolls inside its own container. */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

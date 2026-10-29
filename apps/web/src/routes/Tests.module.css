@@ -1,0 +1,60 @@
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-4);
+  justify-content: space-between;
+}
+
+.importLink {
+  margin-block-end: var(--space-4);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.caption {
+  text-align: start;
+  color: var(--color-text-muted);
+  padding-block-end: var(--space-2);
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-4);
+}
+
+.meta dt {
+  font-weight: 600;
+}
+
+.meta dd {
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-block: var(--space-4);
+}
+
+.exportLink {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.5rem;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.exportLink:hover {
+  background: var(--color-accent-hover);
+  color: var(--color-accent-text);
+}

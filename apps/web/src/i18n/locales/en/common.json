@@ -1,0 +1,46 @@
+{
+  "documentTitle": "{{page}} · gem-proctor",
+  "skipToContent": "Skip to main content",
+  "loading": "Loading…",
+  "cancel": "Cancel",
+  "signedInAs": "Signed in as {{name}} ({{role}})",
+  "nav": {
+    "label": "Main",
+    "home": "Home",
+    "tests": "Tests",
+    "import": "Import",
+    "users": "Users",
+    "settings": "Settings",
+    "auditLog": "Audit log"
+  },
+  "roles": {
+    "student": "Student",
+    "proctor": "Proctor",
+    "admin": "Admin"
+  },
+  "home": {
+    "title": "Home",
+    "welcome": "Welcome, {{name}}",
+    "role": "Your role: {{role}}.",
+    "proctorTitle": "Your tests",
+    "proctorBody": "Import a quiz JSON file, check and fix it, and save it as a test. You can export it again at any time.",
+    "importLink": "Import a quiz",
+    "testsLink": "See your tests",
+    "studentTitle": "Nothing to take yet",
+    "studentBody": "Practice tests and assignments from your proctors will appear here.",
+    "adminTitle": "Administration"
+  },
+  "forbidden": {
+    "title": "Not available",
+    "body": "Your role doesn't give you access to this page."
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "There is no page at this address.",
+    "home": "Go to the home page"
+  },
+  "toasts": {
+    "region": "Notifications",
+    "dismiss": "Dismiss notification"
+  }
+}
