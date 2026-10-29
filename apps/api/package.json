@@ -1,0 +1,29 @@
+{
+  "name": "@gem/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "start": "bun src/main.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.1.5",
+    "@fastify/multipart": "10.1.6",
+    "@fastify/rate-limit": "11.2.1",
+    "@fastify/static": "10.1.8",
+    "@fastify/swagger": "9.9.2",
+    "@gem/authz": "workspace:*",
+    "@gem/db": "workspace:*",
+    "@gem/shared": "workspace:*",
+    "drizzle-orm": "0.45.4",
+    "fastify": "5.12.7",
+    "fastify-type-provider-zod": "7.0.0",
+    "pg": "8.23.1",
+    "pg-boss": "12.38.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}
