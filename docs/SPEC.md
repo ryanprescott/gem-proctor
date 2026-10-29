@@ -1,7 +1,7 @@
 # gem-proctor — Product & Technical Spec (Draft v0.17)
 
 > Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13; planned contingencies and the decision log are in §15.
-> Last updated: 2026-10-29 (v0.20: the sandbox's security is isolation, not code inspection: no network, no secrets, fresh process per run, gVisor, recycling, an escape test suite; results are text over a Unix socket, §3A.3.1. v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
+> Last updated: 2026-10-29 (v0.21: the standard library is present in the runner; only third-party packages are limited; `operator` added to the prompt's module list, §3A.3.1. v0.20: the sandbox's security is isolation, not code inspection: no network, no secrets, fresh process per run, gVisor, recycling, an escape test suite; results are text over a Unix socket, §3A.3.1. v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
 
 ---
 
@@ -196,7 +196,7 @@ GeneratedQuestion = z.object({
   numericAnswer: z.object({ value: z.number(), tolerance: z.number() }).optional(),   // computable: a hint only, replaced by L7
   explanation: z.string(),                             // computable: explains the method, never states the value
   computable: z.boolean(),                             // the model decides *whether* it's computable, never the answer (§3A.3.1)
-  answerProgram: z.string().optional(),                // required when computable: Python setting `result`, whitelisted tools
+  answerProgram: z.string().optional(),                // required when computable: Python setting `result`, the listed math libraries
   mistakes: z.array(z.object({ whyWrong: z.string(), program: z.string() })).max(3).optional(),
                                                        // computable single_choice: 2–3 common mistakes as programs (§3A.3.1)
   inputs: z.array(z.object({                           // computable: the question's {placeholders} (§3A.3.1, input values)
@@ -241,7 +241,7 @@ Structured outputs already guarantee that the JSON has the right **shape**, so t
 | **L4 Duplicates** | Near-duplicate questions within the test, or against locked questions. | Question embeddings (same `embeddings` role as the knowledge base) + cosine threshold, plus n-gram overlap. |
 | **L5 Coverage** | Each question maps to its claimed objective; finds in-scope chunks, sections and objectives that no question covers. | Citations (`evidence.chunkId`) plus embedding similarity between questions, objectives and knowledge-base chunks → coverage matrix and source heatmap. A question whose claimed objective doesn't match its content gets a **warn**. |
 | **L6 Judge (optional)** | Is it really answerable from the evidence? Is exactly one answer correct? Are any distractors also defensible? | A separate model call (the `authoring.judge` role, ideally a different model from the generator) that grades one question at a time against its evidence. **Off by default** (it roughly doubles the model calls per question). Turned on per authoring session. Computable answers are covered by L7 regardless. |
-| **L7 Answer computation & verification** | Generated computable questions: the answer is **computed**, never stated by the model. Imported or hand-edited computable questions: the stated answer equals an **independent computation**. | Two programs (the generator's `answerProgram` and a blind one from `verify.solve`, which never sees options or answer) run in a sandboxed Python worker with whitelisted math libraries. They must agree, and their result becomes (or is compared with) the answer. See §3A.3.1. |
+| **L7 Answer computation & verification** | Generated computable questions: the answer is **computed**, never stated by the model. Imported or hand-edited computable questions: the stated answer equals an **independent computation**. | Two programs (the generator's `answerProgram` and a blind one from `verify.solve`, which never sees options or answer) run in a sandboxed Python worker with the listed math libraries. They must agree, and their result becomes (or is compared with) the answer. See §3A.3.1. |
 
 - L1–L3 run entirely in-process. L4/L5 use vectors already stored in the knowledge base (plus one embedding per new question). All five are fast, deterministic (apart from the embedding model version) and cheap to re-run.
 - L7 needs one model call per computable question, to write the blind check (cached with the question), plus two local sandbox runs. Re-running it with the same check is deterministic and free.
@@ -258,7 +258,7 @@ There are two paths:
 
 **Which questions can be computable (v1):** `single_choice`, `true_false`, `numeric` and `short_answer`. `multi_choice` is never computable in v1 (§13), because its answer depends on evaluating each option.
 
-**Check programs.** A check program is a few lines of Python that set `result` using whitelisted tools only (sandbox, below). Example for sample Q7:
+**Check programs.** A check program is a few lines of Python that set `result` using the listed math libraries (sandbox, below). Example for sample Q7:
 ```python
 from sympy import Matrix
 x = Matrix([2, 4, -3]); y = Matrix([5, -2, 1])
@@ -381,16 +381,16 @@ The values are rendered into the question by the option formatter (step 5). They
   Forking gives every run a clean copy of the pre-imported state, so the 1–2 s SymPy import isn't paid per run and nothing carries over. Option parsing, value comparison and the distractor build (flow A step 5, flow B step 3) run in children the same way, so imported option texts and program outputs are only ever parsed inside the sandbox.
 - **Recycling.** The container is restarted every 500 runs (instance setting), and immediately after any anomaly: a child killed by a limit, a sandbox denial, or a malformed reply. The API waits for its health reply and retries the job. A compromise therefore doesn't outlive the batch it happened in.
 - **Injection signal.** A program that fails with a **sandbox denial** (blocked network or filesystem access, the process limit, a memory kill), as opposed to an ordinary math error, is suspicious. That can come from a prompt injection in the source text. Its question fails, the event goes to the audit log, and the source chunks it was generated from are flagged for the creator to review.
-- **Libraries (v1, fixed).** The runner image contains only these, so any other import simply fails. Adding one is a code change with review (§13).
+- **Libraries (v1, fixed).** **Third-party packages** in the runner image are limited to the ones below, so importing any other fails. Adding one is a code change with review (§13). Python's **standard library** is always present (`os`, `socket`, …) and can't practically be removed. That's harmless, because the isolation above is what stops those modules from doing anything; it doesn't depend on them being missing.
 
   | Module | Used for |
   |---|---|
   | `sympy` | Exact and symbolic math, linear algebra (`Matrix`, `Rational`, `sqrt`, `simplify`, `solve`, …) |
   | `numpy` | Numeric linear algebra (`dot`, `matmul`, `linalg.norm` / `det` / `inv` / `solve` / `eig` / `rank`) |
-  | `fractions`, `math`, `statistics`, `itertools` (stdlib) | Exact fractions, basic math, counting |
+  | `fractions`, `math`, `statistics`, `itertools`, `operator` (stdlib) | Exact fractions, basic math, counting, functional helpers |
   | `lark` | Backend for SymPy's LaTeX parser (option parsing) |
 
-  The prompt lists the same modules, so the model knows what's available (§3A.2). A program over 4 KB is rejected by the API before it's sent.
+  The prompt lists exactly these modules as the ones to use (§3A.2), so programs stay readable and reproducible across runner versions. A program that imports another standard-library module isn't blocked; it just runs inside the same isolation. A program over 4 KB is rejected by the API before it's sent.
 - **Results** are serialized as text: integers and decimals as strings, rationals as `"p/q"`, vectors and matrices as nested lists, other expressions as SymPy's `str` form, plus a LaTeX rendering. Values are compared only inside the runner. The API stores and displays results but never evaluates them, and in particular never passes them to anything like `sympify` or `eval`.
 - **Contract:** request and response schemas are Zod in `packages/shared`, with a generated JSON Schema / Pydantic model on the Python side.
 - **Escape test suite** (an acceptance criterion for P2.1; run in CI, and against the production runtime before release). Each hostile program must fail in the expected way, and leave the next run's result unaffected. The programs:
@@ -703,7 +703,7 @@ Question = BaseQuestion.extend({
   verification: z.object({
     status: z.enum(["computed", "model_agreed", "unverified", "failed"]),
     answerSource: z.enum(["computed", "stated"]).optional(), // computed: answer came from flow A; stated: checked by flow B
-    program: z.string().optional(),              // the blind check program (Python, whitelisted tools)
+    program: z.string().optional(),              // the blind check program (Python, listed libraries)
     authorProgram: z.string().optional(),        // flow A only: the generator's answerProgram
     modelClaim: z.string().optional(),           // flow A only: an answer the model marked or stated, if it differed from the computed one
     inputs: z.record(z.string()).optional(),     // flow A: each input's value (LaTeX), as rendered into the question
@@ -1021,7 +1021,7 @@ Notes (Postgres):
 | Background jobs | **pg-boss** | Postgres-backed queue (no Redis): embedding, generation batches, verification runs |
 | LLM access | **Vercel AI SDK** (`ai`) | `@ai-sdk/openai-compatible` for local servers (vLLM / llama.cpp / Ollama) and gateways, cloud provider packages as needed (§3B) |
 | Markdown parsing | **remark / unified** | Section tree and chunking (§3C) |
-| Answer verification | **Python 3.12** + **SymPy**, **NumPy** | Sandboxed worker with a tool whitelist (§3A.3.1) |
+| Answer verification | **Python 3.12** + **SymPy**, **NumPy** | Isolated runner with a fixed library list (§3A.3.1) |
 | Containers | **Docker** + Docker Compose | One stack: api, web, postgres, verify (§11.5) |
 | Lint / format | **Biome** (2.x) | Lint + format for TypeScript and JSON, plus the custom `no-literal-ui-string` plugin (§11.6); `ruff` for the Python worker |
 | Testing | `bun test` (unit), **Playwright** (end-to-end) + **axe-core** (accessibility, blocks CI) | Fixture: `tests/engr108_chapter1_new_20q_quiz.json` |
@@ -1254,7 +1254,7 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 
 8. **Test type presets:** fixed in code for v1. Should admins be able to define their own (e.g. "lab quiz") later?
 9. **Multi-chapter quizzes:** the base format has a single `chapter` int. The proposal is an optional `chapters: int[]` extension (§4), with `chapter` set only for single-chapter quizzes. Or should `chapter` accept a list?
-10. **Whitelist growth:** which tools come next (e.g. `scipy.stats` for statistics courses, `networkx` for graph problems), and who approves additions?
+10. **Library growth:** which third-party packages come next (e.g. `scipy.stats` for statistics courses, `networkx` for graph problems), and who approves additions?
 11. **Option parsing coverage:** SymPy's LaTeX parser plus our vector/matrix handling covers VMLS-style math. Should we build a test set of option formats from real quizzes before deciding it's enough?
 12. **Unverified questions in proctored tests:** block publishing by default (current proposal), or warn only?
 13. **Casbin adapter:** use an existing Postgres adapter for role grants, or a small custom adapter on Drizzle (only `g` lines live in the DB, so it's tiny)?
@@ -1291,7 +1291,7 @@ Several choices in this spec carry a known risk and have a planned fallback. Whe
 | API runtime | Bun | Node 22 LTS for the API process (Bun stays the package manager and test runner) | A Fastify plugin we need (sessions, multipart, swagger) misbehaves on Bun in the P0 test run or later | §11.0 |
 | LLM client | Vercel AI SDK | Direct `openai`-SDK adapter behind the same `LlmRuntime` interface, per endpoint | A local server needs request options the AI SDK can't send, or structured output fails through the SDK but works directly | §3B.1, §11.2 |
 | Casbin adapter | Existing Postgres adapter | Small custom adapter on Drizzle (only `g` lines in the DB) | The adapter doesn't work on Bun or with our schema | §5.2 |
-| Option parsing (L7) | SymPy LaTeX parsing + our vector/matrix handling | Add a dedicated LaTeX→SymPy parser library to the whitelist (reviewed), or mark the format `unverified` (warn) | Real quizzes contain option formats the parser can't handle | §3A.3.1 |
+| Option parsing (L7) | SymPy LaTeX parsing + our vector/matrix handling | Add a dedicated LaTeX→SymPy parser library to the library list (reviewed), or mark the format `unverified` (warn) | Real quizzes contain option formats the parser can't handle | §3A.3.1 |
 
 ### 15.2 Decision log
 
