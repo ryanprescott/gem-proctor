@@ -1,7 +1,7 @@
-# gem-proctor — Product & Technical Spec (Draft v0.13)
+# gem-proctor — Product & Technical Spec (Draft v0.15)
 
-> Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13.
-> Last updated: 2026-10-28 (v0.13: consistency pass)
+> Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13; planned contingencies and the decision log are in §15.
+> Last updated: 2026-10-28 (v0.15: lint-rule contingency plans; contingencies & decision log, §15)
 
 ---
 
@@ -55,7 +55,7 @@ These apply to every feature, from the first release.
 **Internationalization: English only, i18n-ready**
 - v1 ships in **English only**, but **every user-facing string** goes through i18n string tables from the start: no hard-coded UI text. Frontend: **i18next / react-i18next** with namespaced JSON catalogs (`en`). Dates, numbers and percentages are formatted with `Intl`.
 - **API errors** return stable **error codes** plus parameters, never English sentences. The frontend maps codes to strings.
-- Lint rule: no string literals in JSX (with an allowlist for things like test ids).
+- **Lint rule `no-literal-ui-string`** (a custom Biome plugin, specified in §11.6) blocks hard-coded user-facing text in the web app. A companion CI check keeps the string catalogs and the code in sync.
 - **Quiz content** (questions, options, sources) is not translated; it's in whatever language the curriculum is. Prompts ask the model to write in the source's language (English in v1).
 
 ---
@@ -875,11 +875,11 @@ Notes (Postgres):
 | Markdown parsing | **remark / unified** | Section tree and chunking (§3C) |
 | Answer verification | **Python 3.12** + **SymPy**, **NumPy** | Sandboxed worker with a tool whitelist (§3A.3.1) |
 | Containers | **Docker** + Docker Compose | One stack: api, web, postgres, verify (§11.5) |
-| Lint / format | **Biome** | One fast tool for TypeScript and JSON; `ruff` for the Python worker |
+| Lint / format | **Biome** (2.x) | Lint + format for TypeScript and JSON, plus the custom `no-literal-ui-string` plugin (§11.6); `ruff` for the Python worker |
 | Testing | `bun test` (unit), **Playwright** (end-to-end) + **axe-core** (accessibility, blocks CI) | Fixture: `tests/engr108_chapter1_new_20q_quiz.json` |
 | Model serving (external) | vLLM or llama.cpp (+ an embedding model) | Runs on the GPU host (e.g. Proxmox + RTX 3060), outside the app's stack. Reached through an endpoint (§3B.2) |
 
-**Bun + Fastify:** Fastify runs on Bun, but plugin compatibility (sessions, multipart, swagger) has to be confirmed in a test run in P0. App code avoids Bun-only APIs, so falling back to Node 22 LTS for the API process stays a one-line change if needed.
+**Bun + Fastify:** Fastify runs on Bun, but plugin compatibility (sessions, multipart, swagger) has to be confirmed in a test run in P0. App code avoids Bun-only APIs, so falling back to Node 22 LTS for the API process stays a one-line change if needed (contingency, §15).
 
 ### 11.1 Monorepo layout
 
@@ -897,6 +897,9 @@ packages/
   db/         Drizzle schema, migrations, client, repository helpers (api-only dependency)
 docker/
   compose.yaml, Dockerfiles per app
+tools/
+  biome/      rule-config.json, build-rule.ts → no-literal-ui-string.grit (generated), fixtures + neutral snapshot, suppressions baseline (§11.6)
+  i18n/       check-catalogs.ts (§11.6)
 ```
 
 - **Workspaces:** Bun workspaces.
@@ -940,6 +943,105 @@ docker/
 
 - Model servers (vLLM / llama.cpp / embedding model) run **outside** this stack, on the GPU host, and are configured as endpoints (§3B.2). An optional `docker/compose.models.yaml` can be provided for single-host setups.
 - Configuration comes from env: DB URL, the encryption key for endpoint secrets, and session secret.
+
+### 11.6 Custom lint rule: `no-literal-ui-string`
+
+**Purpose:** enforce §1.3. No user-facing text is hard-coded in the web app; all of it comes from i18n catalogs through `t()` / `<Trans>`. The rule runs in `biome lint` / `biome check`, locally and in CI, and **an error blocks the merge**.
+
+**Implementation:** a **Biome GritQL plugin** (`tools/biome/no-literal-ui-string.grit`), registered in `biome.json` and limited to the web app's source:
+
+```json
+{
+  "plugins": [
+    { "path": "./tools/biome/no-literal-ui-string.grit",
+      "includes": ["apps/web/src/**/*.tsx", "apps/web/src/**/*.ts"] }
+  ]
+}
+```
+
+GritQL plugins are Biome's stable plugin type. They match syntax patterns and report through `register_diagnostic(span, message, severity)`, but they **can't see types or the semantic model**. So the rule is written purely in terms of syntax, as below.
+
+#### What it flags (severity `error`)
+
+A string counts as **UI text** if, after trimming, it contains **at least one letter** (Unicode `\p{L}`). Pure whitespace, numbers and punctuation/symbols (`·`, `—`, `/`, `:`, `%`) are never flagged.
+
+| # | Pattern | Example (flagged) |
+|---|---|---|
+| F1 | JSX text children | `<p>No questions yet</p>` |
+| F2 | String or template literals inside a JSX expression container | `<p>{"Retake missed"}</p>`, ``<p>{`Score: ${n}`}</p>`` |
+| F3 | Literal values of **user-visible attributes/props**: `aria-label`, `aria-description`, `aria-valuetext`, `aria-roledescription`, `alt`, `title`, `placeholder`, `label`, `description`, `helperText`, `errorMessage`, `tooltip`, `emptyText`, `confirmText`, `cancelText` | `<Button aria-label="Close">`, `<TextField label="Email" />` |
+| F4 | A literal first argument to **UI message functions**: `notify`, `toast`, `confirmDialog`, `announce` (our live-region helper), `window.alert`, `window.confirm`, `window.prompt` | `notify("Saved")` |
+| F5 | Assigning a literal to `document.title` | `document.title = "Results"` |
+
+**The rule's lists are single-sourced** in `tools/biome/rule-config.json`: the F3 attributes, F4 functions, the never-flagged attributes, the excluded paths and the proper-noun allowlist. The `.grit` file is **generated** from it by `tools/biome/build-rule.ts`, and CI fails if the generated file is stale. Every contingency below reads the same JSON, so switching implementation never changes what's enforced. The lists change only through code review, like the Casbin policy.
+
+#### What it never flags
+
+- Attributes that aren't user-visible: `className`, `id`, `key`, `href`, `src`, `type`, `role`, `name`, `htmlFor`, `data-*`, `aria-labelledby`, `aria-describedby`, `aria-controls`, `data-testid`, `form`, `method`, `rel`, `target`, `lang`, `dir`, `autoComplete`, `inputMode`. Anything not listed in F3 is out of scope by default.
+- Arguments to `t()`, `i18n.t()` and the `i18nKey` prop of `<Trans>`. These are keys, not text.
+- **Content rendered from data:** questions, options, source passages and model output arrive as variables, never as literals, so they're naturally out of scope.
+- Files excluded by path: `**/*.test.tsx`, `**/*.spec.tsx`, `**/*.stories.tsx`, `apps/web/src/i18n/**`, `apps/web/src/dev/**`.
+- An **allowlist of proper nouns** that are never translated (in `rule-config.json`): `gem-proctor`, `KaTeX`, `Markdown`, `LaTeX`, `JSON`, `CSV`. A literal is allowed if, apart from these terms, it contains no letters.
+
+#### Escape hatch
+
+Biome's standard suppression comment for plugin diagnostics, **with a mandatory reason**, e.g. `// biome-ignore lint/plugin: brand wordmark rendered as SVG title`. The exact suppression syntax is confirmed in the P0 test run. A CI script counts suppressions and fails if the count grows beyond the committed baseline, without a matching update to `tools/biome/suppressions-baseline.txt`, so every new exception is visible in review.
+
+#### Message and fix
+
+- Message: `User-facing text must come from the i18n catalog: use t("…") (see SPEC §1.3).`
+- **No autofix.** The rule can't choose a catalog key or namespace. A fix would need a human to pick the key and add the string to `en` catalogs.
+
+#### Tests
+
+- Fixture files in `tools/biome/__fixtures__/`: `invalid.tsx` covers every F1–F5 case (and template-literal, nested-JSX and fragment variants); `valid.tsx` covers every "never flags" case, including the allowlist and `t()` calls.
+- A test runs the active implementation on the fixtures and compares its diagnostics with a committed snapshot. The snapshot uses a **tool-neutral format** (`file:line:col case-id`, e.g. `invalid.tsx:12:7 F3`), produced by a small adapter per implementation, so the same fixtures and snapshot carry over unchanged to any contingency. Every change to the rule must update the snapshot.
+
+#### Companion check (not part of the lint rule)
+
+A CI script (`tools/i18n/check-catalogs.ts`) handles what a syntax rule can't:
+- every `t("key")` / `i18nKey="key"` used in code exists in the `en` catalog;
+- no catalog key is unused;
+- every API error code (`packages/shared` error-code enum) has an `errors:<code>` entry in the catalog. The API side is enforced by types: route handlers can only throw `AppError(code, params)`, where `code` is the shared enum, so the API can't send prose.
+
+#### Test run in P0 (go/no-go before relying on it)
+
+1. Confirm that GritQL patterns in Biome match **JSX text, JSX attributes and expression containers in `.tsx`** files. Biome's docs list JavaScript as a plugin target language but don't spell out JSX/TSX.
+2. Confirm the suppression-comment syntax for plugin diagnostics.
+3. Run the fixtures and check that every F1–F5 case is detected with no false positives on `valid.tsx`.
+
+#### Contingency plans
+
+If the primary implementation (the GritQL plugin) fails its test run, or breaks later (e.g. after a Biome upgrade), switch to the next contingency. **What's enforced stays the same:** F1–F5, the never-flagged list, the allowlist, the error severity, the merge block, the fixtures and the tool-neutral snapshot. Only the implementation changes.
+
+**Triggers (any one):**
+- A GritQL pattern can't match one of F1–F5 in `.tsx` (JSX text, attributes, expression containers, template literals).
+- `valid.tsx` produces false positives that can't be removed in the pattern.
+- Plugin diagnostics can't be suppressed with a reason-bearing comment.
+- Plugin support regresses or is removed in a Biome release we need.
+- Linting `apps/web` gets more than ~2× slower because of the plugin.
+
+| | **Contingency A: Biome JavaScript plugin** | **Contingency B: ESLint, this rule only** | **Contingency C: standalone AST check** |
+|---|---|---|---|
+| **Use when** | GritQL can't express a case, but Biome's plugin system works | A fails too, or JS plugins break or are removed | A and B both fail, or ESLint's plugin can't be made to match the scope |
+| **Implementation** | `tools/biome/no-literal-ui-string.js` using `defineRule`, with AST queries for JSX text, attributes, expression containers and call expressions (node kind names confirmed at switch time). Reads `rule-config.json` | `eslint` + `typescript-eslint` parser + `eslint-plugin-i18next` (`no-literal-string`), configured from `rule-config.json` (JSX-only mode, the F3 attributes, the F4 functions; exact option names confirmed at switch time). F5, if the plugin can't express it: a tiny local ESLint rule `local/no-document-title-literal`. **No other ESLint rules** are enabled; Biome still lints and formats everything else | `tools/i18n/no-literal-ui-string.ts`: parse each file with the TypeScript compiler API (`ts.createSourceFile`), walk JSX and call nodes, and apply F1–F5 from `rule-config.json`. No third-party lint dependency |
+| **Config changes** | Replace the `.grit` entry in `biome.json` with the `.js` plugin, same `includes`. **Pin Biome to an exact version** (developer-preview API), and Biome upgrades need manual approval | Add `eslint.config.js` limited to `apps/web/src/**/*.{ts,tsx}` with the same exclusions; add a `lint:i18n` script | Add a `lint:i18n` script (`bun tools/i18n/no-literal-ui-string.ts apps/web/src`) |
+| **Suppression** | Biome plugin suppression comment with a reason (as for GritQL) | `// eslint-disable-next-line i18next/no-literal-string -- <reason>`; a reason is required (enforced by `eslint-comments/require-description` or the baseline script) | `// i18n-ignore: <reason>` on the line before; the script rejects it without a reason |
+| **Suppression baseline** | Unchanged script | Script counts the ESLint disable comments instead | Script counts `i18n-ignore` comments |
+| **CI** | Unchanged (`biome check`) | `biome check` **plus** `bun run lint:i18n` (`eslint`); both block the merge | `biome check` **plus** `bun run lint:i18n`; blocks the merge |
+| **Editor feedback** | Yes (Biome LSP) | Yes (ESLint extension) | No: CI and the pre-commit hook only. This is the main cost of C |
+| **Snapshot adapter** | Biome JSON reporter → neutral format | ESLint JSON formatter → neutral format | Script outputs the neutral format directly |
+| **Exit / return path** | Move back to GritQL when the blocking case is supported. Re-run the test run first | Move back to A or the primary when they pass the test run. Remove ESLint entirely | Move back to any passing option |
+
+**Switching procedure** (the same for every contingency):
+1. Implement the contingency, reading `rule-config.json`.
+2. Run the fixtures. The tool-neutral snapshot must match **without edits**. A change to the snapshot means the scope changed, which needs its own review.
+3. Port the suppression baseline (same count, new comment syntax).
+4. Remove the previous implementation's files and config, so only one is active.
+5. Mark this section **"Active implementation: Contingency X since YYYY-MM-DD"** and add a row to the decision log (§15) with the trigger and evidence (Biome version, the failing case).
+6. Commit the switch as one commit, referencing the §15 row.
+
+**Active implementation:** primary (GritQL plugin), pending the P0 test run.
 
 ---
 
@@ -1008,6 +1110,7 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 11. **Option parsing coverage:** SymPy's LaTeX parser plus our vector/matrix handling covers VMLS-style math. Should we build a test set of option formats from real quizzes before deciding it's enough?
 12. **Unverified questions in proctored tests:** block publishing by default (current proposal), or warn only?
 13. **Casbin adapter:** use an existing Postgres adapter for role grants, or a small custom adapter on Drizzle (only `g` lines live in the DB, so it's tiny)?
+14. **UI string-function list (F4, §11.6):** confirm the names of our notification and live-region helpers once the component library is chosen, so the rule covers them from the start.
 
 ---
 
@@ -1015,7 +1118,7 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 
 | Phase | Scope |
 |---|---|
-| **P0 – Foundations** | Bun monorepo, Docker Compose (Postgres + pgvector, api, web, verify skeleton), Drizzle schema + migrations, pg-boss, auth (bcrypt, cached sessions), Casbin roles + route enforcement, first-admin bootstrap, base + extended Zod schemas, quiz normalizer + import preview/edit, Quiz/Result export. Test run: Fastify plugins on Bun. Cross-cutting from day one: audit log, i18n scaffolding (string catalogs, error codes), accessibility CI (axe), component library |
+| **P0 – Foundations** | Bun monorepo, Docker Compose (Postgres + pgvector, api, web, verify skeleton), Drizzle schema + migrations, pg-boss, auth (bcrypt, cached sessions), Casbin roles + route enforcement, first-admin bootstrap, base + extended Zod schemas, quiz normalizer + import preview/edit, Quiz/Result export. Test run: Fastify plugins on Bun. Cross-cutting from day one: audit log, i18n scaffolding (string catalogs, error codes), accessibility CI (axe), component library. `no-literal-ui-string` Biome plugin + fixtures + catalog check (§11.6), with its test run |
 | **P1 – Practice** | Practice attempts (shuffle, immediate feedback, soft timer, flag, autosave, retake missed), grading + short-answer normalization, self-graded override, results, history, Result export |
 | **P1.5 – LLM layer** | `packages/llm`, endpoints + model discovery + probe, role assignment, per-endpoint queue, structured-output modes + normalization/repair loop, eval harness, call logging. Verified against local Qwen on the 3060 box (vLLM and llama.cpp) and at least one cloud model |
 | **P2 – Authoring** | Text/Markdown sources + revisions, **knowledge base** (chunking, embedding jobs, pgvector + full-text hybrid retrieval, retrieval logs), scope picker, objectives from headings, blueprint, generation, L1–L3 validation, review UI, revise loop, publish, provenance trail (question history, `QuestionEvent`) |
@@ -1024,3 +1127,25 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 | **P3 – Proctoring** | Groups + join codes, assignments (to groups), single-attempt submissions, time limits, review queue, overrides, release action, cohort view, CSV export |
 | **P3.1 – AI analysis** | Attempt analysis, cohort analysis on top of the cohort view |
 | **P4 – Hardening** | Backups/restore drill, performance, full manual accessibility audit |
+
+---
+
+## 15. Contingencies & decision log
+
+Several choices in this spec carry a known risk and have a planned fallback. When one is activated, the spec is updated **in the same commit**: the affected section is marked "Active: …", and a row is added to the log below. That way the spec always describes what is actually built.
+
+### 15.1 Planned contingencies
+
+| Area | Primary | Contingency | Trigger | Spec |
+|---|---|---|---|---|
+| i18n lint rule | Biome GritQL plugin | A: Biome JS plugin → B: ESLint (`eslint-plugin-i18next`) for this rule only → C: standalone TypeScript AST check | Test-run failure or later regression (triggers in §11.6) | §11.6 |
+| API runtime | Bun | Node 22 LTS for the API process (Bun stays the package manager and test runner) | A Fastify plugin we need (sessions, multipart, swagger) misbehaves on Bun in the P0 test run or later | §11.0 |
+| LLM client | Vercel AI SDK | Direct `openai`-SDK adapter behind the same `LlmRuntime` interface, per endpoint | A local server needs request options the AI SDK can't send, or structured output fails through the SDK but works directly | §3B.1, §11.2 |
+| Casbin adapter | Existing Postgres adapter | Small custom adapter on Drizzle (only `g` lines in the DB) | The adapter doesn't work on Bun or with our schema | §5.2 |
+| Option parsing (L7) | SymPy LaTeX parsing + our vector/matrix handling | Add a dedicated LaTeX→SymPy parser library to the whitelist (reviewed), or mark the format `unverified` (warn) | Real quizzes contain option formats the parser can't handle | §3A.3.1 |
+
+### 15.2 Decision log
+
+| Date | Area | Decision | Reason / evidence | Commit |
+|---|---|---|---|---|
+| — | — | *(no contingencies activated yet)* | — | — |
