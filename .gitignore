@@ -12,3 +12,4 @@ __pycache__/
 .venv/
 .dev/
 apps/web/dist/
+zeroshot/
