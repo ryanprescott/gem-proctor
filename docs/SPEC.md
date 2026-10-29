@@ -1,7 +1,7 @@
 # gem-proctor — Product & Technical Spec (Draft v0.17)
 
 > Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13; planned contingencies and the decision log are in §15.
-> Last updated: 2026-10-29 (v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
+> Last updated: 2026-10-29 (v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
 
 ---
 
@@ -434,11 +434,18 @@ RoleAssignment = z.object({
     structuredOutput: z.enum(["native_schema", "prompt_only"]),
     contextWindow: z.number().int(),          // the context we budget against (for local: what the server was launched with)
     maxOutputTokens: z.number().int(),
+    maxInputTokens: z.number().int().optional(), // embeddings: longest input embedded *without truncation* (measured, see below)
   }),
+  embedding: z.object({                       // embeddings role only
+    dimensions: z.number().int(),             // fixes the pgvector column size
+    queryPrefix: z.string().default(""),      // prepended to retrieval queries, e.g. "task: search result | query: "
+    documentPrefix: z.string().default(""),   // prepended to chunks at ingest, e.g. "title: none | text: "
+  }).optional(),
   params: z.record(z.unknown()).optional(),   // sampling settings + provider-specific options
 })
 ```
 
+- **Embedding inputs can be cut off silently.** Ollama embeds at most `min(num_ctx, num_batch)` tokens, which is 2,048 by default whatever the model supports. A longer input is truncated without an error on `/v1/embeddings`, and on `/api/embed` unless `truncate: false` is sent. Measured on `embeddinggemma-2:270m`, which advertises a 262K context: a change after token 2,048 left the vector identical. So `maxInputTokens` is set from what the server is launched with, not from the model card. The probe button measures it: it embeds a long input twice, with different endings, and finds the length where the vectors stop changing. At ingest, a chunk whose reported token count (`usage.prompt_tokens`) reaches `maxInputTokens` **fails** instead of being stored truncated.
 - **Model discovery:** where the endpoint supports it (e.g. `/v1/models`), the admin UI lists the available models.
 - **Probe/test button:** sends a small structured-output request and an embeddings request, and reports latency, whether the schema was respected, and the context size where reported. This helps fill in `capabilities` and catches a wrong `baseUrl` or key.
 - **Per-endpoint queue:** requests to an endpoint are limited to its `concurrency`, with a fair queue across users. That protects a single local GPU from being flooded, and keeps cloud usage within rate limits.
@@ -504,6 +511,10 @@ source.md ─▶ parse headings (remark) ─▶ sections ─▶ chunks ─┬─
 
 - **Sections come from Markdown headings.** `#` → chapter, `##` → section, and so on. Plain text with no headings is treated as one section and split by paragraph.
 - **Chunks** are split within a section, paragraph-aware, with a target token size and small overlap. They're never split inside a code block, table or `$$` math block.
+  - **Target size: about 500 tokens**, with a hard maximum of the embeddings role's `maxInputTokens` minus the document prefix. A unit that can't be split but goes over the maximum (a very long table or math block) fails ingest with that reason, instead of being embedded truncated.
+  - Chunk tokens are counted with the embedding endpoint's own count where it reports one. Otherwise a conservative estimate is used (characters ÷ 3).
+  - Chunks stay well under the cap anyway. Retrieval works better on focused chunks, and the reference embedding model attends within a 1,024-token sliding window.
+  - The document prefix (`RoleAssignment.embedding`) is added only to the embedded text. The stored chunk text, the full-text index and the citations never include it.
 - **Every chunk is a provenance record:**
 
   | Field | Example |
@@ -514,12 +525,18 @@ source.md ─▶ parse headings (remark) ─▶ sections ─▶ chunks ─┬─
   | Character offsets in the revision's Markdown | 1200–1480 |
   | Content hash | `sha256:…` |
   | Text | the chunk itself |
-  | Embedding + embedding model id | `vector(N)`, `bge-m3@…` |
+  | Embedding + embedding model id | `vector(768)`, `embeddinggemma-2:270m@sha256:111e…` |
   | Full-text index | `tsvector` |
 
 - **Chunks are immutable.** Editing a source creates a new revision with new chunks. Old chunks are kept, so published tests' citations always resolve.
 - **Embedding runs as a background job** (§11.2), batched to suit the embedding endpoint's `concurrency`. A source is usable for authoring once all its chunks are embedded.
-- The `embeddings` role is **required** for authoring. A small embedding model on the same box as the generation model is enough.
+- The `embeddings` role is **required** for authoring. A small embedding model on the same box as the generation model is enough. The embedding model and the vector store don't need to be near each other: the API calls the model over HTTP and stores the vectors in Postgres (pgvector) itself.
+- **Reference embedding model:** `embeddinggemma-2:270m` on Ollama.
+  - 768 dimensions; 0.35 GiB of VRAM, resident next to `qwen3.5-9b-32k` (6.1 GiB) on a 12 GB card.
+  - Prefixes: `queryPrefix` `"task: search result | query: "`, `documentPrefix` `"title: none | text: "`.
+  - `maxInputTokens` 2,048 on Ollama defaults. The reference setup uses a Modelfile tag (`embeddinggemma2-4k`: `num_ctx 4096`, `num_batch 4096`) for 4,096. Both settings are needed, and Ollama honors both from a Modelfile (measured). Over the cap, `/v1/embeddings` still truncates silently, but it reports `prompt_tokens` equal to the cap, which the ingest guard catches. The tag uses 0.6 GiB of VRAM and gives the same vectors as the base tag.
+  - The larger `embeddinggemma-2` tags add image and audio encoders only, and give identical text vectors (cosine 1.000000), so the 270m tag is the one to use.
+  - Small retrieval test (14 chunks, 15 queries): top-1 11/15 without prefixes, **13/15 with them** (MRR 0.83 → 0.92). Using the section heading as the title scored lower (11/15) than `title: none`.
 
 ### 3C.3 Retrieval (our server) and how it works with the model
 
@@ -1189,7 +1206,7 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 1. **Question types beyond v1:** ordering, matching, fill-in-the-blank, image-based questions?
 2. **Default model roles:** which role → endpoint/model assignments should a fresh install ship with? (Probably: everything unassigned, plus a setup wizard with the local reference setup preselected.)
 3. **Fairness & quotas:** do we need per-user limits (questions/day, concurrent runs, cloud spend), or is the fair queue (§3B.2) enough?
-4. **Embedding model:** which one to recommend (multilingual? math-aware?), and at what vector dimension? It's now required for the knowledge base. Changing it means a column migration plus re-embedding everything.
+4. ~~**Embedding model**~~ **Resolved (v0.19):** `embeddinggemma-2:270m`, 768 dimensions, with query and document prefixes (§3C.2). Changing it later still means a column migration plus re-embedding everything. Re-check the prefixes and the section-title choice on real course material once P2 has a retrieval eval set.
 5. **Minimum model:** what's the minimum we document as supported for `authoring.generate` (e.g. "≥ 8B open-weight, `native_schema`, ≥ 16K context")? Decide after running the §3B.4 eval set on the 3060 box and on one cloud model. Also: vLLM or llama.cpp as the recommended local server?
 6. **Source sharing & retention:** can a source be shared with other proctors/groups? How long are sources kept? (Students see cited passages only on `full_review` assignments, §9.2.)
 7. **Deployment:** Docker Compose on one host (e.g. a Proxmox VM) is the v1 target (§11.5). Is anything beyond that needed (HA, managed Postgres, separate GPU host networking/TLS)?
