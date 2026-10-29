@@ -1,0 +1,21 @@
+# Policy (SPEC §5.2): sub, objType, act, cond (any | owner | member). Code review only.
+# P0 rows; later phases add sources, assignments, practice, groups, ...
+
+# Any signed-in user: their own session.
+p, student, session, read, any
+p, student, session, delete, any
+
+# Proctors: imports and their own tests.
+p, proctor, import, preview, any
+p, proctor, import, create, any
+p, proctor, test, list, any
+p, proctor, test, read, owner
+p, proctor, test, update, owner
+p, proctor, test, export, owner
+
+# Admins: everything, on all resources.
+p, admin, *, *, any
+
+# Role hierarchy: student < proctor < admin.
+g, proctor, student
+g, admin, proctor

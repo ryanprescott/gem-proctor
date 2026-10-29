@@ -1,0 +1,15 @@
+{
+  "name": "@gem/authz",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gem/db": "workspace:*",
+    "@gem/shared": "workspace:*",
+    "casbin": "5.51.1",
+    "drizzle-orm": "0.45.4"
+  }
+}
