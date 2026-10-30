@@ -17,7 +17,12 @@ VARS = {
                        "for true_false: True or False (a bool, not a number)",
     "styleGuidance": "Test type: chapter quiz. Test individual concepts and definitions, evenly across the chapter's sections.",
 }
-def load(name): return open(os.path.join(HERE, "prompts", name + ".txt")).read()
+# The current prompts live in packages/llm/prompts/ (P1.5); this folder keeps the older drafts.
+LLM_PROMPTS = os.path.join(HERE, "..", "..", "..", "packages", "llm", "prompts")
+MOVED = {"gen-v8": "authoring.generate", "blind-v2": "verify.solve.blind", "classify-v1": "verify.solve.classify", "repair-v1": "program-repair"}
+def load(name):
+    if name in MOVED: return open(os.path.join(LLM_PROMPTS, MOVED[name], name + ".md")).read().replace("<!-- user -->\n", "")
+    return open(os.path.join(HERE, "prompts", name + ".txt")).read()
 def fill(t, **kw):
     for k, v in {**VARS, **kw}.items(): t = t.replace("{{" + k + "}}", v)
     assert "{{" not in t, re.findall(r"\{\{\w+\}\}", t)

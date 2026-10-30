@@ -1,0 +1,444 @@
+{
+  "type": "object",
+  "required": ["questions"],
+  "properties": {
+    "questions": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "tempId": {
+                "type": "string",
+                "maxLength": 20
+              },
+              "type": {
+                "const": "single_choice"
+              },
+              "topic": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "computable": {
+                "const": true
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["chunkId", "quote"],
+                  "properties": {
+                    "chunkId": {
+                      "type": "string"
+                    },
+                    "quote": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "kind", "size", "from", "sourceText"],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9]{0,5}$"
+                    },
+                    "kind": {
+                      "enum": ["integer", "rational", "vector", "matrix"]
+                    },
+                    "size": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 6
+                      },
+                      "maxItems": 2
+                    },
+                    "from": {
+                      "enum": ["source", "sample"]
+                    },
+                    "sourceText": {
+                      "type": "string",
+                      "maxLength": 60
+                    }
+                  }
+                },
+                "minItems": 1,
+                "maxItems": 4
+              },
+              "question": {
+                "type": "string",
+                "maxLength": 400
+              },
+              "constraint": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "answerProgram": {
+                "type": "string",
+                "maxLength": 600
+              },
+              "options": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "mistakes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["whyWrong", "program"],
+                  "properties": {
+                    "whyWrong": {
+                      "type": "string",
+                      "maxLength": 120
+                    },
+                    "program": {
+                      "type": "string",
+                      "maxLength": 400
+                    }
+                  }
+                },
+                "minItems": 2,
+                "maxItems": 3
+              },
+              "explanation": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "tempId",
+              "type",
+              "topic",
+              "computable",
+              "evidence",
+              "inputs",
+              "question",
+              "constraint",
+              "answerProgram",
+              "options",
+              "mistakes",
+              "explanation"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tempId": {
+                "type": "string",
+                "maxLength": 20
+              },
+              "type": {
+                "const": "numeric"
+              },
+              "topic": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "computable": {
+                "const": true
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["chunkId", "quote"],
+                  "properties": {
+                    "chunkId": {
+                      "type": "string"
+                    },
+                    "quote": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "kind", "size", "from", "sourceText"],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9]{0,5}$"
+                    },
+                    "kind": {
+                      "enum": ["integer", "rational", "vector", "matrix"]
+                    },
+                    "size": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 6
+                      },
+                      "maxItems": 2
+                    },
+                    "from": {
+                      "enum": ["source", "sample"]
+                    },
+                    "sourceText": {
+                      "type": "string",
+                      "maxLength": 60
+                    }
+                  }
+                },
+                "minItems": 1,
+                "maxItems": 4
+              },
+              "question": {
+                "type": "string",
+                "maxLength": 400
+              },
+              "constraint": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "answerProgram": {
+                "type": "string",
+                "maxLength": 600
+              },
+              "options": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "mistakes": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "explanation": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "tempId",
+              "type",
+              "topic",
+              "computable",
+              "evidence",
+              "inputs",
+              "question",
+              "constraint",
+              "answerProgram",
+              "options",
+              "mistakes",
+              "explanation"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tempId": {
+                "type": "string",
+                "maxLength": 20
+              },
+              "type": {
+                "const": "true_false"
+              },
+              "topic": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "computable": {
+                "const": true
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["chunkId", "quote"],
+                  "properties": {
+                    "chunkId": {
+                      "type": "string"
+                    },
+                    "quote": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "kind", "size", "from", "sourceText"],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9]{0,5}$"
+                    },
+                    "kind": {
+                      "enum": ["integer", "rational", "vector", "matrix"]
+                    },
+                    "size": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 6
+                      },
+                      "maxItems": 2
+                    },
+                    "from": {
+                      "enum": ["source", "sample"]
+                    },
+                    "sourceText": {
+                      "type": "string",
+                      "maxLength": 60
+                    }
+                  }
+                },
+                "minItems": 1,
+                "maxItems": 4
+              },
+              "question": {
+                "type": "string",
+                "maxLength": 400
+              },
+              "constraint": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "answerProgram": {
+                "type": "string",
+                "maxLength": 600
+              },
+              "options": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "mistakes": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "explanation": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "tempId",
+              "type",
+              "topic",
+              "computable",
+              "evidence",
+              "inputs",
+              "question",
+              "constraint",
+              "answerProgram",
+              "options",
+              "mistakes",
+              "explanation"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "tempId": {
+                "type": "string",
+                "maxLength": 20
+              },
+              "type": {
+                "const": "single_choice"
+              },
+              "topic": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "computable": {
+                "const": false
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["chunkId", "quote"],
+                  "properties": {
+                    "chunkId": {
+                      "type": "string"
+                    },
+                    "quote": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "minItems": 1
+              },
+              "inputs": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "question": {
+                "type": "string",
+                "maxLength": 400
+              },
+              "constraint": {
+                "type": "string",
+                "maxLength": 0
+              },
+              "answerProgram": {
+                "type": "string",
+                "maxLength": 0
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["text", "isCorrect"],
+                  "properties": {
+                    "whyWrong": {
+                      "type": "string",
+                      "maxLength": 160
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "isCorrect": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "minItems": 3,
+                "maxItems": 4
+              },
+              "mistakes": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "explanation": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "tempId",
+              "type",
+              "topic",
+              "computable",
+              "evidence",
+              "inputs",
+              "question",
+              "constraint",
+              "answerProgram",
+              "options",
+              "mistakes",
+              "explanation"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

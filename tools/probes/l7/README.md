@@ -9,6 +9,6 @@ python3 -I probe.py <gen-prompt> <plain|strict|strict5|strict6|strict7> <trials>
 #      python3 -I probe.py gen-v4 strict 6 blind-v2 objective   (objective-only request: agreement + copying)
 ```
 
-`LLM_DEV_BASE_URL` and `LLM_DEV_MODEL` override the endpoint. Prompts are in `prompts/`; `strict` adds the grammar union on `computable`; `strict6` (current) has no model-written options for calculation questions, and `distract.py` builds them locally. Throwaway tooling until the eval harness exists (P1.5).
+`LLM_DEV_BASE_URL` and `LLM_DEV_MODEL` override the endpoint. The current prompts (`gen-v8`, `blind-v2`, `classify-v1`, `repair-v1`) are in `packages/llm/prompts/` (one folder per prompt id); older drafts stay in `prompts/`; `strict` adds the grammar union on `computable`; `strict6` (current) has no model-written options for calculation questions, and `distract.py` builds them locally. Throwaway tooling until the eval harness exists (P1.5).
 
 Current: `python3 -I probe.py gen-v8 strict7 8`. It uses named inputs (`inputs.py`: values from the chunk first, else sampled), local distractors (`distract.py`), and the notation check with `classify-v1` on concept questions.

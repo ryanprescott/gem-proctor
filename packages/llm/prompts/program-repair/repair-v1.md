@@ -1,3 +1,4 @@
+<!-- user -->
 This Python program was meant to set `result` to the answer of the question, but it failed.
 
 Question:

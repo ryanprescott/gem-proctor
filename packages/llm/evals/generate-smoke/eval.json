@@ -1,0 +1,26 @@
+{
+  "name": "generate-smoke",
+  "kind": "generate",
+  "role": "authoring.generate",
+  "prompt": "authoring.generate",
+  "schema": "strict7",
+  "defaultTrials": 5,
+  "request": {
+    "vars": {
+      "allowedImports": "fractions, itertools, math, numpy, statistics, sympy",
+      "resultTypeRules": "for single_choice, numeric and short_answer: a number, Fraction, list (vector), list of lists (matrix) or sympy expression; for true_false: True or False (a bool, not a number)",
+      "styleGuidance": "Test type: chapter quiz. Test individual concepts and definitions, evenly across the chapter's sections."
+    },
+    "user": "Source chunk [{{chunkId}}]:\n{{chunk}}\n\nObjective O1: compute inner products and norms of vectors, and decide orthogonality.\nWrite 4 questions for O1: 3 calculation questions (one single_choice, one numeric, one true_false) and 1 concept single_choice question."
+  },
+  "questionsPerTrial": 4,
+  "fixtures": {
+    "chunks": [
+      {
+        "id": "evals:inner-products:c1",
+        "text": "For two n-vectors a and b, the inner product is the number a^T b = a_1 b_1 + a_2 b_2 + ... + a_n b_n: multiply the matching entries and add up the products. The Euclidean norm of a vector is ||a|| = sqrt(a^T a), so a vector's norm is never negative, and it is zero only for the zero vector. Two vectors are called orthogonal when their inner product is zero. As a worked example, take a = (2, -1, 2) and b = (1, 4, 1). Then a^T b = 2*1 + (-1)*4 + 2*1 = 0, so a and b are orthogonal, and ||a|| = sqrt(4 + 1 + 4) = 3."
+      }
+    ]
+  },
+  "metrics": ["validFirstTry", "repairsPerCall", "validAfterRepairs", "evidenceVerbatim", "secondsPerQuestion"]
+}

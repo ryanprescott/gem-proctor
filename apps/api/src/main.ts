@@ -1,11 +1,12 @@
 import { join } from "node:path";
 import { Authz } from "@gem/authz";
 import { createDb, createPool, runMigrations } from "@gem/db";
-import { createLlmRuntime } from "@gem/llm";
+import { createLlmRuntime, dbStore } from "@gem/llm";
 import { buildApp } from "./app.ts";
 import { SessionStore } from "./auth/sessions.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import type { AppContext } from "./context.ts";
+import { startEvalWorker } from "./llm-evals.ts";
 import { seedDevLlm } from "./llm-seed.ts";
 import { Queue } from "./queue.ts";
 import { bootstrapEnvAdmin } from "./routes/auth.ts";
@@ -35,12 +36,13 @@ const ctx: AppContext = {
   sessions: new SessionStore(db),
   queue: null,
   verify: new SocketVerifyClient(config.VERIFY_SOCKET),
-  llm: createLlmRuntime({ db, secretKey: config.ENDPOINT_SECRET_KEY }),
+  llm: createLlmRuntime({ store: dbStore(db), secretKey: config.ENDPOINT_SECRET_KEY }),
   now: () => new Date(),
 };
 
 const app = await buildApp(ctx, { logger: { level: config.NODE_ENV === "development" ? "debug" : "info" } });
 ctx.queue = await Queue.start(config.DATABASE_URL, (msg, err) => app.log.error({ err }, msg));
+await startEvalWorker(ctx);
 await bootstrapEnvAdmin(ctx);
 // A key that can't be read makes that endpoint `llm_endpoint_auth`, not the API fail to start (P1.5.md §5).
 const unreadable = await ctx.llm.unreadableEndpoints();

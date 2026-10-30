@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { z } from "zod";
 import * as contracts from "../src/contracts/index.ts";
 import { CONTRACTS } from "../src/contracts/index.ts";
+import { GeneratedQuestion, GenerationBatch } from "../src/generation.ts";
+import { jsonSchemaOf } from "../src/json-schema.ts";
 import {
   Capabilities,
   EmbeddingConfig,
@@ -118,5 +121,88 @@ describe("C5: every §6 route has a contract", () => {
     ]) {
       expect(routes).toContain(r);
     }
+  });
+});
+
+describe("C28: the strict7 schema", () => {
+  /** What differs in form only: Zod's `type` next to `const`, `items` on an empty array, `$schema`, key order of `required`. */
+  function canon(node: unknown): unknown {
+    if (Array.isArray(node)) return node.map(canon);
+    if (typeof node !== "object" || node === null) return node;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(node)) {
+      if (k === "$schema") continue;
+      out[k] = k === "required" ? [...(v as string[])].sort() : canon(v);
+    }
+    if ("const" in out) delete out.type;
+    if (out.enum) delete out.type;
+    if (out.maxItems === 0) delete out.items;
+    return out;
+  }
+
+  /** Paths where two values differ, property order included (it's part of the contract on llama.cpp). */
+  function diff(a: unknown, b: unknown, path = "$"): string[] {
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) return [`${path}: length ${a.length} vs ${b.length}`];
+      return a.flatMap((x, i) => diff(x, b[i], `${path}[${i}]`));
+    }
+    if (typeof a === "object" && a !== null && typeof b === "object" && b !== null) {
+      const [ka, kb] = [Object.keys(a), Object.keys(b)];
+      const all = [...new Set([...ka, ...kb])];
+      return all.flatMap((k) =>
+        diff((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], `${path}.${k}`),
+      );
+    }
+    return a === b ? [] : [`${path}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`];
+  }
+
+  test("matches the probe's SCHEMAS['strict7']", async () => {
+    const probe = await Bun.file(join(import.meta.dir, "fixtures", "strict7.json")).json();
+    const differences = diff(canon(jsonSchemaOf(GenerationBatch)), canon(probe));
+    expect(differences).toEqual([]);
+  });
+
+  test("property order is the probe's", async () => {
+    const probe = await Bun.file(join(import.meta.dir, "fixtures", "strict7.json")).json();
+    const keys = (s: { properties: { questions: { items: { anyOf: { properties: object }[] } } } }) =>
+      s.properties.questions.items.anyOf.map((b) => Object.keys(b.properties));
+    expect(keys(jsonSchemaOf(GenerationBatch) as never)).toEqual(keys(probe));
+  });
+
+  test("a computable question can't carry options, and a concept question can't carry inputs", () => {
+    const base = {
+      tempId: "q1",
+      topic: "t",
+      evidence: [{ chunkId: "c", quote: "q" }],
+      question: "What is {x}?",
+      explanation: "e",
+    };
+    const input = { name: "x", kind: "integer", size: [], from: "sample", sourceText: "" };
+    const numeric = {
+      ...base,
+      type: "numeric",
+      computable: true,
+      inputs: [input],
+      constraint: "",
+      answerProgram: "result = x",
+      options: [],
+      mistakes: [],
+    };
+    expect(GeneratedQuestion.safeParse(numeric).success).toBe(true);
+    expect(GeneratedQuestion.safeParse({ ...numeric, options: ["1"] }).success).toBe(false);
+    const option = { whyWrong: "", text: "a", isCorrect: true };
+    const concept = {
+      ...base,
+      type: "single_choice",
+      computable: false,
+      inputs: [],
+      constraint: "",
+      answerProgram: "",
+      options: [option, option, option],
+      mistakes: [],
+    };
+    expect(GeneratedQuestion.safeParse(concept).success).toBe(true);
+    expect(GeneratedQuestion.safeParse({ ...concept, inputs: [input] }).success).toBe(false);
+    expect(GeneratedQuestion.safeParse({ ...concept, answerProgram: "x" }).success).toBe(false);
   });
 });

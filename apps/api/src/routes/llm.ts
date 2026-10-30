@@ -1,5 +1,5 @@
 import { Endpoint, encryptSecret, LlmCallLog, newId, RoleAssignment as RoleTable } from "@gem/db";
-import { type EndpointRow, PROVIDER_IDS, providerFor } from "@gem/llm";
+import { type EndpointRow, listEvalSets, PROVIDER_IDS, providerFor } from "@gem/llm";
 import {
   AppError,
   type Capabilities,
@@ -34,6 +34,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { writeAudit } from "../audit.ts";
 import type { AppContext } from "../context.ts";
 import { type RouteOptions, route } from "../http/route.ts";
+import { createEvalRun, EVAL_QUEUE, evalDetail, evalRuns, evalSummary } from "../llm-evals.ts";
 import { getSettings } from "../settings.ts";
 import { requestMeta } from "./auth.ts";
 
@@ -395,12 +396,24 @@ export function llmRoutes(app: FastifyInstance, ctx: AppContext) {
 
   route(app, adminLlmStats, async ({ query }) => ({ rows: await stats(ctx, query.since) }));
 
-  // Replaced by the eval runner (F4).
-  for (const contract of [adminLlmEvalsRun, adminLlmEvalsList, adminLlmEvalsGet]) {
-    route(app, contract, async () => {
-      throw new AppError("service_unavailable");
-    });
-  }
+  route(
+    app,
+    adminLlmEvalsRun,
+    async ({ body, user }) => {
+      if (!ctx.queue) throw new AppError("service_unavailable");
+      const run = await createEvalRun(ctx, { evalSet: body.evalSet, trials: body.trials, startedBy: user.userId });
+      await ctx.queue.send(EVAL_QUEUE, { runId: run.id });
+      return { run: await evalSummary(ctx, run.id) };
+    },
+    modelCallLimit(ctx),
+  );
+
+  route(app, adminLlmEvalsList, async ({ query }) => ({
+    runs: await evalRuns(ctx, query.role),
+    evalSets: listEvalSets(),
+  }));
+
+  route(app, adminLlmEvalsGet, async ({ params }) => ({ run: await evalDetail(ctx, params.id) }));
 
   route(app, llmRoles, async () => {
     const roles = await allRoles(ctx);

@@ -17,7 +17,7 @@ import {
 import type { Capabilities, EmbeddingConfig, ModelParams, ModelRole } from "@gem/shared";
 import { desc, eq } from "drizzle-orm";
 import pg from "pg";
-import { createLlmRuntime, type Runtime } from "../src/index.ts";
+import { createLlmRuntime, dbStore, type Runtime } from "../src/index.ts";
 
 /** Real Postgres, like apps/api's tests: a fresh database per file, connected as gem_app. */
 export const ADMIN_URL = process.env.TEST_PG_ADMIN_URL;
@@ -54,7 +54,7 @@ export async function createEnv(): Promise<TestEnv> {
   const pool = createPool(roleUrl("gem_app", APP_PW, name), 5);
   const db = createDb(pool);
   const runtime = createLlmRuntime({
-    db,
+    store: dbStore(db),
     secretKey: SECRET_KEY,
     prompts: {
       dir: join(import.meta.dir, "prompts"),

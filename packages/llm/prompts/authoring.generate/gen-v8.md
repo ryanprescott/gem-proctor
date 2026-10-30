@@ -28,52 +28,50 @@ CALCULATION questions ("computable": true): the answer is a value you could comp
 Examples of the four patterns. They are deliberately about an unrelated everyday topic: they show the format only.
 
 {"tempId": "ex1", "type": "single_choice", "topic": "Shopping totals", "computable": true,
- "evidence": [{"chunkId": "<id>", "quote": "<exact quote>"}],
- "inputs": [{"name": "p", "kind": "integer", "size": [], "from": "sample", "sourceText": ""},
+"evidence": [{"chunkId": "<id>", "quote": "<exact quote>"}],
+"inputs": [{"name": "p", "kind": "integer", "size": [], "from": "sample", "sourceText": ""},
             {"name": "q", "kind": "integer", "size": [], "from": "sample", "sourceText": ""},
             {"name": "a", "kind": "integer", "size": [], "from": "sample", "sourceText": ""},
             {"name": "b", "kind": "integer", "size": [], "from": "sample", "sourceText": ""}],
- "question": "A notebook costs {p} dollars and a pen costs {q} dollars. What do {a} notebooks and {b} pens cost in total?",
- "constraint": "valid = min(p, q, a, b) > 0",
- "answerProgram": "result = a * p + b * q",
- "options": [],
- "mistakes": [
-   {"whyWrong": "adds the pens' count instead of their price", "program": "result = a * p + b"},
+"question": "A notebook costs {p} dollars and a pen costs {q} dollars. What do {a} notebooks and {b} pens cost in total?",
+"constraint": "valid = min(p, q, a, b) > 0",
+"answerProgram": "result = a * p + b * q",
+"options": [],
+"mistakes": [{"whyWrong": "adds the pens' count instead of their price", "program": "result = a * p + b"},
    {"whyWrong": "swaps the two counts", "program": "result = b * p + a * q"},
    {"whyWrong": "multiplies the total count by the total price", "program": "result = (a + b) * (p + q)"}],
- "explanation": "Multiply each price by its count and add the results."}
+"explanation": "Multiply each price by its count and add the results."}
 
 {"tempId": "ex2", "type": "true_false", "topic": "Shopping totals", "computable": true,
- "evidence": [{"chunkId": "<id>", "quote": "<exact quote>"}],
- "inputs": [{"name": "c", "kind": "vector", "size": [3], "from": "sample", "sourceText": ""}],
- "question": "The vector {c} lists the prices of three items. True or false: the first item costs more than the other two together.",
- "constraint": "valid = min(c) > 0",
- "answerProgram": "result = c[0] > c[1] + c[2]",
- "options": [],
- "mistakes": [],
- "explanation": "Add the second and third prices and compare the sum with the first."}
+"evidence": [{"chunkId": "<id>", "quote": "<exact quote>"}],
+"inputs": [{"name": "c", "kind": "vector", "size": [3], "from": "sample", "sourceText": ""}],
+"question": "The vector {c} lists the prices of three items. True or false: the first item costs more than the other two together.",
+"constraint": "valid = min(c) > 0",
+"answerProgram": "result = c[0] > c[1] + c[2]",
+"options": [],
+"mistakes": [],
+"explanation": "Add the second and third prices and compare the sum with the first."}
 
 {"tempId": "ex3", "type": "numeric", "topic": "Unit price", "computable": true,
- "evidence": [{"chunkId": "<id>", "quote": "A pack of 8 pens costs 12 dollars."}],
- "inputs": [{"name": "n", "kind": "integer", "size": [], "from": "source", "sourceText": "8"},
+"evidence": [{"chunkId": "<id>", "quote": "A pack of 8 pens costs 12 dollars."}],
+"inputs": [{"name": "n", "kind": "integer", "size": [], "from": "source", "sourceText": "8"},
             {"name": "t", "kind": "integer", "size": [], "from": "source", "sourceText": "12"}],
- "question": "A pack of {n} pens costs {t} dollars. What is the price of one pen, in dollars?",
- "constraint": "",
- "answerProgram": "result = t / n",
- "options": [],
- "mistakes": [],
- "explanation": "Divide the pack price by the number of pens."}
+"question": "A pack of {n} pens costs {t} dollars. What is the price of one pen, in dollars?",
+"constraint": "",
+"answerProgram": "result = t / n",
+"options": [],
+"mistakes": [],
+"explanation": "Divide the pack price by the number of pens."}
 
 {"tempId": "ex4", "type": "single_choice", "topic": "Store hours", "computable": false,
- "evidence": [{"chunkId": "<id>", "quote": "<exact quote>"}],
- "inputs": [], "question": "According to the store policy, when are returns accepted?",
- "constraint": "", "answerProgram": "",
- "options": [
-   {"text": "Within 30 days, with a receipt", "isCorrect": true},
+"evidence": [{"chunkId": "<id>", "quote": "<exact quote>"}],
+"inputs": [], "question": "According to the store policy, when are returns accepted?",
+"constraint": "", "answerProgram": "",
+"options": [{"text": "Within 30 days, with a receipt", "isCorrect": true},
    {"whyWrong": "the policy requires a receipt", "text": "Any time, without a receipt", "isCorrect": false},
    {"whyWrong": "the policy allows 30 days", "text": "Only on the day of purchase", "isCorrect": false}],
- "mistakes": [],
- "explanation": "The policy states the time limit and the receipt requirement."}
+"mistakes": [],
+"explanation": "The policy states the time limit and the receipt requirement."}
 
 Write your own questions about the given sources only. Never reuse an example's topic, question or options.
 

@@ -3,6 +3,8 @@ import { PgBoss } from "pg-boss";
 export const HEARTBEAT_QUEUE = "system.heartbeat";
 /** A heartbeat older than this means the queue isn't processing jobs. */
 export const HEARTBEAT_STALE_MS = 3 * 60 * 1000;
+/** An eval on a local GPU takes minutes per trial. */
+const LONG_JOB_EXPIRE_SECONDS = 6 * 60 * 60;
 
 /**
  * pg-boss, started with the API (P0.md S4). The `system.heartbeat` job is sent at startup and every
@@ -25,6 +27,18 @@ export class Queue {
     await boss.schedule(HEARTBEAT_QUEUE, "* * * * *");
     await boss.send(HEARTBEAT_QUEUE, { at: new Date().toISOString() });
     return queue;
+  }
+
+  /** A long-running job queue: one job at a time, no retries (a failed job has already recorded why). */
+  async workOne<T extends object>(name: string, handler: (data: T) => Promise<void>): Promise<void> {
+    await this.boss.createQueue(name);
+    await this.boss.work<T>(name, { pollingIntervalSeconds: 1 }, async (jobs) => {
+      for (const job of jobs) await handler(job.data);
+    });
+  }
+
+  async send(name: string, data: object): Promise<void> {
+    await this.boss.send(name, data, { retryLimit: 0, expireInSeconds: LONG_JOB_EXPIRE_SECONDS });
   }
 
   status(now = new Date()): { ok: boolean; lastHeartbeatAt: string | null } {

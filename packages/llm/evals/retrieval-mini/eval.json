@@ -1,0 +1,133 @@
+{
+  "name": "retrieval-mini",
+  "kind": "retrieval",
+  "role": "embeddings",
+  "defaultTrials": 1,
+  "fixtures": {
+    "chunks": [
+      {
+        "id": "linear-eq",
+        "text": "A linear equation in n unknowns sets a weighted sum of the unknowns equal to a constant. A system of linear equations can be written compactly as Ax = b, where the matrix A holds the coefficients."
+      },
+      {
+        "id": "gauss",
+        "text": "Gaussian elimination reduces a matrix to row echelon form with row swaps, row scalings and row additions. Back substitution then recovers the unknowns one at a time from the last row upward."
+      },
+      {
+        "id": "det",
+        "text": "The determinant of a square matrix is a single number. It is nonzero exactly when the matrix is invertible, and it equals the signed volume scaling of the map the matrix represents."
+      },
+      {
+        "id": "eigen",
+        "text": "An eigenvector of a square matrix A is a nonzero vector v that A only stretches: Av = lambda v. The stretch factor lambda is the eigenvalue, found from the roots of the characteristic polynomial."
+      },
+      {
+        "id": "rank",
+        "text": "The rank of a matrix is the number of linearly independent columns, which always equals the number of independent rows. It measures the dimension of the column space."
+      },
+      {
+        "id": "null",
+        "text": "The null space of a matrix A contains every vector x with Ax = 0. Its dimension, the nullity, plus the rank equals the number of columns."
+      },
+      {
+        "id": "ortho-proj",
+        "text": "Projecting a vector onto a line gives the closest point on that line. The error vector left over is perpendicular to the direction of the line."
+      },
+      {
+        "id": "least-sq",
+        "text": "When Ax = b has no exact solution, least squares picks the x that minimizes the squared length of the residual Ax - b. That x satisfies the normal equations A^T A x = A^T b."
+      },
+      {
+        "id": "svd",
+        "text": "The singular value decomposition writes any matrix as U Sigma V^T, with orthogonal U and V and nonnegative singular values on the diagonal of Sigma. It works for rectangular matrices too."
+      },
+      {
+        "id": "cov",
+        "text": "The covariance of two random variables measures how they vary together. A positive value means they tend to rise together, and zero means no linear relationship."
+      },
+      {
+        "id": "bayes",
+        "text": "Bayes' rule updates a prior probability with evidence: the posterior is proportional to the likelihood times the prior. The denominator normalizes the result so that it sums to one."
+      },
+      {
+        "id": "clt",
+        "text": "The central limit theorem says that the average of many independent samples is approximately normally distributed, whatever the shape of the original distribution, as long as its variance is finite."
+      },
+      {
+        "id": "gradient",
+        "text": "The gradient of a scalar function points in the direction of steepest increase. Gradient descent takes repeated small steps in the opposite direction to reach a minimum."
+      },
+      {
+        "id": "chain",
+        "text": "The chain rule differentiates a composition of functions: the derivative of f(g(x)) is f'(g(x)) times g'(x). Backpropagation applies it repeatedly through a network."
+      }
+    ],
+    "queries": [
+      {
+        "text": "How do I solve for several unknowns at once written as a matrix equation?",
+        "expected": "linear-eq"
+      },
+      {
+        "text": "Which procedure uses row operations to reach echelon form?",
+        "expected": "gauss"
+      },
+      {
+        "text": "What single number tells me whether a square matrix can be inverted?",
+        "expected": "det"
+      },
+      {
+        "text": "Which vectors does a matrix merely scale without turning?",
+        "expected": "eigen"
+      },
+      {
+        "text": "How many independent columns does a matrix have?",
+        "expected": "rank"
+      },
+      {
+        "text": "What is the set of inputs that a matrix sends to zero?",
+        "expected": "null"
+      },
+      {
+        "text": "What is the nearest point on a line to a given vector?",
+        "expected": "ortho-proj"
+      },
+      {
+        "text": "How can I fit an overdetermined system when no exact solution exists?",
+        "expected": "least-sq"
+      },
+      {
+        "text": "Which factorization works for any rectangular matrix?",
+        "expected": "svd"
+      },
+      {
+        "text": "How do I measure whether two random quantities move together?",
+        "expected": "cov"
+      },
+      {
+        "text": "How do I revise a belief after seeing new evidence?",
+        "expected": "bayes"
+      },
+      {
+        "text": "Why do averages of many samples look like a bell curve?",
+        "expected": "clt"
+      },
+      {
+        "text": "Which direction makes a function grow fastest?",
+        "expected": "gradient"
+      },
+      {
+        "text": "How do I take the derivative of a function inside another function?",
+        "expected": "chain"
+      },
+      {
+        "text": "What is the dimension of the column space called?",
+        "expected": "rank"
+      },
+      {
+        "text": "Which equations characterize the best approximate solution of Ax = b?",
+        "expected": "least-sq"
+      }
+    ]
+  },
+  "metrics": ["top1", "mrr", "top1NoPrefix", "mrrNoPrefix"]
+}

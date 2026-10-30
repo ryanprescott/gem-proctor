@@ -54,6 +54,8 @@ export interface GenerateOptions extends CallOptions {
 
 export interface EmbedOptions extends CallOptions {
   kind: "query" | "document";
+  /** Sends the texts as they are (`retrieval-mini` compares with and without prefixes). */
+  noPrefix?: boolean;
 }
 
 export interface EmbedResult {

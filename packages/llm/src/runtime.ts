@@ -82,7 +82,7 @@ function cosine(a: number[], b: number[]): number {
 const estimateTokens = (text: string) => Math.ceil(text.length / CHARS_PER_TOKEN);
 
 export interface RuntimeDeps {
-  db: Db;
+  store: LlmStore;
   /** `ENDPOINT_SECRET_KEY`. */
   secretKey?: string;
   prompts?: PromptSource;
@@ -150,13 +150,13 @@ function errorCodeOf(err: unknown): string | null {
 }
 
 export class Runtime implements LlmRuntime {
-  private readonly db: Db;
+  private readonly store: LlmStore;
   private readonly secretKey: string | undefined;
   private readonly prompts: PromptSource;
   private readonly queues = new QueueRegistry();
 
   constructor(deps: RuntimeDeps) {
-    this.db = deps.db;
+    this.store = deps.store;
     this.secretKey = deps.secretKey;
     this.prompts = deps.prompts ?? DEFAULT_PROMPTS;
   }
@@ -164,35 +164,13 @@ export class Runtime implements LlmRuntime {
   // ── Resolution ─────────────────────────────────────────────────────
 
   async resolve(role: ModelRole): Promise<Target> {
-    const rows = await this.db
-      .select({ assignment: RoleAssignment, endpoint: Endpoint })
-      .from(RoleAssignment)
-      .innerJoin(Endpoint, eq(Endpoint.id, RoleAssignment.endpointId))
-      .where(eq(RoleAssignment.role, role))
-      .limit(1);
-    const row = rows[0];
-    if (!row) throw new LlmError("llm_role_unassigned", { role });
-    return {
-      role,
-      endpoint: row.endpoint,
-      model: row.assignment.model,
-      capabilities: row.assignment.capabilities as Capabilities,
-      embedding: row.assignment.embedding as EmbeddingConfig | null,
-      params: (row.assignment.params ?? {}) as ModelParams,
-    };
-  }
-
-  private async localOnly(): Promise<boolean> {
-    const rows = await this.db
-      .select({ value: InstanceSettings.value })
-      .from(InstanceSettings)
-      .where(eq(InstanceSettings.key, "localEndpointsOnly"))
-      .limit(1);
-    return rows[0]?.value === true;
+    const target = await this.store.target(role);
+    if (!target) throw new LlmError("llm_role_unassigned", { role });
+    return target;
   }
 
   private async checkLocation(target: Target) {
-    if (target.endpoint.location === "cloud" && (await this.localOnly())) {
+    if (target.endpoint.location === "cloud" && (await this.store.localEndpointsOnly())) {
       throw new LlmError("llm_cloud_blocked", { role: target.role ?? "" });
     }
   }
@@ -275,7 +253,7 @@ export class Runtime implements LlmRuntime {
     const model = provider.chatModel(ctx, target.model, target.params);
     const common = {
       model,
-      system: request.system,
+      system: request.system || undefined,
       messages: request.messages as ModelMessage[],
       maxOutputTokens: target.capabilities.maxOutputTokens,
       maxRetries: 0,
@@ -533,7 +511,7 @@ export class Runtime implements LlmRuntime {
 
   private async embedAll(target: Target, texts: string[], opts: EmbedOptions, totals: Totals): Promise<EmbedResult> {
     const embedding = target.embedding as EmbeddingConfig;
-    const prefix = opts.kind === "query" ? embedding.queryPrefix : embedding.documentPrefix;
+    const prefix = opts.noPrefix ? "" : opts.kind === "query" ? embedding.queryPrefix : embedding.documentPrefix;
     const maxInputTokens = target.capabilities.maxInputTokens as number;
     const sent = texts.map((t) => prefix + t);
 
@@ -599,7 +577,7 @@ export class Runtime implements LlmRuntime {
 
   /** Endpoints with a stored key that can't be decrypted (startup check, P1.5.md §5). */
   async unreadableEndpoints(): Promise<string[]> {
-    const rows = await this.db.select().from(Endpoint).where(isNotNull(Endpoint.apiKeyCiphertext));
+    const rows = await this.store.endpointsWithKeys();
     return rows
       .filter((row) => {
         try {
@@ -772,7 +750,7 @@ export class Runtime implements LlmRuntime {
   private async writeLog(e: LogEntry): Promise<string> {
     const id = newId();
     const bodies = e.target.role !== null && logsBodies(e.target.role);
-    await this.db.insert(LlmCallLog).values({
+    await this.store.log({
       id,
       endpointId: e.target.endpoint.id,
       model: e.target.model,
@@ -812,6 +790,49 @@ function jsonPart(text: string): string | undefined {
   const body = text.replace(/<think>[\s\S]*?(<\/think>|$)/i, "");
   const start = body.search(/[{[]/);
   return start === -1 ? undefined : body.slice(start);
+}
+
+/** Where the runtime finds assignments and writes its log: the database, or nothing for `llm:eval --dev`. */
+export interface LlmStore {
+  target(role: ModelRole): Promise<Target | undefined>;
+  localEndpointsOnly(): Promise<boolean>;
+  endpointsWithKeys(): Promise<EndpointRow[]>;
+  log(row: typeof LlmCallLog.$inferInsert): Promise<void>;
+}
+
+export function dbStore(db: Db): LlmStore {
+  return {
+    async target(role) {
+      const rows = await db
+        .select({ assignment: RoleAssignment, endpoint: Endpoint })
+        .from(RoleAssignment)
+        .innerJoin(Endpoint, eq(Endpoint.id, RoleAssignment.endpointId))
+        .where(eq(RoleAssignment.role, role))
+        .limit(1);
+      const row = rows[0];
+      if (!row) return undefined;
+      return {
+        role,
+        endpoint: row.endpoint,
+        model: row.assignment.model,
+        capabilities: row.assignment.capabilities as Capabilities,
+        embedding: row.assignment.embedding as EmbeddingConfig | null,
+        params: (row.assignment.params ?? {}) as ModelParams,
+      };
+    },
+    async localEndpointsOnly() {
+      const rows = await db
+        .select({ value: InstanceSettings.value })
+        .from(InstanceSettings)
+        .where(eq(InstanceSettings.key, "localEndpointsOnly"))
+        .limit(1);
+      return rows[0]?.value === true;
+    },
+    endpointsWithKeys: () => db.select().from(Endpoint).where(isNotNull(Endpoint.apiKeyCiphertext)),
+    async log(row) {
+      await db.insert(LlmCallLog).values(row);
+    },
+  };
 }
 
 export function createLlmRuntime(deps: RuntimeDeps): Runtime {

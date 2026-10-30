@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Authz } from "@gem/authz";
 import { bootstrapDatabase, createDb, createPool, type Db, runMigrations, withDatabase } from "@gem/db";
-import { createLlmRuntime } from "@gem/llm";
+import { createLlmRuntime, dbStore } from "@gem/llm";
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from "fastify";
 import pg from "pg";
 import { type BuildOptions, buildApp } from "../src/app.ts";
@@ -103,7 +103,7 @@ export async function createTestApp(
     sessions: new SessionStore(db),
     queue: null,
     verify,
-    llm: createLlmRuntime({ db, secretKey: config.ENDPOINT_SECRET_KEY }),
+    llm: createLlmRuntime({ store: dbStore(db), secretKey: config.ENDPOINT_SECRET_KEY }),
     now: () => new Date(),
   };
   const app = await buildApp(ctx, opts.build);

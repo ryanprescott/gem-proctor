@@ -1,9 +1,9 @@
 # Prompt: `authoring.generate` (+ `verify.solve` blind program)
 
 > Working draft, iterated against the probe and recorded here. Referenced from SPEC §3A.2, §3A.3.1 and §3B.4.
-> Moves into `packages/llm/prompts/` (one versioned template per role) when the LLM layer is built (P1.5). Probe results move into the eval set then.
+> The current texts moved to `packages/llm/prompts/` in P1.5 (`authoring.generate/gen-v8.md`, `verify.solve.blind/blind-v2.md`, `verify.solve.classify/classify-v1.md`, `program-repair/repair-v1.md`), and the `strict7` schema to `packages/shared/src/generation.ts`. This file keeps the history and the probe results. Older drafts stay in `tools/probes/l7/prompts/`.
 
-**Current version:** `gen-v8` + **`strict7` schema** / `blind-v2` / `repair-v1` / `classify-v1`, with local inputs (`tools/probes/l7/inputs.py`) and local distractors (`distract.py`), on `qwen3.5-9b-32k` (§4). Texts: `tools/probes/l7/prompts/`, schema: `SCHEMAS["strict7"]` in `tools/probes/l7/probe.py`. §2–3 below show v1, kept for history.
+**Current version:** `gen-v8` + **`strict7` schema** / `blind-v2` / `repair-v1` / `classify-v1`, with local inputs (`tools/probes/l7/inputs.py`) and local distractors (`distract.py`), on `qwen3.5-9b-32k` (§4). Texts: `packages/llm/prompts/`, schema: `SCHEMAS["strict7"]` in `tools/probes/l7/probe.py`. §2–3 below show v1, kept for history.
 **Reference model:** `qwen2.5-16k` (Qwen2.5 7B Instruct Q5_K_M, Ollama 0.40.12, 16K context)
 
 ---
