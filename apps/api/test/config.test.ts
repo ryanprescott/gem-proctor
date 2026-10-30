@@ -21,6 +21,15 @@ function problems(env: Record<string, string>, file?: string): string[] {
 }
 
 describe("config (P0.md §5)", () => {
+  test("ENDPOINT_SECRET_KEY is optional, and exactly 32 bytes when set", () => {
+    expect(problems(good)).toEqual([]);
+    expect(problems({ ...good, ENDPOINT_SECRET_KEY: Buffer.alloc(32, 1).toString("base64") })).toEqual([]);
+    for (const size of [16, 33]) {
+      const key = Buffer.alloc(size, 1).toString("base64");
+      expect(problems({ ...good, ENDPOINT_SECRET_KEY: key }).join()).toContain("ENDPOINT_SECRET_KEY: invalid");
+    }
+  });
+
   test("valid config loads with defaults", () => {
     const c = loadConfig(good);
     expect(c.NODE_ENV).toBe("production");

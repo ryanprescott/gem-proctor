@@ -330,7 +330,15 @@ function Attempt({ attemptId }: { attemptId: string }) {
           <Markdown>{current.question}</Markdown>
         </div>
 
-        <AnswerInput question={current} value={value} onChange={onChange} response={response} promptId={promptId} />
+        {/* Keyed: a radio group kept across questions keeps its roving tab stop on an option that's gone. */}
+        <AnswerInput
+          key={current.id}
+          question={current}
+          value={value}
+          onChange={onChange}
+          response={response}
+          promptId={promptId}
+        />
 
         {checked ? (
           <Feedback ref={feedbackRef} attemptId={attemptId} question={current} response={response} editable />

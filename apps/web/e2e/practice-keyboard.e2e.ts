@@ -92,7 +92,8 @@ test("B36: keyboard-only practice flow", async ({ page }) => {
     await expect(page.getByRole("heading", { level: 2, name: `Question ${i + 1} of 5` })).toBeVisible();
     await answerByKeyboard(page, q, ANSWERS[q.id] as string | string[]);
     const expected = q.id === 2 ? "Incorrect" : q.id === 4 ? "Partly correct" : "Correct";
-    await expect(page.getByText(expected, { exact: true })).toBeVisible();
+    // Not by text alone: the live region says the same thing once it has announced it.
+    await expect(page.locator("strong", { hasText: new RegExp(`^${expected}$`) })).toBeVisible();
     await expect.poll(() => liveRegionText(page)).toContain(expected);
     if (i === 0) {
       await tabTo(page, page.getByRole("button", { name: "Flag for review" }));
@@ -118,7 +119,7 @@ test("B36: keyboard-only practice flow", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { level: 2, name: "Question 1 of 1" })).toBeVisible();
   await answerByKeyboard(page, detail.questions.find((q) => q.id === 4) as Q, ["e", "i"]);
-  await expect(page.getByText("Correct", { exact: true })).toBeVisible();
+  await expect(page.locator("strong", { hasText: /^Correct$/ })).toBeVisible();
   await submitByKeyboard(page);
   await expect(page.getByTestId("results-score")).toHaveText("1 of 1 points (100%)");
 

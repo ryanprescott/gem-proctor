@@ -6,10 +6,18 @@ import { z } from "zod";
  * with the key name, never the value. Keys in the `.env` file that this schema doesn't know also fail.
  */
 
-const base64Bytes = (min: number) =>
-  z.string().refine((s) => /^[A-Za-z0-9+/_-]+={0,2}$/.test(s) && Buffer.from(s, "base64").length >= min, {
-    message: `must be at least ${min} random bytes, base64`,
-  });
+const base64Bytes = (min: number, max = Number.POSITIVE_INFINITY) =>
+  z.string().refine(
+    (s) => {
+      if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(s)) return false;
+      const length = Buffer.from(s, "base64").length;
+      return length >= min && length <= max;
+    },
+    {
+      message:
+        min === max ? `must be exactly ${min} random bytes, base64` : `must be at least ${min} random bytes, base64`,
+    },
+  );
 
 const optionalText = z
   .string()
@@ -56,8 +64,8 @@ export const ConfigSchema = z
     AUTH_RATE_LIMIT_MAX: optionalInt,
     AUTH_RATE_LIMIT_WINDOW_MS: optionalInt,
 
-    // Secrets at rest (unused until P1.5): shape only.
-    ENDPOINT_SECRET_KEY: optionalText.pipe(base64Bytes(32).optional()),
+    // Secrets at rest: AES-256 key for endpoint API keys (SPEC §3B.2).
+    ENDPOINT_SECRET_KEY: optionalText.pipe(base64Bytes(32, 32).optional()),
 
     // Verify worker (SPEC §3A.3.1)
     VERIFY_SOCKET: z.string().default("/run/verify/verify.sock"),

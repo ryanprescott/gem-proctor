@@ -36,6 +36,20 @@ export const ERROR_CODES = [
   "practice_nothing_to_retake",
   "practice_question_not_in_attempt",
   "practice_self_grade_not_allowed",
+  "llm_role_unassigned",
+  "llm_cloud_blocked",
+  "llm_cloud_roles_assigned",
+  "llm_endpoint_unreachable",
+  "llm_endpoint_auth",
+  "llm_endpoint_timeout",
+  "llm_endpoint_error",
+  "llm_endpoint_in_use",
+  "llm_models_unsupported",
+  "llm_output_invalid",
+  "llm_context_exceeded",
+  "llm_embedding_truncated",
+  "llm_secret_key_missing",
+  "llm_eval_running",
 ] as const;
 
 export const ErrorCode = z.enum(ERROR_CODES);
@@ -83,6 +97,20 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   practice_nothing_to_retake: 409,
   practice_question_not_in_attempt: 404,
   practice_self_grade_not_allowed: 409,
+  llm_role_unassigned: 409,
+  llm_cloud_blocked: 409,
+  llm_cloud_roles_assigned: 409,
+  llm_endpoint_unreachable: 502,
+  llm_endpoint_auth: 502,
+  llm_endpoint_timeout: 504,
+  llm_endpoint_error: 502,
+  llm_endpoint_in_use: 409,
+  llm_models_unsupported: 409,
+  llm_output_invalid: 502,
+  llm_context_exceeded: 422,
+  llm_embedding_truncated: 422,
+  llm_secret_key_missing: 409,
+  llm_eval_running: 409,
 };
 
 /** The only error type route handlers throw (SPEC §11.6, companion check). */

@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { ERROR_CODES, FIX_CODES, GRADE_OUTCOMES, QUESTION_TYPES, QUIZ_ISSUE_CODES } from "@gem/shared";
-import { AUDIT_ACTIONS, PRACTICE_KINDS, ROLES } from "@gem/shared/contracts";
+import { AUDIT_ACTIONS, AUDIT_TARGETS, PRACTICE_KINDS, ROLES } from "@gem/shared/contracts";
 import { Glob } from "bun";
 import ts from "typescript";
 
@@ -23,7 +23,7 @@ export const DYNAMIC_FAMILIES: Record<string, readonly string[]> = {
   "common:roles.": ROLES,
   "admin:actions.": AUDIT_ACTIONS,
   "tests:types.": QUESTION_TYPES,
-  "admin:targets.": ["user", "settings"],
+  "admin:targets.": AUDIT_TARGETS,
   "practice:outcome.": GRADE_OUTCOMES,
   "practice:kind.": PRACTICE_KINDS,
 };

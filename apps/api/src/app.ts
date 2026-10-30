@@ -14,6 +14,7 @@ import { installErrorHandling } from "./http/errors.ts";
 import { API_PREFIX, installAuthz } from "./http/route.ts";
 import { adminRoutes } from "./routes/admin.ts";
 import { authRoutes } from "./routes/auth.ts";
+import { llmRoutes } from "./routes/llm.ts";
 import { practiceRoutes } from "./routes/practice.ts";
 import { publicRoutes } from "./routes/public.ts";
 import { testRoutes } from "./routes/tests.ts";
@@ -66,6 +67,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   testRoutes(app, ctx);
   adminRoutes(app, ctx);
   practiceRoutes(app, ctx);
+  llmRoutes(app);
   opts.extraRoutes?.(app);
 
   app.get("/api/openapi.json", { config: { permission: { public: true } } }, async () => app.swagger());

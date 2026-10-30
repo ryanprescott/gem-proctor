@@ -2,7 +2,7 @@ import { type Db, InstanceSettings as SettingsTable } from "@gem/db";
 import { InstanceSettings } from "@gem/shared/contracts";
 import { sql } from "drizzle-orm";
 
-export const DEFAULT_SETTINGS: InstanceSettings = { selfRegistration: true };
+export const DEFAULT_SETTINGS: InstanceSettings = { selfRegistration: true, localEndpointsOnly: false };
 
 export async function getSettings(db: Pick<Db, "select">): Promise<InstanceSettings> {
   const rows = await db.select().from(SettingsTable);
@@ -14,7 +14,7 @@ export async function getSettings(db: Pick<Db, "select">): Promise<InstanceSetti
 
 export async function putSettings(
   db: Pick<Db, "insert">,
-  values: InstanceSettings,
+  values: Partial<InstanceSettings>,
   actorId: string | null,
 ): Promise<void> {
   for (const [key, value] of Object.entries(values)) {

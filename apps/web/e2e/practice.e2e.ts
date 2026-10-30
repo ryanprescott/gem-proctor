@@ -92,7 +92,8 @@ test("B24: checking shows correct/incorrect in text and icon, the correct answer
   await show(1);
   await choose("radio", "a");
   await page.getByRole("button", { name: "Check answer" }).click();
-  await expect(page.getByText("Incorrect", { exact: true })).toBeVisible();
+  // Not by text alone: the live region says the same thing once it has announced it.
+  await expect(page.locator("strong", { hasText: /^Incorrect$/ })).toBeVisible();
   await expect(page.getByText("Correct answer:")).toBeVisible();
   await expect(page.getByText("Because b is b.")).toBeVisible();
   await expect(page.getByText("(0 of 1 points)")).toBeVisible();
@@ -104,14 +105,14 @@ test("B24: checking shows correct/incorrect in text and icon, the correct answer
   await show(5);
   await choose("radio", "True");
   await page.getByRole("button", { name: "Check answer" }).click();
-  await expect(page.getByText("Correct", { exact: true })).toBeVisible();
+  await expect(page.locator("strong", { hasText: /^Correct$/ })).toBeVisible();
   await expect.poll(() => liveRegionText(page)).toContain("Correct");
   await expectNoAxeViolations(page, "attempt, after correct feedback");
 
   await show(3);
   await page.getByRole("textbox", { name: /^Your answer/ }).fill("3.5");
   await page.getByRole("button", { name: "Check answer" }).click();
-  await expect(page.getByText("Correct", { exact: true })).toBeVisible();
+  await expect(page.locator("strong", { hasText: /^Correct$/ })).toBeVisible();
   // The server's grade is what the UI shows.
   const d = await fetchDetail();
   expect(d.responses.find((r) => r.questionId === 1)?.autoResult).toBe("incorrect");

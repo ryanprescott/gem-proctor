@@ -1,9 +1,11 @@
 # Policy (SPEC §5.2): sub, objType, act, cond (any | owner | member). Code review only.
-# P0 and P1 rows; later phases add sources, assignments, groups, ...
+# P0, P1 and P1.5 rows; later phases add sources, assignments, groups, ...
 
 # Any signed-in user: their own session.
 p, student, session, read, any
 p, student, session, delete, any
+# Any signed-in user: LLM role status (P1.5). The other llm_* objects have no rows: admins only, through `*`.
+p, student, llm_status, read, any
 
 # Proctors: imports and their own tests.
 p, proctor, import, preview, any

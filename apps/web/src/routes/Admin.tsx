@@ -1,6 +1,7 @@
 import {
   type AdminUser,
   AUDIT_ACTIONS,
+  AUDIT_TARGETS,
   type AuditAction,
   adminAuditLog,
   adminAuditLogCsv,
@@ -379,7 +380,7 @@ function AuditLogView() {
                     <td>{e.actorEmail ?? t("admin:audit.system")}</td>
                     <td>{t(`admin:actions.${e.action}`)}</td>
                     <td>
-                      {t(`admin:targets.${e.targetType === "settings" ? "settings" : "user"}`)}
+                      {t(`admin:targets.${AUDIT_TARGETS.find((x) => x === e.targetType) ?? "user"}`)}
                       {e.targetId ? <div className={styles.muted}>{e.targetId}</div> : null}
                     </td>
                     <td>

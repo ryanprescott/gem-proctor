@@ -18,7 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * P0 tables (P0.md §4) and P1's practice tables (P1.md §4), from SPEC §10. Postgres names are snake_case; TypeScript names follow SPEC §10.
+ * P0 tables (P0.md §4), P1's practice tables (P1.md §4) and P1.5's LLM tables (P1.5.md §4), from SPEC §10. Postgres names are snake_case; TypeScript names follow SPEC §10.
  * Ids are UUID v7, generated in the app.
  */
 
@@ -235,5 +235,133 @@ export const Response = pgTable(
     unique("response_attempt_question_unique").on(t.attemptId, t.questionId),
     check("response_auto_result_check", sql`${t.autoResult} IN ('correct', 'partial', 'incorrect')`),
     check("response_time_spent_check", sql`${t.timeSpentMs} >= 0`),
+  ],
+);
+
+// ── LLM layer (P1.5.md §4) ───────────────────────────────────────────
+
+/** Soft-deleted, so call logs and eval runs keep a valid `endpoint_id`. The API refuses deleted endpoints. */
+export const Endpoint = pgTable(
+  "endpoint",
+  {
+    id: uuid("id").primaryKey(),
+    label: text("label").notNull(),
+    provider: text("provider").notNull(),
+    baseUrl: text("base_url"),
+    /** `base64(iv ‖ ciphertext ‖ tag)`, AES-256-GCM with the endpoint id as associated data (`secrets.ts`). */
+    apiKeyCiphertext: text("api_key_ciphertext"),
+    location: text("location", { enum: ["local", "cloud"] }).notNull(),
+    server: text("server", { enum: ["vllm", "llamacpp", "ollama", "lmstudio", "gateway", "other"] }),
+    concurrency: integer("concurrency").notNull().default(1),
+    timeoutMs: integer("timeout_ms").notNull().default(300_000),
+    /** Null for the dev seed. */
+    createdBy: uuid("created_by").references(() => User.id),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+    deletedAt: ts("deleted_at"),
+  },
+  (t) => [
+    check("endpoint_location_check", sql`${t.location} IN ('local', 'cloud')`),
+    check("endpoint_server_check", sql`${t.server} IN ('vllm', 'llamacpp', 'ollama', 'lmstudio', 'gateway', 'other')`),
+    check("endpoint_concurrency_check", sql`${t.concurrency} >= 1`),
+    check("endpoint_timeout_check", sql`${t.timeoutMs} >= 1`),
+  ],
+);
+
+/** One row per assigned role. `embedding` is set for the `embeddings` role and only for it. */
+export const RoleAssignment = pgTable(
+  "role_assignment",
+  {
+    role: text("role", {
+      enum: ["authoring.objectives", "authoring.generate", "authoring.judge", "verify.solve", "analysis", "embeddings"],
+    }).primaryKey(),
+    endpointId: uuid("endpoint_id")
+      .notNull()
+      .references(() => Endpoint.id),
+    model: text("model").notNull(),
+    capabilities: jsonValue("capabilities").notNull(),
+    embedding: jsonValue("embedding"),
+    params: jsonValue("params"),
+    /** Null for the dev seed. */
+    updatedBy: uuid("updated_by").references(() => User.id),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      "role_assignment_role_check",
+      sql`${t.role} IN ('authoring.objectives', 'authoring.generate', 'authoring.judge', 'verify.solve', 'analysis', 'embeddings')`,
+    ),
+    check("role_assignment_embedding_check", sql`(${t.role} = 'embeddings') = (${t.embedding} IS NOT NULL)`),
+  ],
+);
+
+export const LlmEvalRun = pgTable(
+  "llm_eval_run",
+  {
+    id: uuid("id").primaryKey(),
+    evalSet: text("eval_set").notNull(),
+    role: text("role").notNull(),
+    endpointId: uuid("endpoint_id")
+      .notNull()
+      .references(() => Endpoint.id),
+    model: text("model").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    status: text("status", { enum: ["queued", "running", "done", "failed"] }).notNull(),
+    trials: integer("trials").notNull(),
+    summary: jsonValue("summary"),
+    items: jsonValue("items"),
+    errorCode: text("error_code"),
+    /** Null for runs from the CLI. */
+    startedBy: uuid("started_by").references(() => User.id),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    startedAt: ts("started_at"),
+    finishedAt: ts("finished_at"),
+  },
+  (t) => [
+    index("llm_eval_run_created_idx").on(t.createdAt),
+    // One run at a time per role (`llm_eval_running`).
+    uniqueIndex("llm_eval_run_active_unique").on(t.role).where(sql`${t.status} IN ('queued', 'running')`),
+    check("llm_eval_run_status_check", sql`${t.status} IN ('queued', 'running', 'done', 'failed')`),
+  ],
+);
+
+/**
+ * Append-only like `AuditLog` (the provenance record, SPEC §3B.4): the app's DB user has only INSERT/SELECT
+ * (grants migration). `actor_id` has no FK, like `audit_log`. The bodies never hold headers or keys.
+ */
+export const LlmCallLog = pgTable(
+  "llm_call_log",
+  {
+    id: uuid("id").primaryKey(),
+    endpointId: uuid("endpoint_id")
+      .notNull()
+      .references(() => Endpoint.id),
+    model: text("model").notNull(),
+    role: text("role"),
+    kind: text("kind", { enum: ["call", "probe", "eval"] }).notNull(),
+    promptId: text("prompt_id"),
+    promptVersion: text("prompt_version"),
+    /** The template file used; differs from `<version>.md` when a per-model variant was chosen. */
+    promptFile: text("prompt_file"),
+    mode: text("mode").notNull(),
+    finishReason: text("finish_reason"),
+    outcome: text("outcome", { enum: ["ok", "salvaged", "failed"] }).notNull(),
+    errorCode: text("error_code"),
+    repairAttempts: integer("repair_attempts").notNull().default(0),
+    normalizationFixes: jsonValue("normalization_fixes").notNull(),
+    usage: jsonValue("usage").notNull(),
+    queuedMs: integer("queued_ms").notNull().default(0),
+    latencyMs: integer("latency_ms").notNull().default(0),
+    actorId: uuid("actor_id"),
+    evalRunId: uuid("eval_run_id").references(() => LlmEvalRun.id),
+    at: ts("at").notNull().defaultNow(),
+    requestBody: jsonValue("request_body"),
+    responseBody: jsonValue("response_body"),
+  },
+  (t) => [
+    index("llm_call_log_at_idx").on(t.at),
+    index("llm_call_log_stats_idx").on(t.role, t.endpointId, t.model, t.at),
+    check("llm_call_log_kind_check", sql`${t.kind} IN ('call', 'probe', 'eval')`),
+    check("llm_call_log_outcome_check", sql`${t.outcome} IN ('ok', 'salvaged', 'failed')`),
   ],
 );

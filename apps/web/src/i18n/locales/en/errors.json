@@ -30,5 +30,19 @@
   "practice_answer_locked": "This answer has already been checked, so it can't be changed.",
   "practice_nothing_to_retake": "Nothing was missed in the last attempt, so there's nothing to retake.",
   "practice_question_not_in_attempt": "That question isn't part of this attempt.",
-  "practice_self_grade_not_allowed": "Only a short answer marked incorrect can be self-graded."
+  "practice_self_grade_not_allowed": "Only a short answer marked incorrect can be self-graded.",
+  "llm_role_unassigned": "No model is assigned to this role yet.",
+  "llm_cloud_blocked": "Local endpoints only is on, so this can't use a cloud endpoint.",
+  "llm_cloud_roles_assigned": "Local endpoints only can't be turned on while these roles use a cloud endpoint: {{roles}}.",
+  "llm_endpoint_unreachable": "The model endpoint can't be reached.",
+  "llm_endpoint_auth": "The model endpoint rejected the key, or the stored key can't be read.",
+  "llm_endpoint_timeout": "The model endpoint took too long to answer.",
+  "llm_endpoint_error": "The model endpoint returned an error.",
+  "llm_endpoint_in_use": "A role uses this endpoint. Assign the role elsewhere first.",
+  "llm_models_unsupported": "This endpoint can't list its models. Enter the model id by hand.",
+  "llm_output_invalid": "The model's output was still invalid after repairs.",
+  "llm_context_exceeded": "The prompt is too long for this model's context window.",
+  "llm_embedding_truncated": "A text is too long for the embedding model and would be cut off.",
+  "llm_secret_key_missing": "ENDPOINT_SECRET_KEY isn't configured, so a key can't be saved.",
+  "llm_eval_running": "An evaluation is already running for this role."
 }

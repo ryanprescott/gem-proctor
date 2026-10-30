@@ -190,7 +190,7 @@ export function adminRoutes(app: FastifyInstance, ctx: AppContext) {
         targetType: "settings",
         targetId: null,
         before,
-        after: body,
+        after: { ...before, ...body },
         ...requestMeta(request),
       });
     });

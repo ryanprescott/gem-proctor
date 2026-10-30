@@ -67,12 +67,26 @@
       "grant": "Role granted",
       "revoke": "Role revoked"
     },
+    "llm": {
+      "endpoint": {
+        "create": "Endpoint created",
+        "update": "Endpoint changed",
+        "delete": "Endpoint deleted",
+        "secret_change": "Endpoint key changed"
+      },
+      "role": {
+        "assign": "Model role assigned",
+        "unassign": "Model role unassigned"
+      }
+    },
     "settings": {
       "update": "Settings changed"
     }
   },
   "targets": {
     "user": "User",
-    "settings": "Instance settings"
+    "settings": "Instance settings",
+    "llm_endpoint": "LLM endpoint",
+    "llm_role": "LLM role"
   }
 }

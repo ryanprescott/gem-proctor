@@ -1,10 +1,26 @@
 import { z } from "zod";
 import { ImportReport } from "../import.ts";
+import {
+  EndpointCreate,
+  EndpointPatch,
+  EvalRunDetail,
+  EvalRunRequest,
+  EvalRunSummary,
+  LlmEndpoint,
+  LlmRoleStatus,
+  ModelInfo,
+  ModelRole,
+  ProbeRequest,
+  ProbeResult,
+  RoleAssignmentBody,
+  RoleAssignmentView,
+  StatsRow,
+} from "../llm.ts";
 import { QuestionShape, QuizShape, TestType } from "../quiz.ts";
 import { GRADE_OUTCOMES } from "../result.ts";
 
 /**
- * API contracts for every route (P0 §6, P1 §6). The server registers routes from these, the web client
+ * API contracts for every route (P0 §6, P1 §6, P1.5 §6). The server registers routes from these, the web client
  * calls them through `api.call(contract, input)`. All paths are under `/api/v1`.
  */
 
@@ -304,6 +320,8 @@ export const adminDisableUser = contract({
 
 export const InstanceSettings = z.object({
   selfRegistration: z.boolean(),
+  /** While on, no role may use a `cloud` endpoint (SPEC §3B.2). */
+  localEndpointsOnly: z.boolean(),
 });
 export type InstanceSettings = z.infer<typeof InstanceSettings>;
 
@@ -318,7 +336,8 @@ export const adminPutSettings = contract({
   id: "admin.settings.put",
   method: "PUT",
   path: "/admin/settings",
-  body: InstanceSettings,
+  /** A setting left out keeps its value. */
+  body: InstanceSettings.partial({ localEndpointsOnly: true }),
   response: z.object({ settings: InstanceSettings }),
 });
 
@@ -330,9 +349,17 @@ export const AUDIT_ACTIONS = [
   "user.disable",
   "user.enable",
   "settings.update",
+  "llm.endpoint.create",
+  "llm.endpoint.update",
+  "llm.endpoint.delete",
+  "llm.endpoint.secret_change",
+  "llm.role.assign",
+  "llm.role.unassign",
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
+
+export const AUDIT_TARGETS = ["user", "settings", "llm_endpoint", "llm_role"] as const;
 
 export const AuditEntry = z.object({
   id: Uuid,
@@ -542,6 +569,137 @@ export const practiceExport = contract({
   responseKind: "text",
 });
 
+// ── LLM (admin only, except role status; P1.5 §6) ────────────────────
+
+const EndpointResponse = z.object({ endpoint: LlmEndpoint });
+
+export const adminLlmEndpointsList = contract({
+  id: "admin.llm.endpoints.list",
+  method: "GET",
+  path: "/admin/llm/endpoints",
+  response: z.object({ endpoints: z.array(LlmEndpoint) }),
+});
+
+export const adminLlmEndpointsCreate = contract({
+  id: "admin.llm.endpoints.create",
+  method: "POST",
+  path: "/admin/llm/endpoints",
+  body: EndpointCreate,
+  response: EndpointResponse,
+});
+
+export const adminLlmEndpointsGet = contract({
+  id: "admin.llm.endpoints.get",
+  method: "GET",
+  path: "/admin/llm/endpoints/:id",
+  params: IdParams,
+  response: EndpointResponse,
+});
+
+export const adminLlmEndpointsUpdate = contract({
+  id: "admin.llm.endpoints.update",
+  method: "PATCH",
+  path: "/admin/llm/endpoints/:id",
+  params: IdParams,
+  body: EndpointPatch,
+  response: EndpointResponse,
+});
+
+export const adminLlmEndpointsDelete = contract({
+  id: "admin.llm.endpoints.delete",
+  method: "DELETE",
+  path: "/admin/llm/endpoints/:id",
+  params: IdParams,
+  response: Ok,
+});
+
+export const adminLlmEndpointsModels = contract({
+  id: "admin.llm.endpoints.models",
+  method: "GET",
+  path: "/admin/llm/endpoints/:id/models",
+  params: IdParams,
+  response: z.object({ models: z.array(ModelInfo) }),
+});
+
+export const adminLlmEndpointsProbe = contract({
+  id: "admin.llm.endpoints.probe",
+  method: "POST",
+  path: "/admin/llm/endpoints/:id/probe",
+  params: IdParams,
+  body: ProbeRequest,
+  response: ProbeResult,
+});
+
+const RoleParams = z.object({ role: ModelRole });
+
+export const adminLlmRolesList = contract({
+  id: "admin.llm.roles.list",
+  method: "GET",
+  path: "/admin/llm/roles",
+  response: z.object({ roles: z.array(RoleAssignmentView) }),
+});
+
+export const adminLlmRolesPut = contract({
+  id: "admin.llm.roles.put",
+  method: "PUT",
+  path: "/admin/llm/roles/:role",
+  params: RoleParams,
+  body: RoleAssignmentBody,
+  response: z.object({ role: RoleAssignmentView }),
+});
+
+export const adminLlmRolesDelete = contract({
+  id: "admin.llm.roles.delete",
+  method: "DELETE",
+  path: "/admin/llm/roles/:role",
+  params: RoleParams,
+  response: Ok,
+});
+
+export const adminLlmStats = contract({
+  id: "admin.llm.stats",
+  method: "GET",
+  path: "/admin/llm/stats",
+  query: z.object({ since: Iso.optional() }),
+  response: z.object({ rows: z.array(StatsRow) }),
+});
+
+export const adminLlmEvalsRun = contract({
+  id: "admin.llm.evals.run",
+  method: "POST",
+  path: "/admin/llm/evals/run",
+  body: EvalRunRequest,
+  response: z.object({ run: EvalRunSummary }),
+});
+
+export const adminLlmEvalsList = contract({
+  id: "admin.llm.evals.list",
+  method: "GET",
+  path: "/admin/llm/evals",
+  query: z.object({ role: ModelRole.optional() }),
+  response: z.object({
+    /** Newest first. */
+    runs: z.array(EvalRunSummary),
+    /** The eval sets that can be run. */
+    evalSets: z.array(z.string()),
+  }),
+});
+
+export const adminLlmEvalsGet = contract({
+  id: "admin.llm.evals.get",
+  method: "GET",
+  path: "/admin/llm/evals/:id",
+  params: IdParams,
+  response: z.object({ run: EvalRunDetail }),
+});
+
+export const llmRoles = contract({
+  id: "llm.roles",
+  method: "GET",
+  path: "/llm/roles",
+  response: z.object({ roles: z.array(LlmRoleStatus) }),
+});
+
 export const CONTRACTS = [
   health,
   register,
@@ -573,6 +731,21 @@ export const CONTRACTS = [
   practiceSubmit,
   practiceDiscard,
   practiceExport,
+  adminLlmEndpointsList,
+  adminLlmEndpointsCreate,
+  adminLlmEndpointsGet,
+  adminLlmEndpointsUpdate,
+  adminLlmEndpointsDelete,
+  adminLlmEndpointsModels,
+  adminLlmEndpointsProbe,
+  adminLlmRolesList,
+  adminLlmRolesPut,
+  adminLlmRolesDelete,
+  adminLlmStats,
+  adminLlmEvalsRun,
+  adminLlmEvalsList,
+  adminLlmEvalsGet,
+  llmRoles,
 ] as const;
 
 export type AnyContract = (typeof CONTRACTS)[number];

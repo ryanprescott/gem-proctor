@@ -11,6 +11,62 @@ const FIXTURE = readFileSync(
 );
 const FIXED = FIXTURE.replace('"correctAnswer": "1"', '"correctAnswer": "-1"');
 
+/** The LLM routes (C26): only admins reach `/admin/llm/*`; every signed-in user reaches `/llm/roles`. */
+function llmRows(admin: Record<Who, Expect>, signedIn: Record<Who, Expect>) {
+  const id = "01890000-0000-7000-8000-000000000000";
+  return [
+    { id: "admin.llm.endpoints.list", method: "GET", url: () => "/admin/llm/endpoints", expect: admin },
+    {
+      id: "admin.llm.endpoints.create",
+      method: "POST",
+      url: () => "/admin/llm/endpoints",
+      body: () => ({ label: "E", baseUrl: "http://127.0.0.1:9/v1", location: "local" }),
+      expect: admin,
+    },
+    { id: "admin.llm.endpoints.get", method: "GET", url: () => `/admin/llm/endpoints/${id}`, expect: admin },
+    {
+      id: "admin.llm.endpoints.update",
+      method: "PATCH",
+      url: () => `/admin/llm/endpoints/${id}`,
+      body: () => ({ label: "F" }),
+      expect: admin,
+    },
+    { id: "admin.llm.endpoints.delete", method: "DELETE", url: () => `/admin/llm/endpoints/${id}`, expect: admin },
+    { id: "admin.llm.endpoints.models", method: "GET", url: () => `/admin/llm/endpoints/${id}/models`, expect: admin },
+    {
+      id: "admin.llm.endpoints.probe",
+      method: "POST",
+      url: () => `/admin/llm/endpoints/${id}/probe`,
+      body: () => ({ model: "m", kind: "chat" }),
+      expect: admin,
+    },
+    { id: "admin.llm.roles.list", method: "GET", url: () => "/admin/llm/roles", expect: admin },
+    {
+      id: "admin.llm.roles.put",
+      method: "PUT",
+      url: () => "/admin/llm/roles/analysis",
+      body: () => ({
+        endpointId: id,
+        model: "m",
+        capabilities: { structuredOutput: "native_schema", contextWindow: 8192, maxOutputTokens: 1024 },
+      }),
+      expect: admin,
+    },
+    { id: "admin.llm.roles.delete", method: "DELETE", url: () => "/admin/llm/roles/analysis", expect: admin },
+    { id: "admin.llm.stats", method: "GET", url: () => "/admin/llm/stats", expect: admin },
+    {
+      id: "admin.llm.evals.run",
+      method: "POST",
+      url: () => "/admin/llm/evals/run",
+      body: () => ({ evalSet: "generate-smoke" }),
+      expect: admin,
+    },
+    { id: "admin.llm.evals.list", method: "GET", url: () => "/admin/llm/evals", expect: admin },
+    { id: "admin.llm.evals.get", method: "GET", url: () => `/admin/llm/evals/${id}`, expect: admin },
+    { id: "llm.roles", method: "GET", url: () => "/llm/roles", expect: signedIn },
+  ];
+}
+
 type Who = "anonymous" | "student" | "owner" | "other" | "admin";
 const WHO: Who[] = ["anonymous", "student", "owner", "other", "admin"];
 /** `missing`: 404 `not_found`, for a resource that exists but is private to someone else (P1.md §5). */
@@ -210,6 +266,7 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
         url: () => `/practice/attempts/${attemptId}`,
         expect: ownAttempt,
       },
+      ...llmRows(adminOnly, signedIn),
       // Last: it ends each session.
       { id: "auth.logout", method: "POST", url: () => "/auth/logout", expect: signedIn },
     ];
@@ -229,7 +286,9 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
         });
         const code = res.statusCode >= 400 ? (res.json() as { code: string }).code : undefined;
         if (want === "allow") {
-          expect(["unauthenticated", "forbidden", "not_found"]).not.toContain(code);
+          expect(["unauthenticated", "forbidden"]).not.toContain(code);
+          // A missing endpoint or eval run is 404 for an admin: a row in the matrix that has none is still allowed.
+          if (!row.id.startsWith("admin.llm.")) expect(code).not.toBe("not_found");
         } else if (want === "missing") {
           expect(res.statusCode).toBe(404);
           expect(code).toBe("not_found");

@@ -5,8 +5,20 @@ import type { ContractId } from "@gem/shared/contracts";
  * declaration fails the startup check. `resource` names how the preHandler finds the caller's
  * relationship to the target (`owner` / `none`).
  */
-export type ObjType = "session" | "import" | "test" | "user" | "settings" | "audit_log" | "practice_attempt";
-export type Act = "read" | "delete" | "preview" | "create" | "list" | "update" | "export" | "submit";
+export type ObjType =
+  | "session"
+  | "import"
+  | "test"
+  | "user"
+  | "settings"
+  | "audit_log"
+  | "practice_attempt"
+  | "llm_endpoint"
+  | "llm_role"
+  | "llm_eval"
+  | "llm_stats"
+  | "llm_status";
+export type Act = "read" | "delete" | "preview" | "create" | "list" | "update" | "export" | "submit" | "run";
 
 /**
  * `resource: "practice_attempt"` loads the attempt by `(id, userId = caller)` (P1.md §5): someone else's
@@ -50,6 +62,25 @@ export const ROUTE_PERMISSIONS = {
   "practice.submit": { objType: "practice_attempt", act: "submit", resource: "practice_attempt" },
   "practice.discard": { objType: "practice_attempt", act: "delete", resource: "practice_attempt" },
   "practice.export": { objType: "practice_attempt", act: "export", resource: "practice_attempt" },
+
+  // Admin only, through the `*` policy line (P1.5.md §6).
+  "admin.llm.endpoints.list": { objType: "llm_endpoint", act: "list" },
+  "admin.llm.endpoints.create": { objType: "llm_endpoint", act: "create" },
+  "admin.llm.endpoints.get": { objType: "llm_endpoint", act: "read" },
+  "admin.llm.endpoints.update": { objType: "llm_endpoint", act: "update" },
+  "admin.llm.endpoints.delete": { objType: "llm_endpoint", act: "delete" },
+  "admin.llm.endpoints.models": { objType: "llm_endpoint", act: "read" },
+  "admin.llm.endpoints.probe": { objType: "llm_endpoint", act: "run" },
+  "admin.llm.roles.list": { objType: "llm_role", act: "list" },
+  "admin.llm.roles.put": { objType: "llm_role", act: "update" },
+  "admin.llm.roles.delete": { objType: "llm_role", act: "delete" },
+  "admin.llm.stats": { objType: "llm_stats", act: "read" },
+  "admin.llm.evals.run": { objType: "llm_eval", act: "run" },
+  "admin.llm.evals.list": { objType: "llm_eval", act: "list" },
+  "admin.llm.evals.get": { objType: "llm_eval", act: "read" },
+
+  // Any signed-in user: which roles are assigned, for hiding features and the cloud notice (SPEC §8.1).
+  "llm.roles": { objType: "llm_status", act: "read" },
 } as const satisfies Record<ContractId, RoutePermission>;
 
 export function permissionFor(id: string): RoutePermission | undefined {
