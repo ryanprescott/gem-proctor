@@ -19,6 +19,7 @@ const steps: { name: string; cmd: string[]; cwd?: string }[] = [
     name: "JSON Schema export is up to date",
     cmd: ["bun", "packages/shared/scripts/export-json-schema.ts", "--check"],
   },
+  { name: "LLM imports stay in packages/llm", cmd: ["bun", "scripts/check-llm-imports.ts"] },
   { name: "typecheck", cmd: ["bun", "scripts/typecheck.ts"] },
   { name: "bun test", cmd: ["bun", "test"] },
   { name: "ruff (apps/verify)", cmd: ["ruff", "check", "apps/verify"] },

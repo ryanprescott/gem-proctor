@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
-import { analyzeImport, type FixCode, normalizeJson, normalizeQuiz, Quiz, serializeQuiz } from "../src/index.ts";
+import { analyzeImport, extractJson, type FixCode, normalizeQuiz, Quiz, serializeQuiz } from "../src/index.ts";
 import { fixedFixture, fixture, fixtureText } from "./fixture.ts";
 
 type AnyQuiz = { questions: Record<string, unknown>[] } & Record<string, unknown>;
@@ -228,8 +228,8 @@ describe("A7: SPEC §3D.2 normalization table", () => {
     expect(r.fixes.filter((f) => f.code === "type_inferred")).toHaveLength(3);
   });
 
-  test("normalizeJson applies only the JSON-level fixes", () => {
-    const r = normalizeJson("```json\n{answer: 'B', choices: ['x','y',]}\n```");
+  test("extractJson applies only the JSON-level fixes", () => {
+    const r = extractJson("```json\n{answer: 'B', choices: ['x','y',]}\n```");
     expect(r.value).toEqual({ answer: "B", choices: ["x", "y"] });
     expect(r.fixes.map((f) => f.code)).toEqual(["extracted_json", "tolerant_parse"]);
   });

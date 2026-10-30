@@ -40,7 +40,7 @@ cp .env.example .env        # then fill in SESSION_SECRET (openssl rand -base64 
 
 ## Checks (`bun run ci`)
 
-biome check · lint-rule build staleness · lint-rule snapshot · suppression baseline · i18n catalog check · JSON Schema export staleness · typecheck (strict, every project) · `bun test` (unit + integration against real Postgres) · ruff + ruff format · verify unit tests · Playwright + axe.
+biome check · lint-rule build staleness · lint-rule snapshot · suppression baseline · i18n catalog check · JSON Schema export staleness · LLM import boundary (`ai` and `@ai-sdk/*` only in `packages/llm`) · typecheck (strict, every project) · `bun test` (unit + integration against real Postgres) · ruff + ruff format · verify unit tests · Playwright + axe.
 
 Integration tests use `TEST_PG_ADMIN_URL` (a superuser URL). `bun run ci` sets it to the local cluster if it isn't set; in CI it's the Compose postgres. Each test file creates its own database with `docker/postgres/init.sql` and the migrations, and connects as `gem_app`, like the API.
 

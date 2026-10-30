@@ -200,8 +200,11 @@ function extractAndParse(text: string, log: FixLog): unknown {
   return undefined;
 }
 
-/** JSON-level fixes only (extraction, syntax, truncation). Used by the LLM repair loop (SPEC §3B.3). */
-export function normalizeJson(text: string): NormalizeResult {
+/**
+ * Finds the JSON in a model reply: `<think>` blocks, fences, surrounding prose, trailing commas, a cut-off end.
+ * JSON-level fixes only. Used by `normalizeQuiz` and by the LLM repair loop (SPEC §3B.3).
+ */
+export function extractJson(text: string): NormalizeResult {
   const log = new FixLog();
   const value = extractAndParse(text, log);
   return { value, fixes: log.fixes };

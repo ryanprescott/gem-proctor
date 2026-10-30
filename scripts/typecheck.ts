@@ -7,6 +7,7 @@ export const PROJECTS = [
   "packages/shared/tsconfig.json",
   "packages/db/tsconfig.json",
   "packages/authz/tsconfig.json",
+  "packages/llm/tsconfig.json",
   "apps/api/tsconfig.json",
   "apps/web/tsconfig.json",
 ];
