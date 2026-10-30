@@ -12,7 +12,8 @@ export interface AuditInput {
   userAgent?: string | null;
 }
 
-const SECRET_KEYS = /password|secret|token|apikey|api_key/i;
+// `token` at the end only: `maxInputTokens` is a capability, not a credential.
+const SECRET_KEYS = /password|secret|token$|apikey|api_key|ciphertext/i;
 
 /** Secrets are redacted from before/after, whatever the caller passes (SPEC §1.3). */
 export function redact(value: unknown): unknown {

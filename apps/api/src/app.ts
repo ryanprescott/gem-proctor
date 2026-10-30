@@ -67,7 +67,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   testRoutes(app, ctx);
   adminRoutes(app, ctx);
   practiceRoutes(app, ctx);
-  llmRoutes(app);
+  llmRoutes(app, ctx);
   opts.extraRoutes?.(app);
 
   app.get("/api/openapi.json", { config: { permission: { public: true } } }, async () => app.swagger());

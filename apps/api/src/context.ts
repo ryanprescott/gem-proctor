@@ -1,5 +1,6 @@
 import type { Authz } from "@gem/authz";
 import type { Db } from "@gem/db";
+import type { Runtime } from "@gem/llm";
 import type { SessionStore } from "./auth/sessions.ts";
 import type { Config } from "./config.ts";
 import type { Queue } from "./queue.ts";
@@ -13,5 +14,6 @@ export interface AppContext {
   sessions: SessionStore;
   queue: Queue | null;
   verify: VerifyClient;
+  llm: Runtime;
   now: () => Date;
 }

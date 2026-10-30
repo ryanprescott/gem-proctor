@@ -40,7 +40,13 @@ export interface HandlerArgs<C extends Contract> {
 export type Handler<C extends Contract> = (args: HandlerArgs<C>) => Promise<Out<C["response"]>>;
 
 export interface RouteOptions {
-  rateLimit?: { max: number; timeWindow: number };
+  rateLimit?: {
+    max: number;
+    timeWindow: number;
+    /** `preHandler`: after the session is resolved, so the limit can be per user. */
+    hook?: "preHandler";
+    keyGenerator?: (request: FastifyRequest) => string;
+  };
   bodyLimit?: number;
   preValidation?: RouteShorthandOptions["preValidation"];
 }

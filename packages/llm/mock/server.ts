@@ -39,14 +39,11 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-/** A deterministic unit vector that depends on every word, in order. */
+/** A deterministic unit vector; a change in any word gives an unrelated one. */
 export function mockVector(text: string, dimensions: number): number[] {
-  const out = new Array<number>(dimensions).fill(0);
   let h = 2166136261;
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    h = hash(`${h}:${word}`);
-    out[h % dimensions] = (out[h % dimensions] as number) + (h % 2 === 0 ? 1 : -1);
-  }
+  for (const word of text.split(/\s+/).filter(Boolean)) h = hash(`${h}:${word}`);
+  const out = Array.from({ length: dimensions }, (_, i) => hash(`${h}/${i}`) / 2 ** 31 - 1);
   const norm = Math.sqrt(out.reduce((n, x) => n + x * x, 0)) || 1;
   return out.map((x) => x / norm);
 }

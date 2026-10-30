@@ -73,7 +73,10 @@ export const ConfigSchema = z
     // Built web app served by the API in production (P0.md S2).
     WEB_DIST: optionalText,
 
-    // Dev LLM endpoint seed: checked for shape only in P0 (used by a seed script in P1.5).
+    // Model-calling routes (probe, discovery, eval runs), per admin per minute (SPEC §11.2).
+    LLM_RATE_LIMIT_MAX: optionalInt,
+
+    // Dev LLM endpoint seed (`bun run llm:seed`, and on API start in development).
     LLM_DEV_LABEL: optionalText,
     LLM_DEV_PROVIDER: optionalText,
     LLM_DEV_SERVER: optionalText.pipe(
@@ -86,6 +89,22 @@ export const ConfigSchema = z
     LLM_DEV_STRUCTURED_MODE: optionalText.pipe(z.enum(["native_schema", "prompt_only"]).optional()),
     LLM_DEV_CONCURRENCY: optionalInt,
     LLM_DEV_TIMEOUT_MS: optionalInt,
+    LLM_DEV_PARAMS: optionalText.pipe(
+      z
+        .string()
+        .refine(
+          (s) => {
+            try {
+              const v: unknown = JSON.parse(s);
+              return typeof v === "object" && v !== null && !Array.isArray(v);
+            } catch {
+              return false;
+            }
+          },
+          { message: "must be a JSON object" },
+        )
+        .optional(),
+    ),
     LLM_DEV_ROLES: optionalText.pipe(
       z
         .string()

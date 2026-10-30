@@ -22,6 +22,7 @@ import type { AppContext } from "../context.ts";
 import { route } from "../http/route.ts";
 import { getSettings, putSettings } from "../settings.ts";
 import { requestMeta } from "./auth.ts";
+import { assertNoCloudRoles } from "./llm.ts";
 
 type UserRow = typeof User.$inferSelect;
 
@@ -181,6 +182,7 @@ export function adminRoutes(app: FastifyInstance, ctx: AppContext) {
   route(app, adminGetSettings, async () => ({ settings: await getSettings(ctx.db) }));
 
   route(app, adminPutSettings, async ({ body, user, request }) => {
+    if (body.localEndpointsOnly) await assertNoCloudRoles(ctx);
     const before = await getSettings(ctx.db);
     await ctx.db.transaction(async (tx) => {
       await putSettings(tx, body, user.userId);
