@@ -22,6 +22,7 @@
     "db:generate": "drizzle-kit generate --config packages/db/drizzle.config.ts",
     "db:migrate": "bun packages/db/scripts/migrate.ts",
     "llm:eval": "bun apps/api/src/llm-eval-cli.ts",
+    "llm:live": "bun apps/api/src/llm-live-cli.ts",
     "llm:seed": "bun apps/api/src/llm-seed-cli.ts",
     "dev:pg": "bun scripts/dev-pg.ts",
     "dev:api": "bun --filter @gem/api dev",

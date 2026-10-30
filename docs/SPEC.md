@@ -1,7 +1,7 @@
-# gem-proctor — Product & Technical Spec (Draft v0.23)
+# gem-proctor — Product & Technical Spec (Draft v0.24)
 
 > Status: **Draft for iteration.** Nothing here is final. Open questions are collected in §13; planned contingencies and the decision log are in §15.
-> Last updated: 2026-10-29 (v0.23: P1 built (practice): partial credit, numeric parsing and per-question `ignoreWords` in grading, §7.1–7.2; `partialCredit`, `ignoreWords`, `selfGraded` in the schema, §4; practice rules as built (owner or admin practises, private attempts, check-then-lock, retake-missed definition, export), §6; `PracticeAttempt.questionIds` and the P1 `Response` columns, §10; self-grade and discard routes, §12; decisions logged in §15.2. v0.22: P0 built; the GritQL lint rule passed its test run and is the active implementation, its message quotes the key with single quotes, §11.6; the Casbin request carries the caller's relationship to the resource as a string, §5.2; decisions logged in §15.2. v0.21: the standard library is present in the runner; only third-party packages are limited; `operator` added to the prompt's module list, §3A.3.1. v0.20: the sandbox's security is isolation, not code inspection: no network, no secrets, fresh process per run, gVisor, recycling, an escape test suite; results are text over a Unix socket, §3A.3.1. v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
+> Last updated: 2026-10-30 (v0.24: P1.5 built (LLM layer): the runtime as built with `PromptInput`, `embed` options and the extra `LlmResult` fields, §3B.1; secrets, providers, quirks and the local-only rules, §3B.2; self-contained repairs and opt-in salvage, §3B.3; prompt, variant and eval locations, §3B.4; `Endpoint`, `RoleAssignment`, `LlmCallLog`, new `LlmEvalRun`, §10; per-role routes, eval reads and `GET /llm/roles`, §12; live measurements, §13 Q5, §3C.2; decisions logged in §15.2. v0.23: P1 built (practice): partial credit, numeric parsing and per-question `ignoreWords` in grading, §7.1–7.2; `partialCredit`, `ignoreWords`, `selfGraded` in the schema, §4; practice rules as built (owner or admin practises, private attempts, check-then-lock, retake-missed definition, export), §6; `PracticeAttempt.questionIds` and the P1 `Response` columns, §10; self-grade and discard routes, §12; decisions logged in §15.2. v0.22: P0 built; the GritQL lint rule passed its test run and is the active implementation, its message quotes the key with single quotes, §11.6; the Casbin request carries the caller's relationship to the resource as a string, §5.2; decisions logged in §15.2. v0.21: the standard library is present in the runner; only third-party packages are limited; `operator` added to the prompt's module list, §3A.3.1. v0.20: the sandbox's security is isolation, not code inspection: no network, no secrets, fresh process per run, gVisor, recycling, an escape test suite; results are text over a Unix socket, §3A.3.1. v0.19: embedding model chosen, with prefixes and chunk caps against silent truncation, §3B.2, §3C.2. v0.18: computable questions take their input values from the source text or from local sampling, and choice questions get locally built distractors, so the model chooses no numbers; concept questions with math notation are checked for computability, §3A.3.1. v0.17: `isCorrect` rule for computable questions; generation prompt in `docs/prompts/`. v0.16: computable answers are computed locally, §3A.3.1)
 
 ---
 
@@ -443,11 +443,13 @@ The framework is wrapped in a thin **`packages/llm`** module that owns the app's
 interface LlmRuntime {
   generateObject<T>(role: ModelRole, schema: ZodType<T>, input: PromptInput, opts?): Promise<LlmResult<T>>
   streamObject<T>(role: ModelRole, schema: ZodType<T>, input: PromptInput, opts?): AsyncIterable<Partial<T>> & { final: Promise<LlmResult<T>> }
-  embed(texts: string[]): Promise<number[][]>          // uses the "embeddings" role
+  embed(texts: string[], opts: { kind: "query" | "document" }): Promise<{ vectors: number[][]; tokens: number[] }>   // uses the "embeddings" role
 }
 type ModelRole = "authoring.objectives" | "authoring.generate" | "authoring.judge" | "verify.solve"
                | "analysis" | "embeddings"
-LlmResult<T> = { value: T; endpointId; model; finishReason; usage; repairAttempts; latencyMs }
+PromptInput = { promptId; vars; messages? }   // renders packages/llm/prompts/<promptId>/<version>.md
+LlmResult<T> = { value: T; endpointId; model; finishReason; usage; repairAttempts; latencyMs;
+                 callLogId; promptVersion; mode; normalizationFixes; queuedMs; failedItems? }
 ```
 
 ### 3B.2 Endpoints & roles
@@ -460,7 +462,7 @@ Endpoint = z.object({
   label: z.string(),                          // "Qwen on proxmox", "Cloud model X"
   provider: z.string(),                       // "openai-compatible" (default) or any registered provider adapter
   baseUrl: z.string().url().optional(),       // required for openai-compatible, e.g. http://10.0.0.20:8000/v1
-  apiKeyRef: z.string().optional(),           // optional; stored encrypted
+  apiKey: z.string().optional(),              // write-only; AES-256-GCM at rest (apiKeyCiphertext), never returned
   location: z.enum(["local", "cloud"]),       // drives privacy notices and the local-only setting
   server: z.enum(["vllm", "llamacpp", "ollama", "lmstudio", "gateway", "other"]).optional(),  // openai-compatible quirks
   concurrency: z.number().int().default(1),   // single consumer GPU: 1–2; cloud: higher, within rate limits
@@ -496,8 +498,10 @@ RoleAssignment = z.object({
 
   These are documented as starting points, not guarantees.
 - **Privacy:** an instance setting **"local endpoints only"** stops source material and student data from ever reaching a `cloud` endpoint. When a role uses a cloud endpoint, the UI shows a notice naming it.
-- **Secrets:** keys are stored encrypted at rest (key from env) and never returned by the API after they're saved.
-- **SSRF guard:** only admins can create or edit endpoints. Users never enter URLs or keys.
+- **Secrets:** keys are stored encrypted at rest (AES-256-GCM under `ENDPOINT_SECRET_KEY`, a fresh IV per write, the endpoint id as associated data) and never returned by the API after they're saved. Saving a key without `ENDPOINT_SECRET_KEY` is refused. At startup, an endpoint whose key can't be decrypted is logged and fails its calls with `llm_endpoint_auth`.
+- **SSRF guard:** only admins can create or edit endpoints. Users never enter URLs or keys. `baseUrl` must be `http:` or `https:` with no credentials in it. There's no address block-list in v1: local endpoints are private addresses by design.
+- **Providers and quirks:** a provider adapter is one file in `packages/llm`'s registry; v1 ships `openai-compatible` and `anthropic`. Per-`server` differences are limited to discovery and reported context (`ollama`: `/api/show` `num_ctx`; `vllm`: `/v1/models` `max_model_len`; `llamacpp`: `/props` `n_ctx`). Endpoints are soft-deleted so call logs keep a valid id; deleting one that a role uses is refused.
+- **Local endpoints only, as built:** `InstanceSettings.localEndpointsOnly`. While on, the runtime refuses a call that resolves to a `cloud` endpoint (logged), a cloud endpoint can't be assigned to a role, and an endpoint with roles can't become `cloud`. It can't be turned on while a role uses a cloud endpoint.
 
 ### 3B.3 Getting valid structured output from any model
 
@@ -510,9 +514,9 @@ Each role's `structuredOutput` capability picks one of two methods. `native_sche
 
 Whatever the mode, the response then goes through the **repair loop**:
 
-1. **Normalize** (§3D.2), then validate with the Zod schema (L1). Fixes from normalization are recorded but don't count as repairs.
-2. If that fails: re-ask once or twice, including the Zod error messages, the invalid output and the schema (`maxRepairs`, default 2).
-3. Still failing: handle **per item** where possible. Valid questions from the batch are kept, invalid ones are marked as failed, and the whole batch is only failed if nothing can be salvaged.
+1. **Normalize** (§3D.2; the JSON-level steps are `extractJson` in `packages/shared`), then validate with the Zod schema (L1). Fixes from normalization are recorded but don't count as repairs.
+2. If that fails: re-ask once or twice, including the Zod error messages, the invalid output and the schema (`maxRepairs`, default 2). A repair is self-contained (the `output-repair` prompt), so it stays within the context budget.
+3. Still failing: handle **per item** where possible (opt-in per call, `salvage: { path }`). Valid questions from the batch are kept, invalid ones are returned as `failedItems`, and the whole batch is only failed if nothing can be salvaged.
 4. Record `repairAttempts` and the mode used, so each role's reliability can be monitored.
 
 The shared Zod schemas are written for the **weakest supported model**, not the strongest. Rules: no recursive types; avoid `anyOf` where possible (it's why the generation schema uses flat optional fields rather than a discriminated union); keep enums small; give every field a `.describe()` (it goes into the JSON Schema and helps prompt-only models).
@@ -523,10 +527,10 @@ The shared Zod schemas are written for the **weakest supported model**, not the 
 
 ### 3B.4 Prompts & evals
 
-- Prompts are versioned templates in `packages/llm/prompts`, one per role. Until that package exists, drafts are iterated in `docs/prompts/` together with their probe results (e.g. [`authoring-generate.md`](prompts/authoring-generate.md)). Each `LlmResult` and saved report records the prompt version.
+- Prompts are versioned templates in `packages/llm/prompts/<promptId>/<version>.md`, one per role (`authoring.objectives`, `authoring.judge` and `analysis` come with the features that call them), plus `output-repair` and `program-repair`. The active version is a constant in code, changed by review. Probe history stays in `docs/prompts/` (e.g. [`authoring-generate.md`](prompts/authoring-generate.md)). Each `LlmResult` and saved report records the prompt version.
 - **Call logging:** every call records metadata (endpoint, model, prompt version, tokens, repairs, latency). For **authoring and `verify.solve` calls, the full request and response are stored as well**, so any question's origin can be reproduced exactly (provenance, §3A.1). Analysis calls, which carry student data, store metadata only.
-- One default prompt per role, written to work on small models (short, explicit, one example), which also works on large models. The mechanism for **per-model variants** exists, but none ship in v1; one is added only when evals show it's needed.
-- A small **eval set** (fixed sources plus expected properties: grounding pass rate, single-correct-answer rate, coverage, repair rate, seconds per question) is run against each role's model. That makes model choices ("is local 8B enough?", "is the cloud judge worth it?") measured answers instead of guesses.
+- One default prompt per role, written to work on small models (short, explicit, one example), which also works on large models. The mechanism for **per-model variants** exists (a file `<version>.<model-glob>.md`), but none ship in v1; one is added only when evals show it's needed.
+- A small **eval set** (fixed sources plus expected properties: grounding pass rate, single-correct-answer rate, coverage, repair rate, seconds per question) is run against each role's model. That makes model choices ("is local 8B enough?", "is the cloud judge worth it?") measured answers instead of guesses. Eval sets live in `packages/llm/evals/`; a run is a pg-boss job against the role's current assignment, one at a time per role (or `bun run llm:eval`), and its report is stored on `LlmEvalRun`. Live checks against real servers are `bun run llm:live`.
 
 ---
 
@@ -578,6 +582,7 @@ source.md ─▶ parse headings (remark) ─▶ sections ─▶ chunks ─┬─
   - `maxInputTokens` 2,048 on Ollama defaults. The reference setup uses a Modelfile tag (`embeddinggemma2-4k`: `num_ctx 4096`, `num_batch 4096`) for 4,096. Both settings are needed, and Ollama honors both from a Modelfile (measured). Over the cap, `/v1/embeddings` still truncates silently, but it reports `prompt_tokens` equal to the cap, which the ingest guard catches. The tag uses 0.6 GiB of VRAM and gives the same vectors as the base tag.
   - The larger `embeddinggemma-2` tags add image and audio encoders only, and give identical text vectors (cosine 1.000000), so the 270m tag is the one to use.
   - Small retrieval test (14 chunks, 15 queries): top-1 11/15 without prefixes, **13/15 with them** (MRR 0.83 → 0.92). Using the section heading as the title scored lower (11/15) than `title: none`.
+  - Repeated on the repo's `retrieval-mini` set (P1.5; 14 chunks, 16 queries, `embeddinggemma2-4k`): top-1 13/16 without prefixes, **14/16 with them** (MRR 0.90 → 0.93).
 
 ### 3C.3 Retrieval (our server) and how it works with the model
 
@@ -1005,11 +1010,14 @@ Response(id, attemptId | submissionId, questionId (int, §2.3), answer JSON, aut
          UNIQUE(attemptId, questionId))   // as built in P1: attemptId only (NOT NULL, cascade) and no needsReview; P3 adds submissionId + needsReview
 GradeOverride(id, responseId, proctorId, fromPoints, toPoints, comment, createdAt)
 AnalysisReport(id, ownerId, kind, subjectRef, endpointId, model, promptVersion, result JSON, createdAt)
-Endpoint(id, label, provider, baseUrl?, apiKeyCiphertext?, location, server?, concurrency, timeoutMs, createdBy)
-RoleAssignment(role, endpointId, model, capabilities JSON, params JSON)
+Endpoint(id, label, provider, baseUrl?, apiKeyCiphertext?, location, server?, concurrency, timeoutMs, createdBy?, createdAt, updatedAt, deletedAt?)   // soft-deleted
+RoleAssignment(role PK, endpointId, model, capabilities JSON, embedding JSON?, params JSON?, updatedBy?, updatedAt)
 VerificationRun(id, testVersionId? | draftQuestionId?, questionId, programKind: author|blind, program TEXT, status, result JSON, matchedOption?, durationMs, sandboxVersion, at)
-LlmCallLog(id, endpointId, model, role, promptVersion, mode, finishReason, repairAttempts, usage JSON, latencyMs, at,
-           requestBody JSON?, responseBody JSON?)   // bodies stored for authoring + verify.solve calls (provenance); metadata only for analysis
+LlmCallLog(id, endpointId, model, role?, kind: call|probe|eval, promptId?, promptVersion?, promptFile?, mode, finishReason?, outcome: ok|salvaged|failed,
+           errorCode?, repairAttempts, normalizationFixes JSON, usage JSON, queuedMs, latencyMs, actorId?, evalRunId?, at,
+           requestBody JSON?, responseBody JSON?)   // append-only (INSERT/SELECT for the app user); bodies stored for authoring + verify.solve calls (provenance); metadata only for analysis, embeddings and probes
+LlmEvalRun(id, evalSet, role, endpointId, model, promptVersion, status: queued|running|done|failed, trials, summary JSON?, items JSON?, errorCode?,
+           startedBy?, createdAt, startedAt?, finishedAt?)   // one queued or running run per role
 AuditLog(id, actorId, action, targetType, targetId, before JSON?, after JSON?, ip?, userAgent?, at)   // append-only; app DB user has INSERT/SELECT only
 Accommodation(assignmentId, studentId, timeMultiplier, note?, grantedBy, grantedAt)
 ```
@@ -1259,7 +1267,9 @@ Review      GET /assignments/:id/review-queue   POST /responses/:id/override
             POST /submissions/:id/reset   PUT /assignments/:id/accommodations/:studentId   POST /assignments/:id/release
 AI          POST /ai/analyze-attempt   POST /ai/analyze-cohort   GET /ai/reports/:id
 LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   POST /admin/llm/endpoints/:id/probe
-            GET/PUT /admin/llm/roles   GET /admin/llm/stats   POST /admin/llm/evals/run
+            GET /admin/llm/roles   PUT|DELETE /admin/llm/roles/:role   GET /admin/llm/stats
+            POST /admin/llm/evals/run   GET /admin/llm/evals   GET /admin/llm/evals/:id
+LLM status  GET /llm/roles   (any signed-in user: assigned or not, location, a cloud endpoint's label)
 ```
 
 ---
@@ -1270,7 +1280,7 @@ LLM admin   CRUD /admin/llm/endpoints   GET /admin/llm/endpoints/:id/models   PO
 2. **Default model roles:** which role → endpoint/model assignments should a fresh install ship with? (Probably: everything unassigned, plus a setup wizard with the local reference setup preselected.)
 3. **Fairness & quotas:** do we need per-user limits (questions/day, concurrent runs, cloud spend), or is the fair queue (§3B.2) enough?
 4. ~~**Embedding model**~~ **Resolved (v0.19):** `embeddinggemma-2:270m`, 768 dimensions, with query and document prefixes (§3C.2). Changing it later still means a column migration plus re-embedding everything. Re-check the prefixes and the section-title choice on real course material once P2 has a retrieval eval set.
-5. **Minimum model:** what's the minimum we document as supported for `authoring.generate` (e.g. "≥ 8B open-weight, `native_schema`, ≥ 16K context")? Decide after running the §3B.4 eval set on the 3060 box and on one cloud model. Also: vLLM or llama.cpp as the recommended local server?
+5. **Minimum model:** what's the minimum we document as supported for `authoring.generate` (e.g. "≥ 8B open-weight, `native_schema`, ≥ 16K context")? Decide after running the §3B.4 eval set on the 3060 box and on one cloud model. Also: vLLM or llama.cpp as the recommended local server? **Measured so far (P1.5, 2026-10-30):** `qwen3.5-9b-32k` (Q4_K_M, 32K context, Ollama 0.40.12), `native_schema`, `generate-smoke` × 5: valid first try 5/5, no repairs, evidence verbatim 20/20, 6.44 s per question. vLLM, llama.cpp and a cloud model haven't been measured (no server or key was available), so this stays open.
 6. **Source sharing & retention:** can a source be shared with other proctors/groups? How long are sources kept? (Students see cited passages only on `full_review` assignments, §9.2.)
 7. **Deployment:** Docker Compose on one host (e.g. a Proxmox VM) is the v1 target (§11.5). Is anything beyond that needed (HA, managed Postgres, separate GPU host networking/TLS)?
 
@@ -1335,3 +1345,14 @@ Several choices in this spec carry a known risk and have a planned fallback. Whe
 | 2026-10-29 | Practice tables (§10) | `PracticeAttempt.questionIds` (retake subset), `score` null until submit, partial unique in-progress index; `Response` without `submissionId` / `needsReview` until P3; points `numeric(10,2)` | Deriving the subset later would be fragile; proctored columns come with P3 | P1 |
 | 2026-10-29 | Practice routes (§12) | Added `POST /practice/attempts/:id/responses/:questionId/self-grade` and `DELETE /practice/attempts/:id`; `GET /practice/attempts` takes an optional `limit` (home page) and returns `missedCount` | Self-grade and discard need routes | P1 |
 | 2026-10-29 | Retake missed, results, export (§6) | Missed = no full points after self-grade in the most recent submitted attempt (unanswered included); topic breakdown by `topic` in first-appearance order; export in the test's order with stored grades | `docs/P1.md` §5 | P1 |
+| 2026-10-30 | LLM framework (§3B.1, §15.1) | Vercel AI SDK confirmed, §15.1's contingency not triggered; `generateText` / `streamText` with a small custom output instead of the SDK's `generateObject`, and `params` merged by a `fetch` wrapper in the adapters | The repair loop needs the raw text, and `providerOptions` drops `top_k` on `openai-compatible` | P1.5 |
+| 2026-10-30 | Providers (§3B.2) | `openai-compatible` and `anthropic`; a provider is one registry file; `server` quirks cover discovery and reported context only; model behaviour lives in `params` | `docs/P1.5.md` §5 | P1.5 |
+| 2026-10-30 | Runtime interface (§3B.1) | `PromptInput`; `LlmResult` adds `callLogId`, `promptVersion`, `mode`, `normalizationFixes`, `queuedMs`, `failedItems`; `embed(texts, { kind })` returns `{ vectors, tokens }`; typed `LlmError` codes, no automatic transport retries | `docs/P1.5.md` §5 | P1.5 |
+| 2026-10-30 | Repairs and salvage (§3B.3) | A repair is self-contained (`output-repair-v1`: issues, invalid output, schema); salvage is opt-in per call; `strict: false` in `response_format` | Stays within the context budget; OpenAI-style clouds refuse optional fields under `strict: true` | P1.5 |
+| 2026-10-30 | Embeddings (§3B.2, §3C.2) | Batches ≤ 32; a text over half of `maxInputTokens` by estimate goes alone, so its count is exact; reaching the cap fails `llm_embedding_truncated`; the probe searches in ≤ 16 requests up to 32,768 | Batched counts can't show one truncated text | P1.5 |
+| 2026-10-30 | Secrets (§3B.2, §11.5) | AES-256-GCM, endpoint id as associated data; `ENDPOINT_SECRET_KEY` exactly 32 bytes; saving a key without it is 409; an unreadable key is `llm_endpoint_auth`, not a refused start; soft delete clears the key | `docs/P1.5.md` §5 | P1.5 |
+| 2026-10-30 | Local endpoints only (§3B.2) | `InstanceSettings.localEndpointsOnly`, enforced in the runtime and on assignment; can't be turned on with a cloud role; an endpoint with roles can't become `cloud` while it's on | The last rule closes a way around assignment | P1.5 |
+| 2026-10-30 | LLM tables (§10) | `LlmCallLog` append-only with `kind`, `outcome`, `promptId`, `promptFile`, `errorCode`, `normalizationFixes`, `queuedMs`, `actorId`, `evalRunId`; new `LlmEvalRun` with one active run per role; `Endpoint` soft-deleted; nullable actors for the seed and CLI | Provenance, stats, eval records | P1.5 |
+| 2026-10-30 | LLM routes (§12) | Per-role `PUT`/`DELETE` replace `PUT /admin/llm/roles`; added `GET /admin/llm/evals[/:id]` and `GET /llm/roles`; the endpoints list also returns `providers`; `GET/PUT /admin/settings` gains `localEndpointsOnly`; 14 `llm_*` error codes | The UI and P2/P3.1 need them; a new provider stays one registry file | P1.5 |
+| 2026-10-30 | Prompts and evals (§3B.4) | `packages/llm/prompts/<id>/<version>.md`, active version constant in code, variants by model glob (none shipped); `program-repair` kept for P2.1; eval sets `generate-smoke`, `retrieval-mini`; `llm:eval`, `llm:live`; `EVAL_METRICS` in `packages/shared` for the labels | `docs/P1.5.md` §5, `docs/P1.5-audit.md` F5 | P1.5 |
+| 2026-10-30 | Compose (`docker/compose.yaml`) | `api` gets `host.docker.internal` | Reaches a model server on the Docker host; CI's e2e mock uses it | P1.5 |

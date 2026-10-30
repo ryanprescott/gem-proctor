@@ -286,6 +286,45 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
     expect((await t.db.select().from(LlmEvalRun)).length).toBe(before);
   });
 
+  test("llm:live reports discovery, probes and evals from LLM_DEV_*, and exits non-zero on a failed check", async () => {
+    const live = async (baseUrl: string) => {
+      const proc = Bun.spawn(["bun", join(ROOT, "apps", "api", "src", "llm-live-cli.ts"), "--trials", "1"], {
+        cwd: tmpdir(),
+        env: {
+          PATH: process.env.PATH ?? "",
+          HOME: process.env.HOME ?? "",
+          DATABASE_URL: "postgres://nobody:x@127.0.0.1:9/none",
+          DATABASE_URL_OWNER: "postgres://nobody:x@127.0.0.1:9/none",
+          SESSION_SECRET: Buffer.alloc(32, 7).toString("base64"),
+          ENV_FILE: "/nonexistent",
+          LLM_DEV_BASE_URL: baseUrl,
+          LLM_DEV_MODEL: "m",
+          LLM_DEV_CONTEXT: "65536",
+          LLM_DEV_ROLES: "authoring.generate",
+          LLM_DEV_EMBED_MODEL: "e",
+          LLM_DEV_EMBED_DIM: "8",
+          LLM_DEV_EMBED_MAX_INPUT_TOKENS: "4096",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      return { out: await new Response(proc.stdout).text(), code: await proc.exited };
+    };
+    mock.options.embedCap = 512;
+    mock.options.dimensions = 8;
+    mock.options.reply = (body) => (JSON.stringify(body.messages).includes("2 + 2") ? '{"answer": 4}' : batch());
+    const ok = await live(mock.url);
+    expect(ok.out).toContain("== discovery");
+    expect(ok.out).toContain('"schemaRespected": true');
+    expect(ok.out).toContain('"dimensions": 8');
+    expect(ok.out).toContain("eval generate-smoke");
+    expect(ok.out).toContain("eval retrieval-mini");
+    expect(ok.code).toBe(0);
+    const down = await live("http://127.0.0.1:9/v1");
+    expect(down.out).toContain("llm_endpoint_unreachable");
+    expect(down.code).toBe(1);
+  });
+
   test("processEvalRun ignores an unknown id", async () => {
     expect(await processEvalRun(t.ctx, "01890000-0000-7000-8000-000000000000")).toBeNull();
   });

@@ -38,6 +38,48 @@ cp .env.example .env        # then fill in SESSION_SECRET (openssl rand -base64 
 | `bun run ci` | Everything CI runs (below). |
 | `bun run e2e` | Playwright + axe. Starts a throwaway stack (fresh database, built web app, API on :3100, the real verify parent), or uses `E2E_BASE_URL`. Either way it runs a mock model server for the LLM page (`E2E_MOCK_HOST` is the name a stack in containers reaches it by; CI uses `host.docker.internal`). |
 
+## LLM (P1.5)
+
+Nothing in `bun run ci` needs a model server: tests and e2e use the mock in `packages/llm/mock/server.ts`.
+
+| Command | What it does |
+|---|---|
+| `bun run llm:seed` | Creates the `LLM_DEV_*` endpoint(s) and role assignments once (also on API start in development). Never overwrites an assignment. |
+| `bun run llm:eval <set> [--trials n] [--dev]` | Runs an eval set (`generate-smoke`, `retrieval-mini`) from the database's assignments and stores the run; with `--dev`, from `LLM_DEV_*`, with nothing stored. |
+| `bun run llm:live [--trials n] [--embed-model tag]…` | The live checks against the `LLM_DEV_*` server: discovery, chat probe, `generate-smoke`, embeddings probes, `retrieval-mini`. Stores nothing; exits 1 if a check failed. |
+
+Keys: `ENDPOINT_SECRET_KEY` (32 random bytes, base64) is needed to save an endpoint key. Cloud keys stay in the shell environment or the admin UI, never in the repo.
+
+### Reference local setup (Ollama, 12 GB GPU)
+
+```
+# qwen3.5-9b-32k: ollama create qwen3.5-9b-32k -f <this file>
+FROM qwen3.5:9b
+PARAMETER num_ctx 32768
+
+# embeddinggemma2-4k: both settings are needed, or inputs are cut at 2,048 tokens without an error
+FROM embeddinggemma-2:270m
+PARAMETER num_ctx 4096
+PARAMETER num_batch 4096
+```
+
+Assignment for the chat roles, as `.env` values (`LLM_DEV_PARAMS` is optional; `llm:live` on P1.5 used exactly this):
+
+```sh
+LLM_DEV_SERVER=ollama
+LLM_DEV_MODEL=qwen3.5-9b-32k
+LLM_DEV_CONTEXT=32768
+LLM_DEV_STRUCTURED_MODE=native_schema
+LLM_DEV_PARAMS={"temperature":0.7,"top_p":0.8,"top_k":20,"presence_penalty":0,"reasoning_effort":"none"}
+LLM_DEV_EMBED_MODEL=embeddinggemma2-4k
+LLM_DEV_EMBED_DIM=768
+LLM_DEV_EMBED_MAX_INPUT_TOKENS=4096
+LLM_DEV_EMBED_QUERY_PREFIX="task: search result | query: "
+LLM_DEV_EMBED_DOCUMENT_PREFIX="title: none | text: "
+```
+
+Other servers set their context at launch (vLLM `--max-model-len`, `llama-server -c`); the probe reports what they were started with. The cloud setup is an `anthropic` or OpenAI-compatible endpoint with `location: cloud` and the role's `maxOutputTokens` set for that model. These are starting points, not guarantees (SPEC §3B.2).
+
 ## Checks (`bun run ci`)
 
 biome check · lint-rule build staleness · lint-rule snapshot · suppression baseline · i18n catalog check · JSON Schema export staleness · LLM import boundary (`ai` and `@ai-sdk/*` only in `packages/llm`) · typecheck (strict, every project) · `bun test` (unit + integration against real Postgres) · ruff + ruff format · verify unit tests · Playwright + axe.
