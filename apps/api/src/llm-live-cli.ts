@@ -48,7 +48,7 @@ if (chat) {
     return JSON.stringify(models ?? "no models endpoint");
   });
   await check(`chat probe ${chat.model}`, async () => {
-    const probe = await llm.probe(chat.endpoint, { model: chat.model, kind: "chat" });
+    const probe = await llm.probe(chat.endpoint, { model: chat.model, kind: "chat", params: chat.params });
     if (probe.kind === "chat" && !probe.modes.some((m) => m.schemaRespected)) failed = true;
     return JSON.stringify(probe, null, 2);
   });

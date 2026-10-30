@@ -560,6 +560,18 @@ describe.skipIf(!hasDb)("C15: embeddings", () => {
     expect(r.tokens).toEqual([99]);
   });
 
+  test("a long text with no token count back fails: truncation couldn't be seen", async () => {
+    await setup();
+    mock.options.noEmbedUsage = true;
+    try {
+      const error = await env.runtime.embed([words(60)], { kind: "document" }).catch((e) => e);
+      expect(error).toBeInstanceOf(LlmError);
+      expect(error).toMatchObject({ code: "llm_endpoint_error", params: { index: 0, reason: "no_token_count" } });
+    } finally {
+      mock.options.noEmbedUsage = false;
+    }
+  });
+
   test("a wrong vector length fails", async () => {
     await setup();
     mock.wrongDimensions = 5;

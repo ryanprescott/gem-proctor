@@ -207,6 +207,40 @@ describe.skipIf(!hasDb)("LLM admin API", () => {
       expect(body.reportedContext).toBeNull();
     });
 
+    test("chat: a reply cut off at the budget is not reported as unsupported, and prompt_only isn't tried", async () => {
+      const m = mock({ reply: () => ({ text: '{"ans', finishReason: "length" }) });
+      const e = await create({ baseUrl: m.url });
+      const body = (await admin.post(`${API}/admin/llm/endpoints/${e.id}/probe`, { model: "m", kind: "chat" })).json();
+      expect(body.modes).toEqual([
+        expect.objectContaining({
+          mode: "native_schema",
+          schemaRespected: null,
+          finishReason: "length",
+          errorCode: null,
+        }),
+      ]);
+      expect(m.chatRequests()).toHaveLength(1);
+    });
+
+    test("chat: a complete answer that hit the budget still counts", async () => {
+      const m = mock({ reply: () => ({ text: GOOD, finishReason: "length" }) });
+      const e = await create({ baseUrl: m.url });
+      const body = (await admin.post(`${API}/admin/llm/endpoints/${e.id}/probe`, { model: "m", kind: "chat" })).json();
+      expect(body.modes[0]).toMatchObject({ schemaRespected: true, finishReason: "length" });
+    });
+
+    test("chat: the budget leaves room for reasoning, and params reach the request", async () => {
+      // A model that reasons for 2,000 tokens before answering, as the reference model can.
+      const m = mock({
+        reply: (body) => ((body.max_tokens as number) < 2000 ? { text: "", finishReason: "length" } : (GOOD as string)),
+      });
+      const e = await create({ baseUrl: m.url });
+      const params = { reasoning_effort: "none" };
+      const res = await admin.post(`${API}/admin/llm/endpoints/${e.id}/probe`, { model: "m", kind: "chat", params });
+      expect(res.json().modes[0]).toMatchObject({ mode: "native_schema", schemaRespected: true });
+      expect(m.chatRequests()[0]?.body.reasoning_effort).toBe("none");
+    });
+
     test("chat: an unreachable endpoint is reported per mode; probes log metadata only, with kind probe", async () => {
       const e = await create();
       const body = (await admin.post(`${API}/admin/llm/endpoints/${e.id}/probe`, { model: "m", kind: "chat" })).json();

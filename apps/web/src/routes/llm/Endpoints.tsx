@@ -6,6 +6,7 @@ import {
   type LlmEndpoint,
   MODEL_ROLES,
   type ModelInfo,
+  type ModelParams,
   type ModelRole,
   type ProbeKind,
   type ProbeResult,
@@ -26,7 +27,15 @@ import { formatNumber, formatSeconds } from "../../format.ts";
 import { ConfirmDialog } from "../../ui/ConfirmDialog.tsx";
 import { Button, Card, ErrorMessage, Select, TextField } from "../../ui/controls.tsx";
 import styles from "../Admin.module.css";
-import { ENDPOINTS_KEY, LLM_KEY, type RoleDialogRequest, ScrollTable, useFeedback, useRoleName } from "./shared.tsx";
+import {
+  ENDPOINTS_KEY,
+  LLM_KEY,
+  parseParams,
+  type RoleDialogRequest,
+  ScrollTable,
+  useFeedback,
+  useRoleName,
+} from "./shared.tsx";
 
 const NO_SERVER = "none";
 const COMPATIBLE = "openai-compatible";
@@ -270,7 +279,11 @@ function ProbeReport({ result }: { result: ProbeResult }) {
               <tr key={m.mode}>
                 <th scope="row">{t(`admin:llm.modes.${m.mode}`)}</th>
                 <td>
-                  {m.schemaRespected ? t("admin:llm.probe.yes") : t("admin:llm.probe.no")}
+                  {m.schemaRespected === null
+                    ? t("admin:llm.probe.cutOff")
+                    : m.schemaRespected
+                      ? t("admin:llm.probe.yes")
+                      : t("admin:llm.probe.no")}
                   {m.errorCode ? <div className={styles.muted}>{t(`errors:${m.errorCode}`)}</div> : null}
                 </td>
                 <td>{formatSeconds(m.latencyMs)}</td>
@@ -288,12 +301,13 @@ function ProbeReport({ result }: { result: ProbeResult }) {
 const CHAT_ROLES = MODEL_ROLES.filter((r) => r !== "embeddings");
 
 /** The role dialog's starting values from a probe; null when the probe gave nothing usable. */
-function probeValues(endpoint: LlmEndpoint, model: string, result: ProbeResult) {
+function probeValues(endpoint: LlmEndpoint, model: string, result: ProbeResult, params?: ModelParams) {
   if (result.kind === "embeddings") {
     const { dimensions, maxInputTokens, reportedContext } = result;
     return {
       endpointId: endpoint.id,
       model,
+      params,
       dimensions,
       maxInputTokens,
       ...(reportedContext === null ? {} : { contextWindow: reportedContext }),
@@ -305,6 +319,7 @@ function probeValues(endpoint: LlmEndpoint, model: string, result: ProbeResult) 
   return {
     endpointId: endpoint.id,
     model,
+    params,
     structuredOutput: mode.mode,
     ...(context === null ? {} : { contextWindow: context }),
   };
@@ -322,6 +337,8 @@ function EndpointTools({
   const roleName = useRoleName();
   const [model, setModel] = useState("");
   const [kind, setKind] = useState<ProbeKind>("chat");
+  const [paramsText, setParamsText] = useState("");
+  const params = parseParams(paramsText);
   const [role, setRole] = useState<ModelRole>(CHAT_ROLES[0] as ModelRole);
   const models = useMutation({
     mutationFn: () => api.call(adminLlmEndpointsModels, { params: { id: endpoint.id } }),
@@ -329,15 +346,16 @@ function EndpointTools({
     onError: feedback.failed,
   });
   const probe = useMutation({
-    mutationFn: (input: { model: string; kind: ProbeKind }) =>
+    mutationFn: (input: { model: string; kind: ProbeKind; params?: ModelParams }) =>
       api.call(adminLlmEndpointsProbe, { params: { id: endpoint.id }, body: input }),
     onSuccess: () => feedback.done(t("admin:llm.probe.done")),
     onError: feedback.failed,
   });
   // The probed model and kind, not whatever the form holds by the time the result is used.
   const probed = probe.variables;
-  const values = probe.data && probed ? probeValues(endpoint, probed.model, probe.data) : null;
+  const values = probe.data && probed ? probeValues(endpoint, probed.model, probe.data, probed.params) : null;
   const target = probed?.kind === "embeddings" ? "embeddings" : role;
+  const cutOff = probe.data?.kind === "chat" && probe.data.modes.some((m) => m.schemaRespected === null);
 
   return (
     <section>
@@ -350,7 +368,7 @@ function EndpointTools({
       <Form
         onSubmit={(e) => {
           e.preventDefault();
-          probe.mutate({ model, kind });
+          if (params !== null) probe.mutate({ model, kind, ...(params ? { params } : {}) });
         }}
       >
         <div className={styles.fieldRow}>
@@ -365,6 +383,16 @@ function EndpointTools({
             ]}
           />
         </div>
+        <TextField
+          label={t("admin:llm.roles.params")}
+          description={t("admin:llm.probe.paramsHelp")}
+          multiline
+          rows={2}
+          value={paramsText}
+          onChange={setParamsText}
+          isInvalid={params === null}
+          errorMessage={t("admin:llm.roles.paramsInvalid")}
+        />
         <Button type="submit" isDisabled={probe.isPending}>
           {probe.isPending ? t("admin:llm.probe.running") : t("admin:llm.probe.run")}
         </Button>
@@ -387,7 +415,7 @@ function EndpointTools({
               <Button onPress={() => onAssign({ role: target, prefill: values })}>{t("admin:llm.probe.use")}</Button>
             </div>
           ) : (
-            <p>{t("admin:llm.probe.unusable")}</p>
+            <p>{cutOff ? t("admin:llm.probe.cutOffHelp") : t("admin:llm.probe.unusable")}</p>
           )}
         </>
       ) : null}

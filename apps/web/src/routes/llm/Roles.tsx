@@ -1,6 +1,5 @@
 import {
   type LlmEndpoint,
-  type ModelParams,
   type ModelRole,
   type RoleAssignmentView,
   STRUCTURED_MODES,
@@ -16,20 +15,18 @@ import { formatNumber } from "../../format.ts";
 import { ConfirmDialog } from "../../ui/ConfirmDialog.tsx";
 import { Button, Card, ErrorMessage, Select, TextField } from "../../ui/controls.tsx";
 import styles from "../Admin.module.css";
-import { LLM_KEY, ROLES_KEY, type RoleDialogRequest, ScrollTable, useFeedback, useRoleName } from "./shared.tsx";
+import {
+  LLM_KEY,
+  parseParams,
+  ROLES_KEY,
+  type RoleDialogRequest,
+  ScrollTable,
+  useFeedback,
+  useRoleName,
+} from "./shared.tsx";
 
 /** The share of the context a new assignment keeps for output, as the dev seed does. */
 const OUTPUT_SHARE = 4;
-
-function parseParams(text: string): ModelParams | null | undefined {
-  if (text.trim() === "") return undefined;
-  try {
-    const value: unknown = JSON.parse(text);
-    return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as ModelParams) : null;
-  } catch {
-    return null;
-  }
-}
 
 const numberText = (n: number | undefined) => (n === undefined ? "" : String(n));
 
@@ -70,7 +67,10 @@ export function RoleDialog({
   const [dimensions, setDimensions] = useState(numberText(prefill?.dimensions ?? current?.embedding?.dimensions));
   const [queryPrefix, setQueryPrefix] = useState(current?.embedding?.queryPrefix ?? "");
   const [documentPrefix, setDocumentPrefix] = useState(current?.embedding?.documentPrefix ?? "");
-  const [paramsText, setParamsText] = useState(current?.params ? JSON.stringify(current.params, null, 2) : "");
+  const [paramsText, setParamsText] = useState(() => {
+    const start = prefill?.params ?? current?.params;
+    return start ? JSON.stringify(start, null, 2) : "";
+  });
   const params = parseParams(paramsText);
 
   const save = useMutation({

@@ -92,6 +92,7 @@ test("C34 models and probes; 'Use these values' prefills the role dialog", async
   await expect(page.getByRole("rowheader", { name: "mock-chat" })).toBeVisible();
   await page.getByRole("button", { name: "Probe this: mock-chat" }).click();
   await expect(page.getByLabel("Model id")).toHaveValue("mock-chat");
+  await page.getByLabel("Parameters (JSON)").fill('{ "reasoning_effort": "none" }');
   await page.getByRole("button", { name: "Run probe" }).click();
   await expect(page.getByRole("rowheader", { name: "Native schema" })).toBeVisible();
   await expect(page.getByText("Reported context: 32,768")).toBeVisible();
@@ -104,6 +105,7 @@ test("C34 models and probes; 'Use these values' prefills the role dialog", async
   await expect(dialog.getByLabel("Model", { exact: false }).first()).toHaveValue("mock-chat");
   await expect(dialog.getByRole("button", { name: / Mode$/ })).toContainText("Native schema");
   await expect(dialog.getByLabel("Context window")).toHaveValue("32768");
+  await expect(dialog.getByLabel("Parameters (JSON)")).toHaveValue(/"reasoning_effort": "none"/);
   await expectNoAxeViolations(page, "/admin/llm role dialog");
   await dialog.getByRole("button", { name: "Save assignment" }).click();
   await expect(dialog).toBeHidden();
@@ -111,6 +113,7 @@ test("C34 models and probes; 'Use these values' prefills the role dialog", async
   await expect(assigned.getByRole("cell", { name: "mock-chat" })).toBeVisible();
 
   await page.getByLabel("Model id").fill("mock-embed");
+  await page.getByLabel("Parameters (JSON)").fill("");
   await choose(page, "Probe", "Embeddings");
   await page.getByRole("button", { name: "Run probe" }).click();
   await expect(page.getByText("Dimensions")).toBeVisible();

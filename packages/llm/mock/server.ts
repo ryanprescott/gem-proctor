@@ -23,6 +23,8 @@ export interface MockOptions {
   /** No `/v1/models` at all. */
   noModels?: boolean;
   dimensions?: number;
+  /** Embedding replies without `usage`. */
+  noEmbedUsage?: boolean;
   /** Embedding inputs are cut here, without an error, and `prompt_tokens` stops growing. */
   embedCap?: number;
   /** Fallback for chat requests when the reply list is empty. */
@@ -201,7 +203,7 @@ export class MockLlmServer {
       object: "list",
       model: body.model,
       data,
-      usage: { prompt_tokens: promptTokens, total_tokens: promptTokens },
+      ...(this.options.noEmbedUsage ? {} : { usage: { prompt_tokens: promptTokens, total_tokens: promptTokens } }),
     });
   }
 }

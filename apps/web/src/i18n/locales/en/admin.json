@@ -195,6 +195,9 @@
       "no": "No",
       "forRole": "For role",
       "use": "Use these values",
+      "paramsHelp": "Optional, as in the role's assignment, e.g. to turn a model's thinking off. Sent with this probe only, and carried to the role dialog.",
+      "cutOff": "Not determined: the reply was cut off",
+      "cutOffHelp": "The model used up the probe's output budget before it finished, which says nothing about the schema. Try again with parameters that turn its thinking off.",
       "unusable": "No mode respected the schema, so there are no values to use."
     },
     "roles": {

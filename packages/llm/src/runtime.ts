@@ -52,11 +52,14 @@ const logsBodies = (role: ModelRole) => role.startsWith("authoring.") || role ==
 const PROBE_SYSTEM = "You answer with JSON.";
 const PROBE_QUESTION = 'What is 2 + 2? Reply as {"answer": 4}.';
 const ProbeAnswer = z.object({ answer: z.number() });
-/** Enough for the tiny probe request on any model. The budget check isn't what's being probed. */
+/**
+ * The answer is tiny, but a model that reasons first spends its budget before it: 256 tokens cut off the reference
+ * model in 3 of 7 probes. The budget check isn't what's being probed.
+ */
 const PROBE_CAPABILITIES: Capabilities = {
   structuredOutput: "native_schema",
   contextWindow: 1_000_000,
-  maxOutputTokens: 256,
+  maxOutputTokens: 4096,
 };
 /** One token on the usual tokenizers. */
 const PROBE_WORD = " the";
@@ -550,7 +553,10 @@ export class Runtime implements LlmRuntime {
     };
     for (const i of alone) {
       await run([i]);
-      if ((tokens[i] as number) >= maxInputTokens) throw new LlmError("llm_embedding_truncated", { index: i });
+      const count = tokens[i] as number;
+      // Without a count a truncated vector can't be told from a whole one, so it isn't accepted.
+      if (!(count > 0)) throw new LlmError("llm_endpoint_error", { index: i, reason: "no_token_count" });
+      if (count >= maxInputTokens) throw new LlmError("llm_embedding_truncated", { index: i });
     }
     await Promise.all(batches.map(run));
     return { vectors, tokens };
@@ -612,7 +618,7 @@ export class Runtime implements LlmRuntime {
 
   async probe(
     endpoint: EndpointRow,
-    request: { model: string; kind: "chat" | "embeddings" },
+    request: { model: string; kind: "chat" | "embeddings"; params?: ModelParams },
     opts: CallOptions = {},
   ): Promise<ProbeResult> {
     const target: Target = {
@@ -621,12 +627,13 @@ export class Runtime implements LlmRuntime {
       model: request.model,
       capabilities: PROBE_CAPABILITIES,
       embedding: null,
-      params: {},
+      params: request.params ?? {},
     };
     const reportedContext = await this.reportedContext(endpoint, request.model, opts);
     if (request.kind === "embeddings") return { ...(await this.probeEmbeddings(target, opts)), reportedContext };
     const modes = [await this.probeChat(target, "native_schema", opts)];
-    if (!modes[0]?.schemaRespected) modes.push(await this.probeChat(target, "prompt_only", opts));
+    // Only a real failure moves on: a reply cut off by the budget says nothing against the mode.
+    if (modes[0]?.schemaRespected === false) modes.push(await this.probeChat(target, "prompt_only", opts));
     return { kind: "chat", modes, reportedContext };
   }
 
@@ -654,12 +661,13 @@ export class Runtime implements LlmRuntime {
         queuedMs: totals.queuedMs,
         latencyMs: totals.latencyMs,
       });
+      const cutOff = !parsed.ok && reply.finishReason === "length";
       return {
         mode,
         latencyMs: totals.latencyMs,
-        schemaRespected: parsed.ok,
+        schemaRespected: cutOff ? null : parsed.ok,
         finishReason: reply.finishReason,
-        errorCode: parsed.ok ? null : "llm_output_invalid",
+        errorCode: parsed.ok || cutOff ? null : "llm_output_invalid",
       };
     } catch (err) {
       await this.writeLog({ ...log, outcome: "failed", error: err });
@@ -688,7 +696,7 @@ export class Runtime implements LlmRuntime {
       if (!a || !b) throw new LlmError("llm_endpoint_error");
       dimensions = a.length;
       firstLatencyMs ||= reply.latencyMs;
-      const tokens = Math.floor(reply.usage.inputTokens / 2);
+      const tokens = Math.floor(reply.usage.inputTokens / 2) || 0; // NaN when the server reports no usage.
       const grew = tokens === 0 || tokens > previousTokens;
       return cosine(a, b) < PROBE_SAME_VECTOR && grew ? tokens || n + 1 : null;
     };

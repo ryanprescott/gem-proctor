@@ -1,4 +1,4 @@
-import type { ModelRole, StructuredMode } from "@gem/shared";
+import type { ModelParams, ModelRole, StructuredMode } from "@gem/shared";
 import { type ReactNode, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { errorText } from "../../ui/controls.tsx";
@@ -20,6 +20,18 @@ export interface RolePrefill {
   contextWindow?: number;
   maxInputTokens?: number;
   dimensions?: number;
+  params?: ModelParams;
+}
+
+/** The text of a JSON params field: undefined when empty, null when it isn't an object. */
+export function parseParams(text: string): ModelParams | null | undefined {
+  if (text.trim() === "") return undefined;
+  try {
+    const value: unknown = JSON.parse(text);
+    return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as ModelParams) : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface RoleDialogRequest {

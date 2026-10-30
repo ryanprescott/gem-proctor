@@ -159,12 +159,18 @@ export type ModelInfo = z.infer<typeof ModelInfo>;
 export const ProbeKind = z.enum(["chat", "embeddings"]);
 export type ProbeKind = z.infer<typeof ProbeKind>;
 
-export const ProbeRequest = z.object({ model: z.string().trim().min(1).max(500), kind: ProbeKind });
+export const ProbeRequest = z.object({
+  model: z.string().trim().min(1).max(500),
+  kind: ProbeKind,
+  /** As in `RoleAssignment.params`: e.g. thinking off, for a model that would otherwise reason first. */
+  params: ModelParams.optional(),
+});
 
 export const ProbeMode = z.object({
   mode: StructuredMode,
   latencyMs: z.number().int(),
-  schemaRespected: z.boolean(),
+  /** Null: the reply hit the output budget before it was complete, so this says nothing about the mode. */
+  schemaRespected: z.boolean().nullable(),
   finishReason: z.string().nullable(),
   errorCode: z.enum(ERROR_CODES).nullable(),
 });
@@ -172,7 +178,7 @@ export type ProbeMode = z.infer<typeof ProbeMode>;
 
 export const ChatProbeResult = z.object({
   kind: z.literal("chat"),
-  /** `native_schema` first; `prompt_only` is tried if that fails. */
+  /** `native_schema` first; `prompt_only` is tried if the schema wasn't respected, not if the reply was cut off. */
   modes: z.array(ProbeMode),
   reportedContext: z.number().int().nullable(),
 });
