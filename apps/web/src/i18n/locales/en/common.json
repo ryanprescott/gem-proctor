@@ -11,7 +11,8 @@
     "import": "Import",
     "users": "Users",
     "settings": "Settings",
-    "auditLog": "Audit log"
+    "auditLog": "Audit log",
+    "llm": "LLM"
   },
   "roles": {
     "student": "Student",

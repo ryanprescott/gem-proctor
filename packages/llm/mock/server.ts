@@ -13,6 +13,8 @@ export type ChatReply =
 
 export interface MockOptions {
   server?: EndpointServer;
+  /** Default 127.0.0.1. */
+  hostname?: string;
   /** Required as `Authorization: Bearer …` or `x-api-key`; anything else is 401. */
   apiKey?: string;
   models?: string[];
@@ -62,7 +64,8 @@ export class MockLlmServer {
   private readonly server: ReturnType<typeof Bun.serve>;
 
   constructor(readonly options: MockOptions = {}) {
-    this.server = Bun.serve({ port: 0, hostname: "127.0.0.1", idleTimeout: 0, fetch: (req) => this.handle(req) });
+    const hostname = options.hostname ?? "127.0.0.1";
+    this.server = Bun.serve({ port: 0, hostname, idleTimeout: 0, fetch: (req) => this.handle(req) });
   }
 
   get port(): number {

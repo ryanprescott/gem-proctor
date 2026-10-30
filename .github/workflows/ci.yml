@@ -45,6 +45,7 @@ jobs:
           sed -i "s|^DATABASE_URL_OWNER=.*|DATABASE_URL_OWNER=postgres://gem_owner:$OWNER@localhost:5432/gem_proctor|" .env
           sed -i "s|^DATABASE_URL=.*|DATABASE_URL=postgres://gem_app:$APP@localhost:5432/gem_proctor|" .env
           sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$(rand)|" .env
+          sed -i "s|^ENDPOINT_SECRET_KEY=.*|ENDPOINT_SECRET_KEY=$(rand)|" .env
           echo "TEST_PG_ADMIN_URL=postgres://postgres:$SUPER@127.0.0.1:5432/postgres" >> "$GITHUB_ENV"
           echo "GEM_OWNER_PASSWORD=$OWNER" >> "$GITHUB_ENV"
           echo "GEM_APP_PASSWORD=$APP" >> "$GITHUB_ENV"
@@ -58,6 +59,7 @@ jobs:
       - name: bun run ci
         env:
           E2E_BASE_URL: http://localhost:3000
+          E2E_MOCK_HOST: host.docker.internal
           CI: "true"
         run: bun run ci
 

@@ -6,7 +6,18 @@
 // below, each tied to a shared enum, so they stay checkable.
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
-import { ERROR_CODES, FIX_CODES, GRADE_OUTCOMES, QUESTION_TYPES, QUIZ_ISSUE_CODES } from "@gem/shared";
+import {
+  ENDPOINT_LOCATIONS,
+  ERROR_CODES,
+  EVAL_METRICS,
+  EVAL_STATUSES,
+  FIX_CODES,
+  GRADE_OUTCOMES,
+  MODEL_ROLES,
+  QUESTION_TYPES,
+  QUIZ_ISSUE_CODES,
+  STRUCTURED_MODES,
+} from "@gem/shared";
 import { AUDIT_ACTIONS, AUDIT_TARGETS, PRACTICE_KINDS, ROLES } from "@gem/shared/contracts";
 import { Glob } from "bun";
 import ts from "typescript";
@@ -26,6 +37,11 @@ export const DYNAMIC_FAMILIES: Record<string, readonly string[]> = {
   "admin:targets.": AUDIT_TARGETS,
   "practice:outcome.": GRADE_OUTCOMES,
   "practice:kind.": PRACTICE_KINDS,
+  "admin:llm.roleNames.": MODEL_ROLES,
+  "admin:llm.modes.": STRUCTURED_MODES,
+  "admin:llm.locations.": ENDPOINT_LOCATIONS,
+  "admin:llm.evals.statuses.": EVAL_STATUSES,
+  "admin:llm.evals.metrics.": EVAL_METRICS,
 };
 
 const PLURAL_SUFFIXES = ["_zero", "_one", "_two", "_few", "_many", "_other"];

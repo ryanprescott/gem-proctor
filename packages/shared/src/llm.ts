@@ -244,6 +244,22 @@ export const EvalRunRequest = z.object({
   trials: z.number().int().min(1).max(EVAL_TRIALS_MAX).optional(),
 });
 
+/** Every metric an eval set can report; a new one needs a catalog label too. */
+export const EVAL_METRICS = [
+  "trials",
+  "validFirstTry",
+  "repairsPerCall",
+  "validAfterRepairs",
+  "evidenceVerbatim",
+  "secondsPerQuestion",
+  "queries",
+  "top1",
+  "mrr",
+  "top1NoPrefix",
+  "mrrNoPrefix",
+] as const;
+export type EvalMetric = (typeof EVAL_METRICS)[number];
+
 /** Metric name → value; which metrics exist depends on the eval set. */
 export const EvalSummary = z.record(z.string(), z.number().nullable());
 export type EvalSummary = z.infer<typeof EvalSummary>;

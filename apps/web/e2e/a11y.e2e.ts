@@ -73,6 +73,7 @@ test("admin: every page", async ({ browser }) => {
     `/tests/${testId}`,
     "/admin/users",
     "/admin/settings",
+    "/admin/llm",
     "/admin/audit-log",
     "/no-such-page",
   ]) {

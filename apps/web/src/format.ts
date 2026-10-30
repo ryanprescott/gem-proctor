@@ -27,6 +27,16 @@ export function formatPercent(percent: number): string {
   return new Intl.NumberFormat(locale(), { style: "percent", maximumFractionDigits: 1 }).format(percent / 100);
 }
 
+/** A short duration in seconds, e.g. "1.25 sec" (model latencies). */
+export function formatSeconds(ms: number): string {
+  return new Intl.NumberFormat(locale(), {
+    style: "unit",
+    unit: "second",
+    unitDisplay: "short",
+    maximumFractionDigits: 2,
+  }).format(ms / 1000);
+}
+
 /** A running clock, e.g. "00:02:05" (the soft timer). Wraps after 24 hours, which a practice timer can live with. */
 export function formatClock(ms: number): string {
   return new Intl.DateTimeFormat(locale(), {

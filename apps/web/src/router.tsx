@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { Layout } from "./Layout.tsx";
 import { AdminAuditLogPage, AdminSettingsPage, AdminUsersPage } from "./routes/Admin.tsx";
+import { AdminLlmPage } from "./routes/AdminLlm.tsx";
 import { AttemptPage } from "./routes/Attempt.tsx";
 import { HomePage, NotFoundPage } from "./routes/Home.tsx";
 import { ImportPage } from "./routes/Import.tsx";
@@ -43,6 +44,7 @@ const routes = [
   }),
   createRoute({ getParentRoute: () => root, path: "/admin/users", component: AdminUsersPage }),
   createRoute({ getParentRoute: () => root, path: "/admin/settings", component: AdminSettingsPage }),
+  createRoute({ getParentRoute: () => root, path: "/admin/llm", component: AdminLlmPage }),
   createRoute({ getParentRoute: () => root, path: "/admin/audit-log", component: AdminAuditLogPage }),
 ] as const;
 const testRoute = routes[5];

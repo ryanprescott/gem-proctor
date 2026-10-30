@@ -36,7 +36,7 @@ cp .env.example .env        # then fill in SESSION_SECRET (openssl rand -base64 
 | `bun run dev:api` | API with reload (needs `DATABASE_URL*` pointing at a migrated database). |
 | `bun run dev:web` | Vite on :5173, proxying `/api` to the API. |
 | `bun run ci` | Everything CI runs (below). |
-| `bun run e2e` | Playwright + axe. Starts a throwaway stack (fresh database, built web app, API on :3100, the real verify parent), or uses `E2E_BASE_URL`. |
+| `bun run e2e` | Playwright + axe. Starts a throwaway stack (fresh database, built web app, API on :3100, the real verify parent), or uses `E2E_BASE_URL`. Either way it runs a mock model server for the LLM page (`E2E_MOCK_HOST` is the name a stack in containers reaches it by; CI uses `host.docker.internal`). |
 
 ## Checks (`bun run ci`)
 

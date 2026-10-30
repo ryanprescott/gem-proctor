@@ -3,12 +3,15 @@
 //   bun run e2e                                      start a throwaway stack: fresh database on the local
 //                                                    Postgres (TEST_PG_ADMIN_URL or .dev/pg), built web app,
 //                                                    API on port 3100, and the real verify parent if Python is there
+// Either way a mock model server runs here for the LLM page; its URL reaches the tests as E2E_LLM_URL.
+// A stack in containers reaches it through E2E_MOCK_HOST (CI: host.docker.internal).
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bootstrapDatabase, withDatabase } from "@gem/db";
 import pg from "pg";
+import { MockLlmServer } from "../packages/llm/mock/server.ts";
 import { adminUrl, ROOT, startLocalPg } from "./pg-local.ts";
 
 const WEB = join(ROOT, "apps", "web");
@@ -48,8 +51,46 @@ function findVerifyPython(): string | undefined {
   );
 }
 
+/** Enough for the probe and for `generate-smoke`; slow enough that the UI sees a run in progress. */
+function startMockLlm(mockHost: string | undefined) {
+  const quote = "For two n-vectors a and b, the inner product";
+  const question = {
+    tempId: "q1",
+    type: "single_choice",
+    topic: "Inner product",
+    computable: false,
+    evidence: [{ chunkId: "evals:inner-products:c1", quote }],
+    inputs: [],
+    question: "Which is the definition of orthogonal?",
+    constraint: "",
+    answerProgram: "",
+    options: [
+      { whyWrong: "no", text: "a", isCorrect: false },
+      { whyWrong: "no", text: "b", isCorrect: false },
+      { text: "c", isCorrect: true },
+    ],
+    mistakes: [],
+    explanation: "From the definition.",
+  };
+  const mock = new MockLlmServer({
+    hostname: mockHost ? "0.0.0.0" : "127.0.0.1",
+    server: "ollama",
+    contextLength: 32_768,
+    models: ["mock-chat", "mock-embed"],
+    dimensions: 768,
+    embedCap: 2048,
+    reply: (body) =>
+      JSON.stringify(body.messages).includes("2 + 2")
+        ? '{"answer": 4}'
+        : { text: JSON.stringify({ questions: [question, question, question, question] }), delayMs: 700 },
+  });
+  return { mock, url: mockHost ? `http://${mockHost}:${mock.port}/v1` : mock.url };
+}
+
+const llm = startMockLlm(process.env.E2E_MOCK_HOST);
+
 if (process.env.E2E_BASE_URL) {
-  process.exit(await runPlaywright(process.env.E2E_BASE_URL));
+  process.exit(await runPlaywright(process.env.E2E_BASE_URL, { E2E_LLM_URL: llm.url }));
 }
 
 // ── Throwaway stack ──────────────────────────────────────────────────
@@ -88,7 +129,8 @@ if (python) {
 }
 
 const port = process.env.E2E_PORT ?? "3100";
-const api = Bun.spawn(["bun", join(ROOT, "apps", "api", "src", "main.ts")], {
+// --no-env-file: Bun would load the repo's .env, and the dev seed would put LLM_DEV_* in the throwaway database.
+const api = Bun.spawn(["bun", "--no-env-file", join(ROOT, "apps", "api", "src", "main.ts")], {
   cwd: ROOT,
   env: {
     PATH: process.env.PATH ?? "",
@@ -99,6 +141,7 @@ const api = Bun.spawn(["bun", join(ROOT, "apps", "api", "src", "main.ts")], {
     DATABASE_URL: roleUrl("gem_app", appPw),
     DATABASE_URL_OWNER: roleUrl("gem_owner", ownerPw),
     SESSION_SECRET: randomBytes(32).toString("base64"),
+    ENDPOINT_SECRET_KEY: randomBytes(32).toString("base64"),
     ADMIN_EMAIL: "",
     ADMIN_PASSWORD: "",
     VERIFY_SOCKET: socket,
@@ -114,8 +157,9 @@ children.push(api);
 let code = 1;
 try {
   await waitFor(`http://127.0.0.1:${port}/api/v1/health`, 60_000);
-  code = await runPlaywright(`http://127.0.0.1:${port}`);
+  code = await runPlaywright(`http://127.0.0.1:${port}`, { E2E_LLM_URL: llm.url });
 } finally {
+  llm.mock.stop();
   for (const c of children) c.kill();
   await Promise.all(children.map((c) => c.exited));
   const client = new pg.Client({ connectionString: admin });

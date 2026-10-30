@@ -49,6 +49,9 @@ services:
     volumes:
       - verify-socket:/run/verify
       - web-dist:/web-dist:ro
+    # A model server on the Docker host (and CI's mock) is reachable as host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${API_PORT:-3000}:${API_PORT:-3000}"
     restart: unless-stopped

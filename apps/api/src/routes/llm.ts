@@ -200,7 +200,7 @@ export function llmRoutes(app: FastifyInstance, ctx: AppContext) {
       .from(Endpoint)
       .where(isNull(Endpoint.deletedAt))
       .orderBy(asc(Endpoint.createdAt));
-    return { endpoints: rows.map(toEndpoint) };
+    return { endpoints: rows.map(toEndpoint), providers: PROVIDER_IDS };
   });
 
   route(app, adminLlmEndpointsCreate, async ({ body, user, request }) => {

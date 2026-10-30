@@ -68,6 +68,11 @@ export function Layout() {
                   </Link>
                 </li>
                 <li>
+                  <Link to="/admin/llm" activeProps={{ "aria-current": "page" }}>
+                    {t("common:nav.llm")}
+                  </Link>
+                </li>
+                <li>
                   <Link to="/admin/audit-log" activeProps={{ "aria-current": "page" }}>
                     {t("common:nav.auditLog")}
                   </Link>

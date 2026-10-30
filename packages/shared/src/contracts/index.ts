@@ -577,7 +577,11 @@ export const adminLlmEndpointsList = contract({
   id: "admin.llm.endpoints.list",
   method: "GET",
   path: "/admin/llm/endpoints",
-  response: z.object({ endpoints: z.array(LlmEndpoint) }),
+  response: z.object({
+    endpoints: z.array(LlmEndpoint),
+    /** The registered provider adapters. */
+    providers: z.array(z.string()),
+  }),
 });
 
 export const adminLlmEndpointsCreate = contract({

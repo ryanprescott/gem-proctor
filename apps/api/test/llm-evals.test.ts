@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { LlmCallLog, LlmEvalRun } from "@gem/db";
 import { ACTIVE_PROMPTS, listEvalSets, loadEvalSet, loadPrompt, PROMPTS_DIR, renderPrompt } from "@gem/llm";
 import { MockLlmServer } from "@gem/llm/mock";
+import { EVAL_METRICS } from "@gem/shared";
 import { eq } from "drizzle-orm";
 import { evalRuns, processEvalRun, startEvalWorker } from "../src/llm-evals.ts";
 import { Queue } from "../src/queue.ts";
@@ -152,6 +153,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
       evidenceVerbatim: 0.75,
     });
     expect(run.summary.secondsPerQuestion).toBeGreaterThanOrEqual(0);
+    expect(EVAL_METRICS).toEqual(expect.arrayContaining(Object.keys(run.summary)));
     expect(run.items).toHaveLength(2);
     const calls = await t.db.select().from(LlmCallLog).where(eq(LlmCallLog.evalRunId, queued.id));
     expect(calls).toHaveLength(2);
@@ -172,6 +174,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
     expect(run.promptVersion).toBe("none");
     for (const k of ["top1", "mrr", "top1NoPrefix", "mrrNoPrefix"]) expect(run.summary[k]).toBeNumber();
     expect(run.summary.queries).toBe(16);
+    expect(EVAL_METRICS).toEqual(expect.arrayContaining(Object.keys(run.summary)));
     expect(run.items).toHaveLength(16);
     const sent = embed.requests.map((r) => (r.body.input as string[])[0] as string);
     expect(sent.some((s) => s.startsWith("d: "))).toBe(true);

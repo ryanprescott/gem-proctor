@@ -84,6 +84,9 @@ export function HomePage() {
               <Link to="/admin/settings">{t("common:nav.settings")}</Link>
             </li>
             <li>
+              <Link to="/admin/llm">{t("common:nav.llm")}</Link>
+            </li>
+            <li>
               <Link to="/admin/audit-log">{t("common:nav.auditLog")}</Link>
             </li>
           </ul>

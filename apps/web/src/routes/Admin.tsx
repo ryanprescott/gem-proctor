@@ -269,7 +269,7 @@ function json(v: unknown): string {
 }
 
 /** `yyyy-mm-dd` from a date input → ISO bounds for that local day. */
-function dayStart(d: string): string | undefined {
+export function dayStart(d: string): string | undefined {
   return d ? new Date(`${d}T00:00:00`).toISOString() : undefined;
 }
 function dayEnd(d: string): string | undefined {
