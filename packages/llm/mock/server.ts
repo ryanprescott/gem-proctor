@@ -8,7 +8,7 @@ import type { EndpointServer } from "@gem/shared";
 
 export type ChatReply =
   | string
-  | { text: string; delayMs?: number; finishReason?: string; chunks?: string[] }
+  | { text: string; delayMs?: number; holdUntil?: Promise<unknown>; finishReason?: string; chunks?: string[] }
   | { status: number; body?: unknown };
 
 export interface MockOptions {
@@ -141,6 +141,7 @@ export class MockLlmServer {
       }
       const r = typeof reply === "string" ? { text: reply } : reply;
       if (r.delayMs) await sleep(r.delayMs);
+      await r.holdUntil;
       const finish_reason = r.finishReason ?? "stop";
       const usage = { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 };
       const base = { id: "mock", object: "chat.completion", created: 1, model: String(body.model) };

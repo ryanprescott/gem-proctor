@@ -13,6 +13,13 @@ const BAD = '{"title": "t"}';
 const input = { promptId: "greet", vars: { tone: "dry", name: "Ada" } };
 const ROLE: ModelRole = "authoring.generate";
 
+/** Calls waiting in an endpoint's queue; only tests need to know. */
+function waitingCalls(runtime: Runtime, endpointId: string): number {
+  const { queues } = runtime as unknown as { queues: { for(id: string, concurrency: number): unknown } };
+  const queue = queues.for(endpointId, 1) as { waiting: Map<string, unknown[]> };
+  return [...queue.waiting.values()].reduce((n, list) => n + list.length, 0);
+}
+
 async function failure(p: Promise<unknown>): Promise<LlmError> {
   try {
     await p;
@@ -249,24 +256,33 @@ describe.skipIf(!hasDb)("runtime, against the mock server", () => {
     test("concurrency 1: one in flight; two callers alternate", async () => {
       await fresh({ concurrency: 1 });
       const order: string[] = [];
+      const { promise: released, resolve: release } = Promise.withResolvers<void>();
       const server = new MockLlmServer({
         reply: (body) => {
-          order.push(messagesOf(body).at(-1)?.content as string);
-          return { text: GOOD, delayMs: 5 };
+          const content = messagesOf(body).at(-1)?.content as string;
+          order.push(content);
+          return content === "blocker" ? { text: GOOD, holdUntil: released } : { text: GOOD, delayMs: 5 };
         },
       });
       try {
-        await assign(env.db, ROLE, { url: server.url, concurrency: 1 });
-        const call = (who: string, n: number) =>
-          rt.generateObject(
-            ROLE,
-            Answer,
-            { ...input, messages: [{ role: "user", content: `${who}${n}` }] },
-            { userId: who === "a" ? "01890000-0000-7000-8000-00000000000a" : "01890000-0000-7000-8000-00000000000b" },
-          );
-        const results = await Promise.all(["a", "b"].flatMap((w) => [1, 2, 3].map((n) => call(w, n))));
-        // Which call of a caller reaches the queue first depends on the database; the callers still alternate.
-        expect(order.map((c) => c[0])).toEqual(["a", "b", "a", "b", "a", "b"]);
+        const endpointId = await assign(env.db, ROLE, { url: server.url, concurrency: 1, timeoutMs: 30_000 });
+        const call = (content: string, userId?: string) =>
+          rt.generateObject(ROLE, Answer, { ...input, messages: [{ role: "user", content }] }, { userId });
+        // Each call reads the database before it queues. The blocker holds the slot until all six are waiting,
+        // so what's measured is the queue's order, not their arrival.
+        const blocker = call("blocker");
+        while (order.length === 0) await Bun.sleep(1);
+        const users = { a: "01890000-0000-7000-8000-00000000000a", b: "01890000-0000-7000-8000-00000000000b" };
+        const calls = (["a", "b"] as const).flatMap((w) => [1, 2, 3].map((n) => call(`${w}${n}`, users[w])));
+        while (waitingCalls(rt, endpointId) < calls.length) await Bun.sleep(1);
+        release();
+        await blocker;
+        const results = await Promise.all(calls);
+        // Which caller goes first depends on arrival; after that they take turns.
+        const callers = order.slice(1).map((c) => c[0] as string);
+        const first = callers[0] as string;
+        const second = first === "a" ? "b" : "a";
+        expect(callers).toEqual([first, second, first, second, first, second]);
         expect(server.maxInFlight).toBe(1);
         expect(Math.max(...results.map((r) => r.queuedMs))).toBeGreaterThan(0);
         const logged = await env.db
@@ -275,9 +291,10 @@ describe.skipIf(!hasDb)("runtime, against the mock server", () => {
           .where(eq(LlmCallLog.id, results.at(-1)?.callLogId as string));
         expect(logged[0]?.queuedMs).toBe(results.at(-1)?.queuedMs as number);
       } finally {
+        release();
         server.stop();
       }
-    });
+    }, 30_000);
 
     test("concurrency 2 allows two", async () => {
       const server = new MockLlmServer({ reply: () => ({ text: GOOD, delayMs: 20 }) });
