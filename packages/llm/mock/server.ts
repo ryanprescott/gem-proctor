@@ -27,6 +27,10 @@ export interface MockOptions {
   noEmbedUsage?: boolean;
   /** Embedding inputs are cut here, without an error, and `prompt_tokens` stops growing. */
   embedCap?: number;
+  /** Each embeddings request waits this long, so a UI can show progress. */
+  embedDelayMs?: number;
+  /** A vector for this input instead of the hashed one: how a test says two texts mean the same. */
+  embedVector?: (text: string) => number[] | undefined;
   /** Fallback for chat requests when the reply list is empty. */
   reply?: (body: Record<string, unknown>) => ChatReply;
 }
@@ -102,7 +106,10 @@ export class MockLlmServer {
 
     if (path === "/v1/chat/completions") return this.chat(body);
     if (path === "/v1/messages") return this.anthropic(body);
-    if (path === "/v1/embeddings") return this.embeddings(body);
+    if (path === "/v1/embeddings") {
+      if (this.options.embedDelayMs) await sleep(this.options.embedDelayMs);
+      return this.embeddings(body);
+    }
     if (path === "/v1/models" && !this.options.noModels) return this.models();
     if (path === "/api/show" && this.options.server === "ollama") {
       return json({ parameters: `temperature 0.7\nnum_ctx ${this.options.contextLength ?? 4096}\n`, model_info: {} });
@@ -198,7 +205,8 @@ export class MockLlmServer {
     const data = inputs.map((text, index) => {
       const words = text.split(/\s+/).filter(Boolean).slice(0, cap);
       promptTokens += words.length;
-      return { object: "embedding", index, embedding: mockVector(words.join(" "), dimensions) };
+      const embedding = this.options.embedVector?.(text) ?? mockVector(words.join(" "), dimensions);
+      return { object: "embedding", index, embedding };
     });
     return json({
       object: "list",

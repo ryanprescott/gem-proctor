@@ -44,3 +44,33 @@ Built: every §4 table in `packages/db/src/schema.ts`, migrations `0009_p2_autho
 - `apps/api/test/llm-db.test.ts`: two `toEqual`s on the settings object gained `authoring`, because the object did; what they check is unchanged.
 - Found by the tests: paragraph splitting ignored a cap below the 500-token target, so ordinary text was refused; a heading joined to a full chunk went over it; and with pieces at the limit no overlap fit. An oversized upload answered the generic `payload_too_large`.
 - `once=true` on the events route sends one state and closes, for a client that can't hold a stream; the authz matrix uses it, because `inject` can't finish on a stream.
+
+## F2 Retrieval & scope
+
+Built: `packages/knowledge/src/retrieve.ts` (the scope filter, vector search, full text, reciprocal-rank fusion, neighbours, `RetrievalLog`), `POST /sources/:id/scope/estimate`. Mock: `embedVector`, so a test can say two texts mean the same. Tests: `apps/api/test/retrieval.test.ts`, the matrix.
+
+| # | Result | Evidence |
+|---|---|---|
+| E11 | **pass** | `retrieval.test.ts` "E11": the best match by vector and by text comes back unscoped, and not at all when its section is out of scope, in the SQL of both searches; a section stands for what's under it; another revision of the same source is out of scope; an empty scope returns nothing and calls no model. |
+| E12 | **pass** | "E12": `x^T y` finds its chunk with `textRank: 1`; a paraphrase sharing no word finds its chunk with `vectorRank: 1`, `textRank: null`; a stemmed word matches; `fuse` merges by rank with the exact RRF score, ties by key whichever list came first; the same query gives the same ranks. |
+| E13 | **pass** | "E13": `query-prefix: …` is what's sent; with another model assigned, no chunk has a `vectorRank`, and full text still works. |
+| E14 | **pass** | "E14": the row has the query, scope, chunk ids in order, ranks, scores and model. |
+| E15 | **pass** | "E15": a small budget gets fewer tokens and a large one more, neither over; neighbours (`rank: null`) fill the budget past the 40 each search returns; a budget too small for any chunk returns nothing, not an oversized chunk; the estimate route gives chunks and tokens equal to the sections' sums, and per role `assigned`, `budget`, `fits`, with no model name. |
+
+**`bun run ci`:** all steps pass, exit 0.
+
+```
+✔ biome check                       ✔ LLM imports stay in packages/llm
+✔ lint rule build is up to date     ✔ typecheck (9 projects)
+✔ lint-rule snapshot                ✔ bun test — 798 pass, 0 fail, 30 files
+✔ suppression baseline              ✔ ruff + ruff format, verify unit tests (73)
+✔ i18n catalog check (658 keys)     ✔ verify escape suite — 40/40
+✔ JSON Schema export is up to date  ✔ Playwright + axe — 35 passed
+```
+
+**Deviations and notes.**
+- `tsv` holds both configs in one column, and a query asks both: `simple` keeps notation, `english` stems. §5 says "`simple` config, with `english` alongside".
+- Words are OR-ed, not AND-ed: an objective's label rarely has all its words in one chunk. A chunk holding the query as a phrase ranks first, which is what makes a notation query exact.
+- The vector search sets `hnsw.iterative_scan = relaxed_order` for its transaction, since a filtered HNSW scan can otherwise run out of candidates, and re-sorts by distance. With 40 candidates and a small scope, the planner mostly uses the revision and section indexes and an exact sort anyway.
+- A chunk bigger than what's left of the budget is skipped, and smaller ones after it can still fit. So the budget holds strictly, and `llm_context_exceeded` can't come from chunks (the prompt's own share comes in F5).
+- E15's `fits` compares against `contextWindow − maxOutputTokens`. The instructions' share is F5's; here "fits" means the source text alone.

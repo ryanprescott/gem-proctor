@@ -1,13 +1,16 @@
 import { Source, SourceChunk, SourceRevision, SourceSection } from "@gem/db";
-import { chunkCap, previewSource } from "@gem/knowledge";
-import { AppError } from "@gem/shared";
+import { chunkCap, expandSections, previewSource } from "@gem/knowledge";
+import { LlmError } from "@gem/llm";
+import { AppError, MODEL_ROLES } from "@gem/shared";
 import {
+  type ScopeFit,
   type SourceChunkView,
   type SourceSectionView,
   sourcesChunks,
   sourcesCreate,
   sourcesDelete,
   sourcesEmbedRetry,
+  sourcesEstimate,
   sourcesEvents,
   sourcesGet,
   sourcesList,
@@ -101,6 +104,22 @@ export async function sectionViews(ctx: Pick<AppContext, "db">, revisionId: stri
     chunks: by.get(s.id)?.chunks ?? 0,
     tokens: by.get(s.id)?.tokens ?? 0,
   }));
+}
+
+/** Per role, whether a selection fits one call: no model name, and no endpoint (like `GET /llm/roles`). */
+export async function scopeFit(ctx: Pick<AppContext, "llm">, tokens: number): Promise<ScopeFit[]> {
+  const roles = MODEL_ROLES.filter((r) => r !== "embeddings");
+  return Promise.all(
+    roles.map(async (role) => {
+      const target = await ctx.llm.resolve(role).catch((err: unknown) => {
+        if (err instanceof LlmError && err.code === "llm_role_unassigned") return null;
+        throw err;
+      });
+      if (!target) return { role, assigned: false, budget: null, fits: false };
+      const budget = target.capabilities.contextWindow - target.capabilities.maxOutputTokens;
+      return { role, assigned: true, budget, fits: tokens <= budget };
+    }),
+  );
 }
 
 export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
@@ -237,6 +256,25 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
       flagReason: chunk.flagReason,
     }));
     return { chunks };
+  });
+
+  route(app, sourcesEstimate, async ({ params, body: b }) => {
+    const revision = await loadRevision(ctx, params.id, b.revision);
+    const sectionIds = b.sectionIds ? await expandSections(ctx.db, revision.id, b.sectionIds) : null;
+    const [total] = await ctx.db
+      .select({
+        chunks: sql<number>`count(*)::int`,
+        tokens: sql<number>`coalesce(sum(${SourceChunk.tokenCount}), 0)::int`,
+      })
+      .from(SourceChunk)
+      .where(
+        and(
+          eq(SourceChunk.revisionId, revision.id),
+          sectionIds ? inArray(SourceChunk.sectionId, sectionIds) : undefined,
+        ),
+      );
+    const tokens = total?.tokens ?? 0;
+    return { chunks: total?.chunks ?? 0, tokens, fit: await scopeFit(ctx, tokens) };
   });
 
   route(app, sourcesEmbedRetry, async ({ params }) => {

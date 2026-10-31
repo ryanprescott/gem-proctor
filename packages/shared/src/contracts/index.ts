@@ -925,6 +925,32 @@ export const sourcesChunks = contract({
   response: z.object({ chunks: z.array(SourceChunkView) }),
 });
 
+export const ScopeFit = z.object({
+  role: ModelRole,
+  assigned: z.boolean(),
+  /** Tokens of source text a call can take: the context window, less the output budget. Null if unassigned. */
+  budget: z.number().int().nullable(),
+  fits: z.boolean(),
+});
+export type ScopeFit = z.infer<typeof ScopeFit>;
+
+export const ScopeEstimate = z.object({
+  chunks: z.number().int(),
+  tokens: z.number().int(),
+  fit: z.array(ScopeFit),
+});
+export type ScopeEstimate = z.infer<typeof ScopeEstimate>;
+
+export const sourcesEstimate = contract({
+  id: "sources.estimate",
+  method: "POST",
+  path: "/sources/:id/scope/estimate",
+  params: IdParams,
+  /** No `sectionIds`: the whole revision. A section stands for everything under it. */
+  body: z.object({ sectionIds: z.array(Uuid).max(2000).optional(), revision: z.number().int().positive().optional() }),
+  response: ScopeEstimate,
+});
+
 export const sourcesEmbedRetry = contract({
   id: "sources.embedRetry",
   method: "POST",
@@ -957,6 +983,7 @@ export const CONTRACTS = [
   sourcesRevision,
   sourcesSections,
   sourcesChunks,
+  sourcesEstimate,
   sourcesEmbedRetry,
   sourcesEvents,
   health,

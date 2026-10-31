@@ -54,6 +54,7 @@ export const ROUTE_PERMISSIONS = {
   "sources.revision": { objType: "source", act: "read", resource: "source" },
   "sources.sections": { objType: "source", act: "read", resource: "source" },
   "sources.chunks": { objType: "source", act: "read", resource: "source" },
+  "sources.estimate": { objType: "source", act: "read", resource: "source" },
   "sources.embedRetry": { objType: "source", act: "update", resource: "source" },
   "sources.events": { objType: "source", act: "read", resource: "source" },
   "tests.list": { objType: "test", act: "list" },

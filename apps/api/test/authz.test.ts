@@ -104,6 +104,13 @@ function sourceRows(id: () => string, proctor: Record<Who, Expect>, own: Record<
     { id: "sources.revision", method: "GET", url: () => `/sources/${id()}/revisions/1`, expect: own },
     { id: "sources.sections", method: "GET", url: () => `/sources/${id()}/sections`, expect: own },
     { id: "sources.chunks", method: "GET", url: () => `/sources/${id()}/chunks`, expect: own },
+    {
+      id: "sources.estimate",
+      method: "POST",
+      url: () => `/sources/${id()}/scope/estimate`,
+      body: () => ({}),
+      expect: own,
+    },
     { id: "sources.embedRetry", method: "POST", url: () => `/sources/${id()}/embed:retry`, expect: own },
     { id: "sources.events", method: "GET", url: () => `/sources/${id()}/events?once=true`, expect: own },
     { id: "sources.delete", method: "DELETE", url: () => `/sources/${id()}`, expect: own },
