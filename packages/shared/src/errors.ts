@@ -62,6 +62,13 @@ export const ERROR_CODES = [
   "source_not_ready",
   "knowledge_unit_too_large",
   "knowledge_dimension_mismatch",
+  "authoring_session_not_found",
+  "authoring_session_busy",
+  "authoring_scope_invalid",
+  "authoring_chunk_unknown",
+  "authoring_objective_unknown",
+  "authoring_no_objectives",
+  "authoring_blueprint_invalid",
 ] as const;
 
 export const ErrorCode = z.enum(ERROR_CODES);
@@ -135,6 +142,13 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   source_not_ready: 409,
   knowledge_unit_too_large: 422,
   knowledge_dimension_mismatch: 409,
+  authoring_session_not_found: 404,
+  authoring_session_busy: 409,
+  authoring_scope_invalid: 422,
+  authoring_chunk_unknown: 422,
+  authoring_objective_unknown: 422,
+  authoring_no_objectives: 409,
+  authoring_blueprint_invalid: 422,
 };
 
 /** The only error type route handlers throw (SPEC §11.6, companion check). */

@@ -19,17 +19,22 @@ export type ObjType =
   | "llm_stats"
   | "llm_status"
   | "verification_job"
-  | "source";
+  | "source"
+  | "authoring_session";
 export type Act = "read" | "delete" | "preview" | "create" | "list" | "update" | "export" | "submit" | "run";
 
 /**
  * `resource: "practice_attempt"` loads the attempt by `(id, userId = caller)` (P1.md §5): someone else's
- * attempt is not found, for every caller, admins included. `resource: "source"` is private the same way, except
- * that an admin may reach any (P2.md §5): another proctor gets 404, not 403.
+ * attempt is not found, for every caller, admins included. `source` and `authoring_session` are private the same way,
+ * except that an admin may reach any (P2.md §5): another proctor gets 404, not 403.
  */
 export type RoutePermission =
   | { public: true }
-  | { objType: ObjType; act: Act; resource?: "test" | "practice_attempt" | "verification_job" | "source" };
+  | {
+      objType: ObjType;
+      act: Act;
+      resource?: "test" | "practice_attempt" | "verification_job" | "source" | "authoring_session";
+    };
 
 export const ROUTE_PERMISSIONS = {
   health: { public: true },
@@ -57,6 +62,14 @@ export const ROUTE_PERMISSIONS = {
   "sources.estimate": { objType: "source", act: "read", resource: "source" },
   "sources.embedRetry": { objType: "source", act: "update", resource: "source" },
   "sources.events": { objType: "source", act: "read", resource: "source" },
+  "authoring.sessions.list": { objType: "authoring_session", act: "list" },
+  "authoring.sessions.create": { objType: "authoring_session", act: "create" },
+  "authoring.sessions.get": { objType: "authoring_session", act: "read", resource: "authoring_session" },
+  "authoring.sessions.delete": { objType: "authoring_session", act: "delete", resource: "authoring_session" },
+  "authoring.scope": { objType: "authoring_session", act: "update", resource: "authoring_session" },
+  "authoring.objectives.propose": { objType: "authoring_session", act: "run", resource: "authoring_session" },
+  "authoring.objectives.put": { objType: "authoring_session", act: "update", resource: "authoring_session" },
+  "authoring.blueprint": { objType: "authoring_session", act: "update", resource: "authoring_session" },
   "tests.list": { objType: "test", act: "list" },
   "tests.get": { objType: "test", act: "read", resource: "test" },
   "tests.update": { objType: "test", act: "update", resource: "test" },

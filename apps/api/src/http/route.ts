@@ -1,5 +1,5 @@
 import { permissionFor, type RoutePermission } from "@gem/authz";
-import { PracticeAttempt, Source, Test, VerificationJob } from "@gem/db";
+import { AuthoringSession, PracticeAttempt, Source, Test, VerificationJob } from "@gem/db";
 import { AppError, type ErrorCode } from "@gem/shared";
 import type { Contract, Role } from "@gem/shared/contracts";
 import { and, eq, isNull } from "drizzle-orm";
@@ -113,6 +113,14 @@ async function relationship(ctx: AppContext, permission: RoutePermission, reques
       .limit(1);
     return privateTo(rows[0]?.ownerId, user);
   }
+  if (permission.resource === "authoring_session") {
+    const rows = await ctx.db
+      .select({ ownerId: AuthoringSession.ownerId })
+      .from(AuthoringSession)
+      .where(and(eq(AuthoringSession.id, id), isNull(AuthoringSession.deletedAt)))
+      .limit(1);
+    return privateTo(rows[0]?.ownerId, user);
+  }
   const table = permission.resource === "verification_job" ? VerificationJob : Test;
   const rows = await ctx.db.select({ ownerId: table.ownerId }).from(table).where(eq(table.id, id)).limit(1);
   const row = rows[0];
@@ -131,6 +139,7 @@ const NOT_FOUND: Record<NonNullable<Extract<RoutePermission, { objType: string }
   practice_attempt: "not_found",
   verification_job: "verify_job_not_found",
   source: "source_not_found",
+  authoring_session: "authoring_session_not_found",
 };
 
 /**

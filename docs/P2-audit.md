@@ -102,3 +102,35 @@ After that run, two tests changed: E18's failed-embedding state was added, and E
 - A page opened on a finished source announces nothing; one that saw it unfinished says how it ended.
 - A passage's quote is marked only if it's found verbatim, so a wrong quote can't look grounded. `<mark>` carries an underline too, so it isn't colour alone.
 - The upload is read in the browser and sent as text with its filename, so preview and save share one path. Multipart works too (E2).
+
+## F4 Sessions, objectives, blueprint
+
+Built: `packages/shared/src/authoring.ts` (presets, `spreadCounts`, `Blueprint`, `defaultBlueprint`), `apps/api/src/authoring/sessions.ts`, `routes/authoring.ts`, contracts, seven error codes, Casbin object `authoring_session`. Prompts `authoring.objectives/objectives-v1.md` (new, with `ObjectiveProposal`) and `authoring.style/style-v1.md`. The wizard's pages come with review in F6, where a session can be walked end to end. Tests: `apps/api/test/authoring-sessions.test.ts`, `packages/shared/test/authoring.test.ts`, the matrix.
+
+| # | Result | Evidence |
+|---|---|---|
+| E19 | **pass** | `authoring-sessions.test.ts` "E19": create audited; another proctor's list is empty and every route 404 `authoring_session_not_found`; a student 403; an admin reads. A session on another user's source is 404 `source_not_found`, at create and on `PUT scope`, even for an admin; a source that isn't ready is 409; delete is soft and audited. `authz.test.ts` over all eight routes × 5 callers. |
+| E20 | **pass** | "E20": one objective per section with text, narrowed by scope; the model is called once per section with the passages tagged, every kept citation is a real chunk; a citation to an unknown chunk is dropped and counted, and the section keeps its heading; a model failure on a section keeps its heading and is reported; edit (keeps its id and origin), merge, remove, add (`human`); what a creator wrote survives a new proposal; evidence out of scope is 422 `authoring_chunk_unknown`. |
+| E21 | **pass** | "E21": `authoring.objectives` unassigned: 200 with `notice: "headings_only"`, the headings unchanged, no model request. `embeddings` unassigned: 409 `llm_role_unassigned`. |
+| E22 | **pass** | `authoring.test.ts` "E22": each test type against SPEC §3A.1.1's table; every default's mix and objective counts add up; even gives equal shares; proportional goes by tokens with at least one each. "E22" through the route: a 34:1 split from real sections' token counts; every value overridable; counts that don't add up are 422 with which sum. |
+| E23 | **partial → pass in F5** | "E23": the line comes from the versioned file `authoring.style/style-v1.md` and is saved with `styleVersion`. Reaching the prompt needs generation, so that half is in F5. |
+
+**`bun run ci`:** all steps pass, exit 0.
+
+```
+✔ biome check                       ✔ LLM imports stay in packages/llm
+✔ lint rule build is up to date     ✔ typecheck (9 projects)
+✔ lint-rule snapshot                ✔ bun test — 862 pass, 0 fail, 32 files
+✔ suppression baseline              ✔ ruff + ruff format, verify unit tests (73)
+✔ i18n catalog check (738 keys)     ✔ verify escape suite — 40/40
+✔ JSON Schema export is up to date  ✔ Playwright + axe — 41 passed
+```
+
+This run includes F3's two later e2e changes (41 is 35 plus `sources.e2e.ts`'s 6).
+
+**Deviations and notes.**
+- `PUT /authoring/sessions/:id/scope` is added: the wizard sets a scope after the session exists, and §6 has no route for it.
+- A session pins the revision it started from. A newer revision shows as `changed` (F7).
+- `POST …/objectives:propose` runs in the request, section by section, not as a job. It's rate limited, and the wizard shows it as pending. A long source on a slow model takes as long as its sections do.
+- Saving objectives clears the blueprint, since its counts are per objective.
+- A proposal that keeps nothing for a section leaves its heading objective, so a section is never left with no coverage target.

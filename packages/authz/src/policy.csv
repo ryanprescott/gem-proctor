@@ -26,6 +26,14 @@ p, proctor, source, read, owner
 p, proctor, source, update, owner
 p, proctor, source, delete, owner
 
+# Authoring sessions (P2): the same. A student has no route.
+p, proctor, authoring_session, create, any
+p, proctor, authoring_session, list, any
+p, proctor, authoring_session, read, owner
+p, proctor, authoring_session, update, owner
+p, proctor, authoring_session, delete, owner
+p, proctor, authoring_session, run, owner
+
 # Practice (P1): proctors practise their own tests. Attempts are private: the API loads an attempt by
 # (id, caller), so `owner` here is always the caller, and admins' `*` line can't reach anyone else's.
 p, proctor, test, practice, owner

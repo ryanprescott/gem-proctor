@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AuthoringStatus, Blueprint, ObjectiveOrigin } from "../authoring.ts";
 import { ErrorCode } from "../errors.ts";
 import { ImportReport } from "../import.ts";
 import {
@@ -973,7 +974,154 @@ export const sourcesEvents = contract({
   responseKind: "text",
 });
 
+// ── Authoring (proctor+, owner or admin; P2 §6) ──────────────────────
+
+export const SessionSourceView = z.object({
+  sourceId: Uuid,
+  title: z.string(),
+  citationLabel: z.string(),
+  /** The revision the session works from: pinned, so a later edit can't move it. */
+  revisionId: Uuid,
+  revisionNumber: z.number().int(),
+  /** Null: the whole source. */
+  sectionIds: z.array(Uuid).nullable(),
+  latestRevisionNumber: z.number().int(),
+  /** A newer revision is ready (SPEC §3C.5). */
+  changed: z.boolean(),
+});
+export type SessionSourceView = z.infer<typeof SessionSourceView>;
+
+export const ObjectiveView = z.object({
+  id: Uuid,
+  label: z.string(),
+  description: z.string(),
+  evidence: z.array(z.object({ chunkId: Uuid })),
+  origin: ObjectiveOrigin,
+  order: z.number().int(),
+  sectionIds: z.array(Uuid),
+});
+export type ObjectiveView = z.infer<typeof ObjectiveView>;
+
+export const ObjectiveInput = z.object({
+  /** Keeps an objective; without it, this is a new one. */
+  id: Uuid.optional(),
+  label: z.string().trim().min(1).max(200),
+  description: z.string().max(1000).optional(),
+  evidence: z.array(z.object({ chunkId: Uuid })).max(100),
+  sectionIds: z.array(Uuid).max(2000),
+});
+export type ObjectiveInput = z.infer<typeof ObjectiveInput>;
+
+export const SessionSummary = z.object({
+  id: Uuid,
+  title: z.string(),
+  status: AuthoringStatus,
+  testType: TestType,
+  ownerId: Uuid,
+  createdAt: Iso,
+  questionCount: z.number().int(),
+});
+export type SessionSummary = z.infer<typeof SessionSummary>;
+
+export const SessionDetail = z.object({
+  session: SessionSummary,
+  sources: z.array(SessionSourceView),
+  objectives: z.array(ObjectiveView),
+  blueprint: Blueprint.nullable(),
+});
+export type SessionDetail = z.infer<typeof SessionDetail>;
+
+const ScopeBody = z.object({
+  sources: z
+    .array(z.object({ sourceId: Uuid, sectionIds: z.array(Uuid).max(2000).optional() }))
+    .min(1)
+    .max(20),
+});
+
+export const authoringSessionsList = contract({
+  id: "authoring.sessions.list",
+  method: "GET",
+  path: "/authoring/sessions",
+  response: z.object({ sessions: z.array(SessionSummary) }),
+});
+
+export const authoringSessionsCreate = contract({
+  id: "authoring.sessions.create",
+  method: "POST",
+  path: "/authoring/sessions",
+  body: ScopeBody.extend({ title: z.string().trim().min(1).max(300), testType: TestType }),
+  response: SessionDetail,
+});
+
+export const authoringSessionsGet = contract({
+  id: "authoring.sessions.get",
+  method: "GET",
+  path: "/authoring/sessions/:id",
+  params: IdParams,
+  response: SessionDetail,
+});
+
+export const authoringSessionsDelete = contract({
+  id: "authoring.sessions.delete",
+  method: "DELETE",
+  path: "/authoring/sessions/:id",
+  params: IdParams,
+  response: Ok,
+});
+
+export const authoringScope = contract({
+  id: "authoring.scope",
+  method: "PUT",
+  path: "/authoring/sessions/:id/scope",
+  params: IdParams,
+  body: ScopeBody,
+  response: SessionDetail,
+});
+
+export const authoringObjectivesPropose = contract({
+  id: "authoring.objectives.propose",
+  method: "POST",
+  path: "/authoring/sessions/:id/objectives:propose",
+  params: IdParams,
+  response: z.object({
+    objectives: z.array(ObjectiveView),
+    /** `headings_only`: `authoring.objectives` isn't assigned, so the headings stand. */
+    notice: z.enum(["headings_only"]).nullable(),
+    /** Dropped for citing a passage that wasn't sent. */
+    rejected: z.number().int(),
+    /** Sections the model failed on: they keep their heading. */
+    failedSections: z.array(z.string()),
+  }),
+});
+
+export const authoringObjectivesPut = contract({
+  id: "authoring.objectives.put",
+  method: "PUT",
+  path: "/authoring/sessions/:id/objectives",
+  params: IdParams,
+  body: z.object({ objectives: z.array(ObjectiveInput).max(200) }),
+  response: z.object({ objectives: z.array(ObjectiveView) }),
+});
+
+export const authoringBlueprint = contract({
+  id: "authoring.blueprint",
+  method: "PUT",
+  path: "/authoring/sessions/:id/blueprint",
+  params: IdParams,
+  /** A test type alone fills its defaults; anything else overrides them. */
+  body: Blueprint.partial().required({ testType: true }),
+  response: z.object({ blueprint: Blueprint }),
+});
+
 export const CONTRACTS = [
+  authoringSessionsList,
+  authoringSessionsCreate,
+  authoringSessionsGet,
+  authoringSessionsDelete,
+  authoringScope,
+  authoringObjectivesPropose,
+  authoringObjectivesPut,
+  authoringBlueprint,
   sourcesPreview,
   sourcesCreate,
   sourcesList,

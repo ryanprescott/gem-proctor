@@ -56,5 +56,12 @@
   "source_bad_type": "Only .md and .txt files can be added.",
   "source_not_ready": "That source isn't ready yet. It can be used once its latest revision is embedded.",
   "knowledge_unit_too_large": "A block in “{{heading}}” is about {{tokens}} tokens and can't be split, so it can't be embedded whole. The limit is {{maxTokens}}. Shorten it and try again.",
-  "knowledge_dimension_mismatch": "The embedding model makes vectors of {{actual}} dimensions, but this installation stores {{expected}}. An administrator needs to assign a matching model."
+  "knowledge_dimension_mismatch": "The embedding model makes vectors of {{actual}} dimensions, but this installation stores {{expected}}. An administrator needs to assign a matching model.",
+  "authoring_session_not_found": "That authoring session doesn't exist.",
+  "authoring_session_busy": "That can't change while the session is generating or after it's published.",
+  "authoring_scope_invalid": "That section isn't part of the source's latest revision.",
+  "authoring_chunk_unknown": "That passage isn't in this session's scope.",
+  "authoring_objective_unknown": "That objective isn't part of this session.",
+  "authoring_no_objectives": "Add at least one objective first.",
+  "authoring_blueprint_invalid": "The counts don't add up to the question total."
 }

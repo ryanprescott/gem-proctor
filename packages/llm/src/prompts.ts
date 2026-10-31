@@ -7,6 +7,8 @@ export const PROMPTS_DIR = join(import.meta.dir, "..", "prompts");
 
 export const ACTIVE_PROMPTS: Record<string, string> = {
   "authoring.generate": "gen-v8",
+  "authoring.objectives": "objectives-v1",
+  "authoring.style": "style-v1",
   "verify.solve.blind": "blind-v2",
   "verify.solve.classify": "classify-v1",
   "verify.solve.pick": "pick-v1",
@@ -56,6 +58,16 @@ export function loadPrompt(promptId: string, model: string, source: PromptSource
     .sort((a, b) => b.glob.length - a.glob.length);
   const file = variants[0]?.file ?? `${version}.md`;
   return { promptId, version, file, template: readFileSync(join(dir, file), "utf8") };
+}
+
+/**
+ * A test type's style line, and the version it came from (SPEC §3A.1.1). They're lines in a versioned prompt file, so
+ * changing one is a reviewed prompt change. `custom` has none.
+ */
+export function styleLine(testType: string, model: string): { line: string; version: string } {
+  const prompt = loadPrompt("authoring.style", model);
+  const row = prompt.template.split("\n").find((l) => l.startsWith(`${testType}:`));
+  return { line: row?.slice(testType.length + 1).trim() ?? "", version: prompt.version };
 }
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g;

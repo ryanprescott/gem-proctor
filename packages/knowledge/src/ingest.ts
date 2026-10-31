@@ -13,6 +13,10 @@ export interface EmbeddingRuntime {
   embed(texts: string[], opts: EmbedOptions): Promise<EmbedResult>;
 }
 
+/** A chunk's size for a prompt budget: the endpoint's own count once embedded, and never below the estimate. */
+export const estimateChunkTokens = (c: { text: string; tokenCount: number }) =>
+  Math.max(c.tokenCount, Math.ceil(c.text.length / 3));
+
 /** Each batch is one round of progress. */
 export const EMBED_BATCH = 16;
 

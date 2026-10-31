@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { newId, PracticeAttempt, Source, SourceRevision, VerificationJob } from "@gem/db";
+import { AuthoringSession, newId, PracticeAttempt, Source, SourceRevision, VerificationJob } from "@gem/db";
 import { CONTRACTS } from "@gem/shared/contracts";
 import { API, Client, createTestApp, hasDb, registerUser, signIn, type TestApp } from "./helpers.ts";
 
@@ -75,6 +75,45 @@ const WHO: Who[] = ["anonymous", "student", "owner", "other", "admin"];
  */
 type Expect = "allow" | "deny" | "missing" | "hidden";
 
+/** The session routes (P2.md E19). Delete comes last, as for sources. */
+function sessionRows(id: () => string, source: () => string, proctor: Record<Who, Expect>, own: Record<Who, Expect>) {
+  const base = () => `/authoring/sessions/${id()}`;
+  return [
+    { id: "authoring.sessions.list", method: "GET", url: () => "/authoring/sessions", expect: proctor },
+    {
+      id: "authoring.sessions.create",
+      method: "POST",
+      url: () => "/authoring/sessions",
+      body: () => ({ title: "S", testType: "custom", sources: [{ sourceId: source() }] }),
+      expect: proctor,
+    },
+    { id: "authoring.sessions.get", method: "GET", url: base, expect: own },
+    {
+      id: "authoring.scope",
+      method: "PUT",
+      url: () => `${base()}/scope`,
+      body: () => ({ sources: [{ sourceId: source() }] }),
+      expect: own,
+    },
+    { id: "authoring.objectives.propose", method: "POST", url: () => `${base()}/objectives:propose`, expect: own },
+    {
+      id: "authoring.objectives.put",
+      method: "PUT",
+      url: () => `${base()}/objectives`,
+      body: () => ({ objectives: [] }),
+      expect: own,
+    },
+    {
+      id: "authoring.blueprint",
+      method: "PUT",
+      url: () => `${base()}/blueprint`,
+      body: () => ({ testType: "custom" }),
+      expect: own,
+    },
+    { id: "authoring.sessions.delete", method: "DELETE", url: base, expect: own },
+  ];
+}
+
 /** The source routes (P2.md E9). Delete comes last, since it ends the source for the rows after it. */
 function sourceRows(id: () => string, proctor: Record<Who, Expect>, own: Record<Who, Expect>) {
   return [
@@ -125,6 +164,7 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
   let attemptId = "";
   let jobId = "";
   let sourceId = "";
+  let sessionId = "";
 
   beforeAll(async () => {
     t = await createTestApp();
@@ -158,6 +198,15 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
       contentHash: "h",
       embedStatus: "ready",
       createdBy: owner.user.id,
+    });
+    sessionId = newId();
+    await t.db.insert(AuthoringSession).values({
+      id: sessionId,
+      ownerId: owner.user.id,
+      title: "S",
+      status: "draft",
+      testType: "custom",
+      usedValues: { keys: [], source: [] },
     });
     attemptId = newId();
     await t.db.insert(PracticeAttempt).values({
@@ -346,6 +395,12 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
         expect: ownAttempt,
       },
       ...llmRows(adminOnly, signedIn),
+      ...sessionRows(
+        () => sessionId,
+        () => sourceId,
+        proctor,
+        ownSource,
+      ),
       ...sourceRows(() => sourceId, proctor, ownSource),
       // Last: it ends each session.
       { id: "auth.logout", method: "POST", url: () => "/auth/logout", expect: signedIn },
