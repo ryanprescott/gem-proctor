@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import signal
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -53,9 +54,38 @@ def _scalars_equal(a: Any, b: Any, tolerance: float) -> bool:
     return abs(x - y) <= max(tolerance * max(abs(x), abs(y)), 1e-12)
 
 
+_UNIT = re.compile(r"e_(\d+)$")
+
+
+def _unit_vector(expr: Any, n: int) -> Any:
+    """`-3e_1 + 8e_2 + e_3`, a vector written with standard unit vectors, as a column of length `n`."""
+    symbols = {s: _UNIT.match(s.name) for s in expr.free_symbols}
+    if (
+        not symbols
+        or not all(symbols.values())
+        or not expr.is_polynomial()
+        or sp.Poly(expr).total_degree() != 1
+    ):
+        return expr
+    if expr.subs(dict.fromkeys(symbols, 0)) != 0:
+        return expr
+    entries = [sp.Integer(0)] * n
+    for symbol, match in symbols.items():
+        index = int(match[1]) - 1
+        if not 0 <= index < n:
+            return expr
+        entries[index] = expr.coeff(symbol)
+    return sp.Matrix(n, 1, entries)
+
+
 def equal(a: Any, b: Any, tolerance: float) -> bool:
     if V.is_bool(a) or V.is_bool(b):
         return V.is_bool(a) and V.is_bool(b) and bool(a) == bool(b)
+    if V.is_mat(a) != V.is_mat(b):
+        if V.is_mat(a):
+            b = _unit_vector(b, a.rows) if a.cols == 1 else b
+        else:
+            a = _unit_vector(a, b.rows) if b.cols == 1 else a
     if V.is_mat(a) or V.is_mat(b):
         if not (V.is_mat(a) and V.is_mat(b)) or a.shape != b.shape:
             return False
@@ -66,6 +96,9 @@ def equal(a: Any, b: Any, tolerance: float) -> bool:
 def compare(a: dict[str, Any], candidates: list[dict[str, Any]], tolerance: float) -> list[dict[str, bool]]:
     results: list[dict[str, bool]] = []
     for candidate in candidates:
+        if a["kind"] == candidate["kind"] and a["value"] == candidate["value"]:
+            results.append({"equal": True, "guard": False})
+            continue
         try:
             with guard():
                 same = equal(
@@ -74,4 +107,6 @@ def compare(a: dict[str, Any], candidates: list[dict[str, Any]], tolerance: floa
             results.append({"equal": same, "guard": False})
         except GuardExpired:
             results.append({"equal": False, "guard": True})
+        except Exception:  # a value that can't be read back equals nothing
+            results.append({"equal": False, "guard": False})
     return results

@@ -2,5 +2,13 @@
   "name": "@gem/authoring",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gem/llm": "workspace:*",
+    "@gem/shared": "workspace:*",
+    "zod": "4.6.7"
+  }
 }

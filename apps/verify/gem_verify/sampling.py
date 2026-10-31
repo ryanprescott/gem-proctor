@@ -65,29 +65,31 @@ def from_source(inp: dict[str, Any]) -> Any:
     return sp.Matrix(rows, cols, ns)
 
 
-def _vector_ok(v: list[int]) -> bool:
-    if min(v) >= 0 or v.count(0) > 1 or len(set(v)) == 1 or tuple(v) in TEXTBOOK:
+def _vector_ok(v: list[int], positive: bool = False) -> bool:
+    if (min(v) >= 0 and not positive) or v.count(0) > 1 or len(set(v)) == 1 or tuple(v) in TEXTBOOK:
         return False
     # A unit vector: one entry ±1, the rest zero. (`count(0) <= 1` rules out long ones; this covers length 2.)
     return sorted(abs(x) for x in v) != [0, 1]
 
 
-def sample_vector(n: int, rng: random.Random, s: dict[str, int]) -> list[int]:
+def sample_vector(n: int, rng: random.Random, s: dict[str, int], positive: bool = False) -> list[int]:
     while True:
-        v = [rng.randint(s["intMin"], s["intMax"]) for _ in range(n)]
-        if _vector_ok(v):
+        v = [rng.randint(1 if positive else s["intMin"], s["intMax"]) for _ in range(n)]
+        if _vector_ok(v, positive):
             return v
 
 
-def sample_value(inp: dict[str, Any], n_vec: int, rng: random.Random, s: dict[str, int]) -> Any:
+def sample_value(
+    inp: dict[str, Any], n_vec: int, rng: random.Random, s: dict[str, int], positive: bool = False
+) -> Any:
     kind, size = inp["kind"], inp["size"]
-    lo, hi = s["intMin"], s["intMax"]
+    lo, hi = (1 if positive else s["intMin"]), s["intMax"]
     if kind == "integer":
         return sp.Integer(rng.choice([v for v in range(lo, hi + 1) if v != 0]))
     if kind == "rational":
         return sp.Rational(rng.randint(lo, hi) or 1, rng.randint(2, 9))
     if kind == "vector":
-        return sp.Matrix(sample_vector(size[0] if size else n_vec, rng, s))
+        return sp.Matrix(sample_vector(size[0] if size else n_vec, rng, s, positive))
     rows = size[0] if size else rng.randint(s["matrixMin"], s["matrixMax"])
     cols = size[1] if len(size) > 1 else rows
     return sp.Matrix(rows, cols, lambda _i, _j: rng.randint(lo, hi))
@@ -239,15 +241,20 @@ def sample_inputs(req: dict[str, Any]) -> dict[str, Any]:
     last_valid: dict[str, Any] | None = None
     hit = False
     draws = settings["targetDraws"] if is_tf else settings["constraintDraws"]
+    rejected = 0
     for _ in range(draws):
         vals = dict(fixed)
+        # A constraint may rule out the default of a negative entry (`min(c) > 0` for prices, which is the
+        # prompt's own example): after half the constraint's draws, positive values are tried instead.
+        positive = rejected >= settings["constraintDraws"] // 2
         for inp in inputs:
             if inp["name"] not in fixed:
-                vals[inp["name"]] = sample_value(inp, n_vec, rng, settings)
+                vals[inp["name"]] = sample_value(inp, n_vec, rng, settings, positive)
         if value_key(vals) in used and len(fixed) < len(inputs):
             continue
         try:
             if not _valid(req["constraint"], vals):
+                rejected += 1
                 continue
         except (OSError, MemoryError):
             raise

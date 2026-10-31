@@ -81,13 +81,18 @@
     },
     "settings": {
       "update": "Settings changed"
+    },
+    "verify": {
+      "sandbox_denial": "Sandbox denial"
     }
   },
   "targets": {
     "user": "User",
     "settings": "Instance settings",
     "llm_endpoint": "LLM endpoint",
-    "llm_role": "LLM role"
+    "llm_role": "LLM role",
+    "verification_job": "Verification job",
+    "question": "Question"
   },
   "llm": {
     "title": "LLM",

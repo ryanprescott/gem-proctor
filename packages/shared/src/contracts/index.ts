@@ -355,11 +355,12 @@ export const AUDIT_ACTIONS = [
   "llm.endpoint.secret_change",
   "llm.role.assign",
   "llm.role.unassign",
+  "verify.sandbox_denial",
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
 
-export const AUDIT_TARGETS = ["user", "settings", "llm_endpoint", "llm_role"] as const;
+export const AUDIT_TARGETS = ["user", "settings", "llm_endpoint", "llm_role", "verification_job", "question"] as const;
 
 export const AuditEntry = z.object({
   id: Uuid,

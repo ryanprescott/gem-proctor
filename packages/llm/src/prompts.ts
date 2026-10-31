@@ -9,6 +9,7 @@ export const ACTIVE_PROMPTS: Record<string, string> = {
   "authoring.generate": "gen-v8",
   "verify.solve.blind": "blind-v2",
   "verify.solve.classify": "classify-v1",
+  "verify.solve.pick": "pick-v1",
   "program-repair": "repair-v1",
   "output-repair": "output-repair-v1",
 };

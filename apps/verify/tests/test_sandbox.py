@@ -474,6 +474,13 @@ class CompareTest(unittest.TestCase):
         self.assertTrue(self.equal("True", "true"))
         self.assertFalse(self.equal("True", "1"))
 
+    def test_c10_a_vector_equals_its_unit_vector_form(self) -> None:
+        self.assertTrue(self.equal("[-3, 8, 1]", "$-3e_1 + 8e_2 + e_3$"))
+        self.assertFalse(self.equal("[-3, 8, 1]", "$3e_1 - 8e_2 - e_3$"))
+        self.assertFalse(self.equal("[-3, 8, 1]", "$e_1 + e_2 + e_3$"))
+        self.assertFalse(self.equal("[-3, 8]", "$e_1 + e_3$"))
+        self.assertFalse(self.equal("[1, 2]", "$n + 1$"))
+
     def test_c10_symbols_compare_by_name(self) -> None:
         reply = server.Supervisor().run_sync(
             {
@@ -492,6 +499,17 @@ class CompareTest(unittest.TestCase):
         reply = compare.compare(a, [b], 1e-6)
         self.assertLess(time.monotonic() - started, 4)
         self.assertEqual(reply, [{"equal": False, "guard": True}])
+
+    def test_a_value_that_cannot_be_read_equals_nothing(self) -> None:
+        odd = {"kind": "expression", "value": "<script>", "latex": "", "text": ""}
+        other = {"kind": "expression", "value": "<b>", "latex": "", "text": ""}
+        self.assertEqual(
+            compare.compare(odd, [odd, other], 1e-6),
+            [
+                {"equal": True, "guard": False},
+                {"equal": False, "guard": False},
+            ],
+        )
 
     def test_compare_as_a_request(self) -> None:
         reply = server.Supervisor().run_sync(
@@ -538,6 +556,13 @@ class SampleTest(unittest.TestCase):
         self.assertIn("x", reply["inputs"])
         reply = server.Supervisor().run_sync(sample_request(constraint="valid = False"))
         self.assertEqual(reply["failure"], "constraint_unmet")
+
+    def test_c11_a_constraint_can_rule_out_negative_entries(self) -> None:
+        for i in range(6):
+            reply = server.Supervisor().run_sync(
+                sample_request(constraint="valid = min(x) > 0", seed=f"p{i}")
+            )
+            self.assertTrue(all(int(v) > 0 for v in reply["inputs"]["x"]["value"]), reply)
 
     def test_c11_constraint_error_fails(self) -> None:
         reply = server.Supervisor().run_sync(sample_request(constraint="valid = 1/0"))

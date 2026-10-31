@@ -9,4 +9,5 @@ export * from "./quiz.ts";
 export * from "./result.ts";
 export * from "./serialize.ts";
 export * from "./shuffle.ts";
+export * from "./verification.ts";
 export * from "./verify.ts";

@@ -50,6 +50,20 @@
       "when": 1793379480195,
       "tag": "0006_p15_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793417057388,
+      "tag": "0007_p21_verification_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793417057836,
+      "tag": "0008_p21_grants",
+      "breakpoints": true
     }
   ]
 }

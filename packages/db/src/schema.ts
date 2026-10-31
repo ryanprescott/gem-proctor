@@ -18,7 +18,8 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * P0 tables (P0.md §4), P1's practice tables (P1.md §4) and P1.5's LLM tables (P1.5.md §4), from SPEC §10. Postgres names are snake_case; TypeScript names follow SPEC §10.
+ * P0 tables (P0.md §4), P1's practice tables (P1.md §4), P1.5's LLM tables (P1.5.md §4) and P2.1's verification
+ * tables (P2.1.md §4), from SPEC §10. Postgres names are snake_case; TypeScript names follow SPEC §10.
  * Ids are UUID v7, generated in the app.
  */
 
@@ -363,5 +364,69 @@ export const LlmCallLog = pgTable(
     index("llm_call_log_stats_idx").on(t.role, t.endpointId, t.model, t.at),
     check("llm_call_log_kind_check", sql`${t.kind} IN ('call', 'probe', 'eval')`),
     check("llm_call_log_outcome_check", sql`${t.outcome} IN ('ok', 'salvaged', 'failed')`),
+  ],
+);
+
+// ── Verification (P2.1.md §4) ────────────────────────────────────────
+
+/**
+ * One L7 run over an imported quiz. Import preview saves nothing, so a run needs something to hang from before
+ * a `TestVersion` exists. Private to its owner (and admins).
+ */
+export const VerificationJob = pgTable(
+  "verification_job",
+  {
+    id: uuid("id").primaryKey(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => User.id),
+    status: text("status", { enum: ["queued", "running", "done", "failed"] }).notNull(),
+    /** The normalized quiz value: questions that failed `Quiz` validation are checked too. */
+    input: jsonValue("input").notNull(),
+    inputHash: text("input_hash").notNull(),
+    items: jsonValue("items"),
+    summary: jsonValue("summary"),
+    errorCode: text("error_code"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    startedAt: ts("started_at"),
+    finishedAt: ts("finished_at"),
+  },
+  (t) => [
+    index("verification_job_owner_idx").on(t.ownerId, t.createdAt),
+    check("verification_job_status_check", sql`${t.status} IN ('queued', 'running', 'done', 'failed')`),
+  ],
+);
+
+/**
+ * One program run in the sandbox: provenance, append-only for the app's DB user (grants migration). `result` is
+ * text as the runner serialized it, stored and shown, never evaluated. P2 adds `draft_question_id`.
+ */
+export const VerificationRun = pgTable(
+  "verification_run",
+  {
+    id: uuid("id").primaryKey(),
+    jobId: uuid("job_id").references(() => VerificationJob.id),
+    testVersionId: uuid("test_version_id").references(() => TestVersion.id),
+    /** The question's `id` within its quiz (SPEC §2.3). */
+    questionId: integer("question_id").notNull(),
+    programKind: text("program_kind", { enum: ["author", "blind"] }).notNull(),
+    program: text("program").notNull(),
+    status: text("status", {
+      enum: ["ok", "program_error", "timeout", "sandbox_denial", "invalid_output"],
+    }).notNull(),
+    result: jsonValue("result"),
+    matchedOption: text("matched_option"),
+    durationMs: integer("duration_ms").notNull(),
+    sandboxVersion: text("sandbox_version").notNull(),
+    at: ts("at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("verification_run_job_idx").on(t.jobId),
+    index("verification_run_version_idx").on(t.testVersionId),
+    check("verification_run_kind_check", sql`${t.programKind} IN ('author', 'blind')`),
+    check(
+      "verification_run_status_check",
+      sql`${t.status} IN ('ok', 'program_error', 'timeout', 'sandbox_denial', 'invalid_output')`,
+    ),
   ],
 );

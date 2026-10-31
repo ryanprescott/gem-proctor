@@ -32,12 +32,14 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
+# First: the package limits NumPy's threads, which has to happen before anything imports it.
+from gem_verify import child, contract
+
+# isort: split
 # Pre-imported before serving: every child gets a clean copy, and needs no file reads for them.
 import lark
 import numpy
 import sympy
-
-from gem_verify import child, contract
 
 MAX_REQUEST_BYTES = 256 * 1024
 MAX_REPLY_BYTES = 64 * 1024

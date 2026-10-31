@@ -1,0 +1,639 @@
+{
+  "recorded": "2026-10-31",
+  "model": "qwen3.5-9b-32k",
+  "batchSeed": "recorded",
+  "chunk": {
+    "id": "evals:inner-products:c1",
+    "text": "For two n-vectors a and b, the inner product is the number a^T b = a_1 b_1 + a_2 b_2 + ... + a_n b_n: multiply the matching entries and add up the products. The Euclidean norm of a vector is ||a|| = sqrt(a^T a), so a vector's norm is never negative, and it is zero only for the zero vector. Two vectors are called orthogonal when their inner product is zero. As a worked example, take a = (2, -1, 2) and b = (1, 4, 1). Then a^T b = 2*1 + (-1)*4 + 2*1 = 0, so a and b are orthogonal, and ||a|| = sqrt(4 + 1 + 4) = 3."
+  },
+  "batch": {
+    "questions": [
+      {
+        "tempId": "q1",
+        "type": "single_choice",
+        "topic": "Inner Products",
+        "computable": true,
+        "evidence": [
+          {
+            "chunkId": "evals:inner-products:c1",
+            "quote": "For two n-vectors a and b, the inner product is the number a^T b = a_1 b_1 + a_2 b_2 + ... + a_n b_n: multiply the matching entries and add up the products."
+          }
+        ],
+        "inputs": [
+          {
+            "name": "x",
+            "kind": "vector",
+            "size": [3],
+            "from": "sample",
+            "sourceText": ""
+          },
+          {
+            "name": "y",
+            "kind": "vector",
+            "size": [3],
+            "from": "sample",
+            "sourceText": ""
+          }
+        ],
+        "question": "Given vectors {x} and {y}, what is their inner product?",
+        "constraint": "valid = True",
+        "answerProgram": "result = x.dot(y)",
+        "options": [],
+        "mistakes": [
+          {
+            "whyWrong": "subtracts the products instead of adding them",
+            "program": "result = x[0]*y[0] - x[1]*y[1] - x[2]*y[2]"
+          },
+          {
+            "whyWrong": "multiplies the norms of the vectors instead of the component-wise products",
+            "program": "result = x.norm() * y.norm()"
+          }
+        ],
+        "explanation": "Multiply corresponding components of the two vectors and sum the results."
+      },
+      {
+        "tempId": "q2",
+        "type": "numeric",
+        "topic": "Euclidean Norm",
+        "computable": true,
+        "evidence": [
+          {
+            "chunkId": "evals:inner-products:c1",
+            "quote": "The Euclidean norm of a vector is ||a|| = sqrt(a^T a), so a vector's norm is never negative, and it is zero only for the zero vector."
+          }
+        ],
+        "inputs": [
+          {
+            "name": "a",
+            "kind": "vector",
+            "size": [3],
+            "from": "sample",
+            "sourceText": ""
+          }
+        ],
+        "question": "What is the Euclidean norm of the vector {a}?",
+        "constraint": "valid = a.norm() != 0",
+        "answerProgram": "result = a.norm()",
+        "options": [],
+        "mistakes": [],
+        "explanation": "Calculate the sum of the squares of the components and take the square root."
+      },
+      {
+        "tempId": "q3",
+        "type": "true_false",
+        "topic": "Orthogonality",
+        "computable": true,
+        "evidence": [
+          {
+            "chunkId": "evals:inner-products:c1",
+            "quote": "Two vectors are called orthogonal when their inner product is zero."
+          }
+        ],
+        "inputs": [
+          {
+            "name": "u",
+            "kind": "vector",
+            "size": [2],
+            "from": "sample",
+            "sourceText": ""
+          },
+          {
+            "name": "v",
+            "kind": "vector",
+            "size": [2],
+            "from": "sample",
+            "sourceText": ""
+          }
+        ],
+        "question": "Are the vectors {u} and {v} orthogonal?",
+        "constraint": "valid = u.dot(v) != 0 or u.dot(v) == 0",
+        "answerProgram": "result = u.dot(v) == 0",
+        "options": [],
+        "mistakes": [],
+        "explanation": "Compute the inner product; if it equals zero, the vectors are orthogonal."
+      },
+      {
+        "tempId": "q4",
+        "type": "single_choice",
+        "topic": "Orthogonality Definition",
+        "computable": false,
+        "evidence": [
+          {
+            "chunkId": "evals:inner-products:c1",
+            "quote": "Two vectors are called orthogonal when their inner product is zero."
+          }
+        ],
+        "inputs": [],
+        "question": "Under what condition are two non-zero vectors considered orthogonal?",
+        "constraint": "",
+        "answerProgram": "",
+        "options": [
+          {
+            "text": "Their inner product equals zero.",
+            "isCorrect": true
+          },
+          {
+            "whyWrong": "Vectors with equal norms are not necessarily orthogonal; orthogonality depends on the inner product being zero.",
+            "text": "Their norms are equal.",
+            "isCorrect": false
+          },
+          {
+            "whyWrong": "An inner product of one does not imply orthogonality; orthogonality requires the inner product to be zero.",
+            "text": "Their inner product equals one.",
+            "isCorrect": false
+          },
+          {
+            "whyWrong": "Parallel vectors generally have a non-zero inner product (unless one is the zero vector), whereas orthogonal vectors have an inner product of zero.",
+            "text": "They are parallel to each other.",
+            "isCorrect": false
+          }
+        ],
+        "mistakes": [],
+        "explanation": "Orthogonality is defined specifically by the inner product of the two vectors being equal to zero."
+      }
+    ]
+  },
+  "quiz": {
+    "outcomes": [
+      {
+        "id": 1,
+        "outcome": "verified",
+        "reason": "ok",
+        "fix": null
+      },
+      {
+        "id": 2,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 3,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 4,
+        "outcome": "verified",
+        "reason": "ok",
+        "fix": null
+      },
+      {
+        "id": 5,
+        "outcome": "verified",
+        "reason": "ok",
+        "fix": null
+      },
+      {
+        "id": 6,
+        "outcome": "verified",
+        "reason": "ok",
+        "fix": null
+      },
+      {
+        "id": 7,
+        "outcome": "wrong_answer",
+        "reason": "wrong_answer",
+        "fix": "-1"
+      },
+      {
+        "id": 8,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 9,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 10,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 11,
+        "outcome": "verified",
+        "reason": "ok",
+        "fix": null
+      },
+      {
+        "id": 12,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 13,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 14,
+        "outcome": "verified",
+        "reason": "ok",
+        "fix": null
+      },
+      {
+        "id": 15,
+        "outcome": "verified",
+        "reason": "ok",
+        "fix": null
+      },
+      {
+        "id": 16,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 17,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 18,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 19,
+        "outcome": "not_computable",
+        "reason": "model_agreed",
+        "fix": null
+      },
+      {
+        "id": 20,
+        "outcome": "not_computable",
+        "reason": "model_disagreed",
+        "fix": null
+      }
+    ],
+    "replies": [
+      {
+        "promptId": "verify.solve.classify",
+        "question": "What is the dimension of a column vector $z$ given by $z = \\begin{bmatrix} -4 & 2 & 7 & 0 & 9 & -1 \\end{bmatrix}^T$?",
+        "value": {
+          "reason": "The dimension is determined by counting the elements in the provided vector, which requires using the specific values given in the question.",
+          "computable": true
+        }
+      },
+      {
+        "promptId": "verify.solve.blind",
+        "question": "What is the dimension of a column vector $z$ given by $z = \\begin{bmatrix} -4 & 2 & 7 & 0 & 9 & -1 \\end{bmatrix}^T$?",
+        "value": {
+          "program": "import numpy as np\n\n# The vector z is given as a row vector transposed, which makes it a column vector.\n# The values are: -4, 2, 7, 0, 9, -1\n# We create a numpy array from these values.\nrow_values = [-4, 2, 7, 0, 9, -1]\nz = np.array(row_values).reshape(-1, 1)\n\n# The dimension of a column vector is its number of rows.\ndimension = len(z)\n\nresult = dimension"
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "Given the vector $v = \\begin{bmatrix} 12 \\\\ -5 \\\\ 8 \\\\ 0 \\\\ 3 \\end{bmatrix}$, what is the value of the component $v_4$?",
+        "value": {
+          "reason": "The question asks to identify a specific component of a given vector by its position, which is a direct lookup rather than a calculation.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "Given the vector $v = \\begin{bmatrix} 12 \\\\ -5 \\\\ 8 \\\\ 0 \\\\ 3 \\end{bmatrix}$, what is the value of the component $v_4$?",
+        "value": {
+          "reason": "The component v_4 corresponds to the fourth element in the vector, which is 0.",
+          "option": 3
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "When are two vectors $x$ and $y$ considered equal according to Boyd VMLS definitions?",
+        "value": {
+          "reason": "The question asks for the definition of vector equality, which is a conceptual property rather than a calculation involving specific numerical values.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "When are two vectors $x$ and $y$ considered equal according to Boyd VMLS definitions?",
+        "value": {
+          "reason": "Vectors are equal if they have the same dimension and identical corresponding entries.",
+          "option": 1
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "What is the result of adding vector $a = \\begin{bmatrix} -4 \\\\ 3 \\\\ 8 \\end{bmatrix}$ and vector $b = \\begin{bmatrix} 7 \\\\ -1 \\\\ -5 \\end{bmatrix}$?",
+        "value": {
+          "reason": "The question requires performing vector addition using the specific numerical values provided for vectors a and b.",
+          "computable": true
+        }
+      },
+      {
+        "promptId": "verify.solve.blind",
+        "question": "What is the result of adding vector $a = \\begin{bmatrix} -4 \\\\ 3 \\\\ 8 \\end{bmatrix}$ and vector $b = \\begin{bmatrix} 7 \\\\ -1 \\\\ -5 \\end{bmatrix}$?",
+        "value": {
+          "program": "import numpy as np\n\na = np.array([-4, 3, 8])\nb = np.array([7, -1, -5])\nresult = a + b"
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "If $x = \\begin{bmatrix} 5 \\\\ -2 \\\\ 4 \\end{bmatrix}$, what is the scalar multiple $-4x$?",
+        "value": {
+          "reason": "The question requires performing arithmetic operations (scalar multiplication) on the specific vector provided in the question to determine the correct option.",
+          "computable": true
+        }
+      },
+      {
+        "promptId": "verify.solve.blind",
+        "question": "If $x = \\begin{bmatrix} 5 \\\\ -2 \\\\ 4 \\end{bmatrix}$, what is the scalar multiple $-4x$?",
+        "value": {
+          "program": "import numpy as np\n\nx = np.array([5, -2, 4])\nresult = -4 * x"
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "Compute the linear combination $3u - 2v$ where $u = \\begin{bmatrix} 2 \\\\ -1 \\end{bmatrix}$ and $v = \\begin{bmatrix} -3 \\\\ 4 \\end{bmatrix}$.",
+        "value": {
+          "reason": "The question explicitly asks to compute a specific linear combination using the provided vector values, which requires performing arithmetic operations.",
+          "computable": true
+        }
+      },
+      {
+        "promptId": "verify.solve.blind",
+        "question": "Compute the linear combination $3u - 2v$ where $u = \\begin{bmatrix} 2 \\\\ -1 \\end{bmatrix}$ and $v = \\begin{bmatrix} -3 \\\\ 4 \\end{bmatrix}$.",
+        "value": {
+          "program": "import numpy as np\nu = np.array([2, -1])\nv = np.array([-3, 4])\nresult = 3*u - 2*v"
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "What is the inner product $x^T y$ for $x = \\begin{bmatrix} 2 \\\\ 4 \\\\ -3 \\end{bmatrix}$ and $y = \\begin{bmatrix} 5 \\\\ -2 \\\\ 1 \\end{bmatrix}$?",
+        "value": {
+          "reason": "The question requires performing a specific arithmetic calculation using the provided vector values to find the inner product.",
+          "computable": true
+        }
+      },
+      {
+        "promptId": "verify.solve.blind",
+        "question": "What is the inner product $x^T y$ for $x = \\begin{bmatrix} 2 \\\\ 4 \\\\ -3 \\end{bmatrix}$ and $y = \\begin{bmatrix} 5 \\\\ -2 \\\\ 1 \\end{bmatrix}$?",
+        "value": {
+          "program": "import numpy as np\nx = np.array([2, 4, -3])\ny = np.array([5, -2, 1])\nresult = np.dot(x, y)"
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "If two vectors $u$ and $v$ of the same dimension satisfy $u^T v = 0$ (and neither is the zero vector), they are called:",
+        "value": {
+          "reason": "The question asks for the definition of a relationship between vectors based on a symbolic condition, not a numerical calculation.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "If two vectors $u$ and $v$ of the same dimension satisfy $u^T v = 0$ (and neither is the zero vector), they are called:",
+        "value": {
+          "reason": "Two non-zero vectors with a dot product of zero are perpendicular to each other, which is the definition of orthogonal vectors.",
+          "option": 1
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "Suppose $p = \\begin{bmatrix} 10 \\\\ 25 \\\\ 50 \\end{bmatrix}$ represents stock prices and $q = \\begin{bmatrix} 100 \\\\ 40 \\\\ 20 \\end{bmatrix}$ represents the number of shares owned. What does $q^T p$ represent?",
+        "value": {
+          "reason": "The question asks for the interpretation of the dot product formula applied to specific vectors, which requires calculating the result to identify the correct physical meaning from the options.",
+          "computable": true
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "Suppose $p = \\begin{bmatrix} 10 \\\\ 25 \\\\ 50 \\end{bmatrix}$ represents stock prices and $q = \\begin{bmatrix} 100 \\\\ 40 \\\\ 20 \\end{bmatrix}$ represents the number of shares owned. What does $q^T p$ represent?",
+        "value": {
+          "reason": "The dot product of shares and prices calculates the total monetary value of the portfolio.",
+          "option": 1
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "How many floating-point operations (flops) are needed to add two $n$-dimensional vectors?",
+        "value": {
+          "reason": "The question asks for a theoretical count of operations based on the definition of vector addition, not a calculation with specific numerical values provided in the text or options.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "How many floating-point operations (flops) are needed to add two $n$-dimensional vectors?",
+        "value": {
+          "reason": "Adding two n-dimensional vectors requires n addition operations, which corresponds to n flops.",
+          "option": 1
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "How many floating-point operations (flops) are required to scale an $n$-dimensional vector by a scalar $\\alpha$ (i.e., $\\alpha x$)?",
+        "value": {
+          "reason": "The question requires a calculation based on the dimension $n$ provided in the options to determine the correct count of operations.",
+          "computable": true
+        }
+      },
+      {
+        "promptId": "verify.solve.blind",
+        "question": "How many floating-point operations (flops) are required to scale an $n$-dimensional vector by a scalar $\\alpha$ (i.e., $\\alpha x$)?",
+        "value": {
+          "program": "import math\nimport numpy as np\n\n# To scale an n-dimensional vector by a scalar alpha (alpha * x),\n# we must multiply the scalar alpha by each of the n elements of the vector x.\n# Each multiplication is 1 floating-point operation.\n# Therefore, the total number of flops is n.\n\n# We define a function to compute this, but since no specific n is given in the source,\n# we assume the question asks for the general formula or we can set n to a symbolic representation.\n# However, the output type must be a number, Fraction, list, matrix, sympy expression, or bool.\n# Since n is a variable, let's use sympy to represent the exact symbolic answer.\n\nimport sympy\n\nn = sympy.symbols('n')\nresult = n"
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "What is the exact flop count required to compute the inner product $a^T b$ of two $n$-dimensional vectors?",
+        "value": {
+          "reason": "The question asks for a theoretical formula (flop count) based on the definition of an inner product, not a specific numerical calculation with given values.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "What is the exact flop count required to compute the inner product $a^T b$ of two $n$-dimensional vectors?",
+        "value": {
+          "reason": "The inner product requires n multiplications and n-1 additions, totaling 2n-1 flops.",
+          "option": 1
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "What is the 4-dimensional standard unit vector $e_3$?",
+        "value": {
+          "reason": "The question asks for the definition of a standard basis vector, which is a conceptual recall rather than a calculation using the provided numbers.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "What is the 4-dimensional standard unit vector $e_3$?",
+        "value": {
+          "reason": "The standard unit vector $e_3$ in 4 dimensions has a 1 in the third position and 0s elsewhere.",
+          "option": 1
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "How can the vector $x = \\begin{bmatrix} -3 \\\\ 8 \\\\ 1 \\end{bmatrix}$ be written using standard unit vectors $e_1, e_2, e_3$?",
+        "value": {
+          "reason": "The question requires expressing a specific vector with given numerical components as a linear combination of standard unit vectors, which involves using the specific values from the question.",
+          "computable": true
+        }
+      },
+      {
+        "promptId": "verify.solve.blind",
+        "question": "How can the vector $x = \\begin{bmatrix} -3 \\\\ 8 \\\\ 1 \\end{bmatrix}$ be written using standard unit vectors $e_1, e_2, e_3$?",
+        "value": {
+          "program": "import numpy as np\n\n# Define the vector x\nx = np.array([-3, 8, 1])\n\n# Extract the coefficients for e1, e2, e3\n# x = -3*e1 + 8*e2 + 1*e3\n# The result is stored as a list of coefficients [c1, c2, c3]\nresult = x.tolist()"
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "If $1$ denotes the 3-dimensional all-ones vector and $x = \\begin{bmatrix} 4 \\\\ -2 \\\\ 5 \\end{bmatrix}$, what is $1^T x$?",
+        "value": {
+          "reason": "The question requires calculating the dot product of two specific vectors provided in the problem statement.",
+          "computable": true
+        }
+      },
+      {
+        "promptId": "verify.solve.blind",
+        "question": "If $1$ denotes the 3-dimensional all-ones vector and $x = \\begin{bmatrix} 4 \\\\ -2 \\\\ 5 \\end{bmatrix}$, what is $1^T x$?",
+        "value": {
+          "program": "import numpy as np\n\n# Define the all-ones vector 1\none_vector = np.array([1, 1, 1])\n\n# Define vector x\nx = np.array([4, -2, 5])\n\n# Compute the dot product 1^T x\nresult = np.dot(one_vector, x)"
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "Why is the vector sum $x + y$ undefined when $x$ is 3-dimensional and $y$ is 4-dimensional?",
+        "value": {
+          "reason": "The question asks for the conceptual reason behind a mathematical rule, not to perform a calculation with specific values.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "Why is the vector sum $x + y$ undefined when $x$ is 3-dimensional and $y$ is 4-dimensional?",
+        "value": {
+          "reason": "Vector addition is only defined for vectors of the same dimension.",
+          "option": 1
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "Which of the following represents the associative property of vector addition for vectors $x, y, z$ of the same dimension?",
+        "value": {
+          "reason": "The question asks to identify a specific mathematical property from a list of options without requiring any numerical calculation or evaluation of specific values.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "Which of the following represents the associative property of vector addition for vectors $x, y, z$ of the same dimension?",
+        "value": {
+          "reason": "The associative property states that grouping does not affect the sum, which is represented by option 1.",
+          "option": 1
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "In machine learning and data analysis, what does a feature vector typically represent?",
+        "value": {
+          "reason": "The question asks for the conceptual definition of a feature vector, not a numerical computation.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "In machine learning and data analysis, what does a feature vector typically represent?",
+        "value": {
+          "reason": "A feature vector represents a list of numerical attributes or measurements describing an object or data point.",
+          "option": 1
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "For any $n$-dimensional vector $x$, what is the expression given by the inner product $x^T x$?",
+        "value": {
+          "reason": "The question asks for the definition or general property of the inner product $x^T x$, which can be determined without performing a specific numerical calculation on given values.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "For any $n$-dimensional vector $x$, what is the expression given by the inner product $x^T x$?",
+        "value": {
+          "reason": "The inner product of a vector with itself equals the sum of the squares of its components.",
+          "option": 1
+        }
+      },
+      {
+        "promptId": "verify.solve.classify",
+        "question": "What is the total flop count required to evaluate a linear combination of two $n$-dimensional vectors, i.e., $\\alpha x + \\beta y$?",
+        "value": {
+          "reason": "The question asks for a general formula based on the dimension $n$ rather than a specific numerical result derived from given values.",
+          "computable": false
+        }
+      },
+      {
+        "promptId": "verify.solve.pick",
+        "question": "What is the total flop count required to evaluate a linear combination of two $n$-dimensional vectors, i.e., $\\alpha x + \\beta y$?",
+        "value": {
+          "reason": "Computing the linear combination involves n multiplications and n additions, totaling 2n flops.",
+          "option": 2
+        }
+      }
+    ]
+  },
+  "flowA": {
+    "outcomes": [
+      {
+        "tempId": "q1",
+        "outcome": "computed",
+        "reason": "ok",
+        "correctAnswer": "0"
+      },
+      {
+        "tempId": "q2",
+        "outcome": "computed",
+        "reason": "ok",
+        "correctAnswer": "11"
+      },
+      {
+        "tempId": "q3",
+        "outcome": "computed",
+        "reason": "ok",
+        "correctAnswer": "False"
+      }
+    ],
+    "replies": [
+      {
+        "promptId": "verify.solve.blind",
+        "question": "Given vectors $\\begin{bmatrix}2 & -1 & 2\\end{bmatrix}^T$ and $\\begin{bmatrix}1 & 4 & 1\\end{bmatrix}^T$, what is their inner product?",
+        "value": {
+          "program": "import numpy as np\na = np.array([2, -1, 2])\nb = np.array([1, 4, 1])\nresult = np.dot(a, b)"
+        }
+      },
+      {
+        "promptId": "verify.solve.blind",
+        "question": "What is the Euclidean norm of the vector $\\begin{bmatrix}2 & -9 & 6\\end{bmatrix}^T$?",
+        "value": {
+          "program": "import math\nimport numpy as np\n\n# Define the vector\na = np.array([2, -9, 6])\n\n# Compute the Euclidean norm: sqrt(sum of squares of components)\nresult = math.sqrt(sum(x**2 for x in a))\n"
+        }
+      },
+      {
+        "promptId": "verify.solve.blind",
+        "question": "Are the vectors $\\begin{bmatrix}-7 & 3\\end{bmatrix}^T$ and $\\begin{bmatrix}-2 & -4\\end{bmatrix}^T$ orthogonal?",
+        "value": {
+          "program": "import numpy as np\n\na = np.array([-7, 3])\nb = np.array([-2, -4])\n\n# Compute inner product\ninner_product = np.dot(a, b)\n\n# Two vectors are orthogonal if their inner product is zero\nresult = (inner_product == 0)"
+        }
+      }
+    ]
+  }
+}

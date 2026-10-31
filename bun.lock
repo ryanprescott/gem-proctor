@@ -24,6 +24,7 @@
         "@fastify/rate-limit": "11.2.1",
         "@fastify/static": "10.1.8",
         "@fastify/swagger": "9.9.2",
+        "@gem/authoring": "workspace:*",
         "@gem/authz": "workspace:*",
         "@gem/db": "workspace:*",
         "@gem/llm": "workspace:*",
@@ -69,6 +70,11 @@
     "packages/authoring": {
       "name": "@gem/authoring",
       "version": "0.0.0",
+      "dependencies": {
+        "@gem/llm": "workspace:*",
+        "@gem/shared": "workspace:*",
+        "zod": "4.6.7",
+      },
     },
     "packages/authz": {
       "name": "@gem/authz",

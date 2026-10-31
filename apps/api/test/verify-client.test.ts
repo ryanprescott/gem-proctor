@@ -77,6 +77,15 @@ describe.skipIf(!python)("VerifyClient (real parent)", () => {
     await expect(Promise.resolve().then(() => client.parseOptions({ texts: [] }))).rejects.toThrow();
   });
 
+  test("the real entrypoint leaves a child its address space (no NumPy threads before the limits)", async () => {
+    const reply = await client.run({
+      program: "x = bytes(200_000_000)\nresult = int(open('/proc/self/status').read().split('Threads:')[1].split()[0])",
+    });
+    expect(reply).toMatchObject({ status: "ok", value: { value: "1" } });
+    const parsed = await client.parseOptions({ texts: ["$n - 1$ flops", "$-3e_1 + 8e_2 + e_3$"] });
+    expect(parsed.results?.map((r) => r.ok)).toEqual([true, true]);
+  });
+
   test("parse, compare and build through the socket", async () => {
     const parsed = await client.parseOptions({ texts: ["0.5", String.raw`$\frac{1}{2}$`, "Undefined"] });
     const [a, b, c] = parsed.results ?? [];
