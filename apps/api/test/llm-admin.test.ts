@@ -297,6 +297,11 @@ describe.skipIf(!hasDb)("LLM admin API", () => {
         "capabilities.maxInputTokens",
       );
       expect((await put("authoring.judge", e.id, embeddingBody)).statusCode).toBe(400);
+      const noRoom = await put("authoring.judge", e.id, {
+        capabilities: { ...capabilities, maxOutputTokens: capabilities.contextWindow },
+      });
+      expect(noRoom.statusCode).toBe(400);
+      expect(noRoom.json().params.field).toBe("capabilities.maxOutputTokens");
       expect((await admin.put(`${API}/admin/llm/roles/nope`, {})).statusCode).toBe(400);
 
       const ok = await put("embeddings", e.id, { ...embeddingBody, params: { keep_alive: 0 } });

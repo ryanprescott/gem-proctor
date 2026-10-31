@@ -168,6 +168,13 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
     expect(run.summary).toMatchObject({ validFirstTry: 0, validAfterRepairs: 0.5, repairsPerCall: 1.5 });
   });
 
+  test("C30: a cut-off reply counts as an invalid trial, with no repair", async () => {
+    mock.replies.push({ text: "", finishReason: "length" }, batch());
+    const run = await finished((await start({ evalSet: "generate-smoke", trials: 2 })).json().run.id);
+    expect(run.status).toBe("done");
+    expect(run.summary).toMatchObject({ validFirstTry: 0.5, validAfterRepairs: 0.5, repairsPerCall: 0 });
+  });
+
   test("C30: retrieval-mini: top-1 and MRR, with and without prefixes", async () => {
     const run = await finished((await start({ evalSet: "retrieval-mini" })).json().run.id);
     expect(run.status).toBe("done");

@@ -160,6 +160,28 @@ describe.skipIf(!hasDb)("runtime, against the mock server", () => {
       );
       expect(mock.chatRequests()).toHaveLength(1);
     });
+
+    test.each([
+      ["an empty reply cut off by the budget", { text: "", finishReason: "length" }],
+      ["partial JSON cut off by the budget", { text: '{"title":"a","cou', finishReason: "length" }],
+      ["an empty reply that finished normally", { text: "   " }],
+    ])("%s: llm_output_incomplete, not repaired", async (_name, reply) => {
+      await fresh();
+      mock.replies.push(reply, GOOD);
+      const e = await failure(rt.generateObject(ROLE, Answer, input));
+      expect(e.code).toBe("llm_output_incomplete");
+      expect(mock.chatRequests()).toHaveLength(1);
+      const log = await lastLog(env.db);
+      expect(log).toMatchObject({ outcome: "failed", errorCode: "llm_output_incomplete", repairAttempts: 0 });
+    });
+
+    test("a repair that is cut off isn't repaired again", async () => {
+      await fresh();
+      mock.replies.push(BAD, { text: "", finishReason: "length" }, GOOD);
+      const e = await failure(rt.generateObject(ROLE, Answer, input));
+      expect(e.code).toBe("llm_output_incomplete");
+      expect(mock.chatRequests()).toHaveLength(2);
+    });
   });
 
   describe("C10: salvage", () => {

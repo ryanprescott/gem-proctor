@@ -41,6 +41,8 @@ describe("C4: LLM shapes (SPEC §3B.2)", () => {
 
   test("capabilities and embedding parse with SPEC's defaults", () => {
     expect(Capabilities.parse(capabilities)).toEqual(capabilities as never);
+    const atWindow = { ...capabilities, maxOutputTokens: capabilities.contextWindow };
+    expect(Capabilities.safeParse(atWindow).success).toBe(false);
     expect(EmbeddingConfig.parse({ dimensions: 768 })).toEqual({
       dimensions: 768,
       queryPrefix: "",

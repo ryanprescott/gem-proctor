@@ -41,7 +41,8 @@
   "llm_endpoint_in_use": "A role uses this endpoint. Assign the role elsewhere first.",
   "llm_models_unsupported": "This endpoint can't list its models. Enter the model id by hand.",
   "llm_output_invalid": "The model's output was still invalid after repairs.",
-  "llm_context_exceeded": "The prompt is too long for this model's context window.",
+  "llm_output_incomplete": "The model stopped before finishing its reply. Raise the role's max output tokens, or turn the model's thinking off in its parameters.",
+  "llm_context_exceeded": "The prompt doesn't fit in the context window once max output tokens are reserved. Lower the role's max output tokens, or use a larger context window.",
   "llm_embedding_truncated": "A text is too long for the embedding model and would be cut off.",
   "llm_secret_key_missing": "ENDPOINT_SECRET_KEY isn't configured, so a key can't be saved.",
   "llm_eval_running": "An evaluation is already running for this role."

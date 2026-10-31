@@ -222,10 +222,11 @@
       "dialogTitle": "Assign {{role}}",
       "fromProbe": "Values from the probe are filled in. Check them and save.",
       "maxOutputTokens": "Max output tokens",
+      "maxOutputTooLarge": "Must be less than the context window, or no room is left for the prompt.",
       "queryPrefix": "Query prefix",
       "documentPrefix": "Document prefix",
       "params": "Parameters (JSON)",
-      "paramsHelp": "Sent to the model as they are, e.g. { \"temperature\": 0.7 }.",
+      "paramsHelp": "Sent to the model as they are, e.g. { \"temperature\": 0.7 }. Left empty, the model's defaults apply. On some models that includes thinking, which can use up max output tokens.",
       "paramsInvalid": "Enter a JSON object, or leave this empty.",
       "save": "Save assignment",
       "saved": "{{role}} assigned."

@@ -72,6 +72,7 @@ export function RoleDialog({
     return start ? JSON.stringify(start, null, 2) : "";
   });
   const params = parseParams(paramsText);
+  const outputTooLarge = contextWindow !== "" && Number(maxOutputTokens) >= Number(contextWindow);
 
   const save = useMutation({
     mutationFn: () =>
@@ -105,7 +106,7 @@ export function RoleDialog({
           <Form
             onSubmit={(e) => {
               e.preventDefault();
-              if (params !== null) save.mutate();
+              if (params !== null && !outputTooLarge) save.mutate();
             }}
           >
             <Heading slot="title">{t("admin:llm.roles.dialogTitle", { role: roleName(role) })}</Heading>
@@ -137,6 +138,8 @@ export function RoleDialog({
                 value={maxOutputTokens}
                 onChange={setMaxOutputTokens}
                 isRequired
+                isInvalid={outputTooLarge}
+                errorMessage={t("admin:llm.roles.maxOutputTooLarge")}
               />
             </div>
             {isEmbeddings ? (

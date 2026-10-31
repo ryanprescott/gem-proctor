@@ -44,14 +44,19 @@ export const EndpointBaseUrl = z
     { message: "must be http(s) without credentials" },
   );
 
-export const Capabilities = z.object({
-  structuredOutput: StructuredMode,
-  /** The context we budget against; for local servers, what the server was launched with. */
-  contextWindow: z.number().int().positive(),
-  maxOutputTokens: z.number().int().positive(),
-  /** Embeddings: longest input embedded *without truncation* (measured by the probe). */
-  maxInputTokens: z.number().int().positive().optional(),
-});
+export const Capabilities = z
+  .object({
+    structuredOutput: StructuredMode,
+    /** The context we budget against; for local servers, what the server was launched with. */
+    contextWindow: z.number().int().positive(),
+    maxOutputTokens: z.number().int().positive(),
+    /** Embeddings: longest input embedded *without truncation* (measured by the probe). */
+    maxInputTokens: z.number().int().positive().optional(),
+  })
+  .refine((c) => c.maxOutputTokens < c.contextWindow, {
+    path: ["maxOutputTokens"],
+    message: "must be less than contextWindow",
+  });
 export type Capabilities = z.infer<typeof Capabilities>;
 
 export const EmbeddingConfig = z.object({

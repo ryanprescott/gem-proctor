@@ -112,8 +112,18 @@ async function runGenerate(
       });
     } catch (err) {
       // Invalid output is what's being measured; anything else ends the run.
-      if (!(err instanceof LlmError) || err.code !== "llm_output_invalid") throw err;
-      items.push({ trial, valid: false, repairs: err.params.repairAttempts, questions: 0, quotes: 0, quotesFound: 0 });
+      if (!(err instanceof LlmError) || !(err.code === "llm_output_invalid" || err.code === "llm_output_incomplete")) {
+        throw err;
+      }
+      items.push({
+        trial,
+        valid: false,
+        error: err.code,
+        repairs: err.params.repairAttempts,
+        questions: 0,
+        quotes: 0,
+        quotesFound: 0,
+      });
     }
   }
   const valid = items.filter((i) => i.valid);

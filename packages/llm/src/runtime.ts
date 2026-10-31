@@ -412,10 +412,12 @@ export class Runtime implements LlmRuntime {
         fixes.push(...parsed.fixes);
         if (parsed.ok) return await finish(parsed.value);
         if (parsed.parsed !== undefined) lastParsed = parsed.parsed;
-        if (repairAttempts >= maxRepairs) {
+        // A repair has no source text: from a reply that's empty or cut off, the model can only make content up.
+        const incomplete = reply.finishReason === "length" || reply.text.trim() === "";
+        if (incomplete || repairAttempts >= maxRepairs) {
           const saved = opts.salvage && salvage(lastParsed, schema, opts.salvage);
           if (saved) return await finish(saved.value, saved.failedItems);
-          throw new LlmError("llm_output_invalid", { repairAttempts });
+          throw new LlmError(incomplete ? "llm_output_incomplete" : "llm_output_invalid", { repairAttempts });
         }
         repairAttempts++;
         request = this.repairRequest(target, jsonSchema, example, reply.text, parsed.issues);

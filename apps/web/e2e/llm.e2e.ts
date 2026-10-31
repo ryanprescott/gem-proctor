@@ -145,6 +145,9 @@ test("C35 cloud notice, local-only 409 with roles listed, unassign", async () =>
   await choose(page, "Endpoint", CLOUD);
   await dialog.getByLabel("Model", { exact: false }).first().fill("cloud-model");
   await dialog.getByLabel("Context window").fill("8192");
+  await dialog.getByLabel("Max output tokens").fill("8192");
+  await dialog.getByRole("button", { name: "Save assignment" }).click();
+  await expect(dialog.getByText("Must be less than the context window")).toBeVisible();
   await dialog.getByLabel("Max output tokens").fill("1024");
   await dialog.getByLabel("Parameters (JSON)").fill("[1]");
   await dialog.getByRole("button", { name: "Save assignment" }).click();
