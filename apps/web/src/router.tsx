@@ -7,6 +7,8 @@ import { HomePage, NotFoundPage } from "./routes/Home.tsx";
 import { ImportPage } from "./routes/Import.tsx";
 import { ResultsPage } from "./routes/Results.tsx";
 import { RegisterPage, SignInPage } from "./routes/SignIn.tsx";
+import { SourceDetailPage, type SourceSearch } from "./routes/SourceDetail.tsx";
+import { SourcesPage } from "./routes/Sources.tsx";
 import { TestDetailPage, TestsPage } from "./routes/Tests.tsx";
 
 /** TanStack Router (P0.md §5), code-based routes for the pages in P0.md §6 and P1.md §6. */
@@ -46,10 +48,26 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: "/admin/settings", component: AdminSettingsPage }),
   createRoute({ getParentRoute: () => root, path: "/admin/llm", component: AdminLlmPage }),
   createRoute({ getParentRoute: () => root, path: "/admin/audit-log", component: AdminAuditLogPage }),
+  createRoute({ getParentRoute: () => root, path: "/sources", component: SourcesPage }),
+  createRoute({
+    getParentRoute: () => root,
+    path: "/sources/$sourceId",
+    validateSearch: (search: Record<string, unknown>): SourceSearch => ({
+      ...(typeof search.revision === "number" ? { revision: search.revision } : {}),
+      ...(typeof search.chunk === "string" ? { chunk: search.chunk } : {}),
+      ...(typeof search.quote === "string" ? { quote: search.quote } : {}),
+    }),
+    component: function SourceRoute() {
+      const { sourceId } = sourceRoute.useParams();
+      const search = sourceRoute.useSearch();
+      return <SourceDetailPage sourceId={sourceId} search={search} />;
+    },
+  }),
 ] as const;
 const testRoute = routes[5];
 const attemptRoute = routes[6];
 const resultsRoute = routes[7];
+const sourceRoute = routes[13];
 
 export const router = createRouter({ routeTree: root.addChildren([...routes]), defaultPreload: false });
 

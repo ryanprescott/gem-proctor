@@ -19,6 +19,8 @@ import {
   PROCTOR_BLOCKERS,
   QUESTION_TYPES,
   QUIZ_ISSUE_CODES,
+  SOURCE_EMBED_STATUSES,
+  SOURCE_WARNING_CODES,
   STRUCTURED_MODES,
   VERIFICATION_STATUSES,
 } from "@gem/shared";
@@ -50,6 +52,8 @@ export const DYNAMIC_FAMILIES: Record<string, readonly string[]> = {
   "import:verify.reasons.": L7_REASONS,
   "tests:verification.status.": VERIFICATION_STATUSES,
   "tests:proctor.reasons.": PROCTOR_BLOCKERS,
+  "sources:warnings.": SOURCE_WARNING_CODES,
+  "sources:status.": SOURCE_EMBED_STATUSES,
 };
 
 const PLURAL_SUFFIXES = ["_zero", "_one", "_two", "_few", "_many", "_other"];

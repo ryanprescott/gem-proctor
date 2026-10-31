@@ -99,6 +99,7 @@ function startMockLlm(mockHost: string | undefined) {
     models: ["mock-chat", "mock-embed"],
     dimensions: 768,
     embedCap: 2048,
+    embedDelayMs: 250,
     reply: (body) =>
       JSON.stringify(body.messages).includes("2 + 2")
         ? '{"answer": 4}'

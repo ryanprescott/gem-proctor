@@ -1,0 +1,98 @@
+{
+  "list": {
+    "title": "Sources",
+    "empty": "No sources yet. Add one below.",
+    "caption_one": "{{count}} source",
+    "caption_other": "{{count}} sources",
+    "colTitle": "Title",
+    "colLabel": "Citation label",
+    "colRevision": "Revision",
+    "colChunks": "Chunks",
+    "colStatus": "Status",
+    "colAdded": "Added"
+  },
+  "add": {
+    "title": "Add a source",
+    "titleLabel": "Title",
+    "citationLabel": "Citation label",
+    "citationHelp": "Short, like “VMLS”. It's shown in citations.",
+    "author": "Author (optional)",
+    "edition": "Edition (optional)",
+    "url": "URL (optional)",
+    "upload": "Upload .md or .txt",
+    "chosen": "File: {{name}}",
+    "text": "Markdown or plain text",
+    "textHelp": "Paste text here, or upload a file. LaTeX in $…$ and $$…$$ stays as written.",
+    "preview": "Preview",
+    "save": "Save source"
+  },
+  "preview": {
+    "title": "Preview",
+    "summary": "{{sections}} sections, {{chunks}} chunks, about {{tokens}} tokens. Nothing has been saved yet.",
+    "noWarnings": "No problems found.",
+    "ready_one": "Preview ready: {{count}} section.",
+    "ready_other": "Preview ready: {{count}} sections.",
+    "sectionChunks_one": "{{count}} chunk",
+    "sectionChunks_other": "{{count}} chunks"
+  },
+  "warnings": {
+    "no_headings": "This text has no headings, so it will be one section.",
+    "long_section": "“{{heading}}” is very long, about {{tokens}} tokens.",
+    "duplicate_heading": "More than one heading is called “{{heading}}”.",
+    "unit_too_large": "A block in “{{heading}}” is about {{tokens}} tokens and can't be split. Saving will fail until it's shorter."
+  },
+  "status": {
+    "pending": "Waiting to embed",
+    "embedding": "Embedding",
+    "ready": "Ready",
+    "failed": "Embedding failed"
+  },
+  "progress": "{{done}} of {{total}}",
+  "saved": "Source saved: {{title}}",
+  "deleted": "Source deleted.",
+  "retry": "Try embedding again",
+  "announce": {
+    "progress": "Embedding: {{done}} of {{total}} chunks.",
+    "ready": "{{title}} is ready to use.",
+    "failed": "Embedding {{title}} failed."
+  },
+  "detail": {
+    "citation": "Cited as {{label}}"
+  },
+  "revisions": {
+    "title": "Revisions",
+    "item": "Revision {{number}}, {{date}}",
+    "edit": "Edit",
+    "start": "Edit as a new revision",
+    "help": "Saving makes a new revision. Earlier ones stay, so published citations keep working.",
+    "save": "Save new revision",
+    "saved": "Revision {{number}} saved."
+  },
+  "scope": {
+    "title": "Scope",
+    "help": "Pick the sections to use. Ticking a heading includes everything under it.",
+    "label": "Sections",
+    "sectionSize": "{{chunks}} chunks, about {{tokens}} tokens",
+    "total": "Selected: {{chunks}} chunks, about {{tokens}} tokens.",
+    "fits": "fits in one call",
+    "tooLarge": "too large for one call, so it's split across calls",
+    "unassigned": "not assigned"
+  },
+  "viewer": {
+    "title": "Passages",
+    "empty": "No passages in the selected sections.",
+    "cited": "Cited passage:",
+    "citation": "{{label}} § {{path}}"
+  },
+  "flagged": {
+    "title": "Flagged passages",
+    "help": "A program written from these passages tried something the sandbox denied. Check them for instructions aimed at the model. Nothing has been removed.",
+    "chunk": "Flagged {{date}}"
+  },
+  "delete": {
+    "action": "Delete source",
+    "title": "Delete this source?",
+    "body": "It leaves your library. Tests already published from it keep their citations.",
+    "confirm": "Delete"
+  }
+}

@@ -1,0 +1,19 @@
+.passage {
+  overflow-wrap: anywhere;
+  max-inline-size: 100%;
+  overflow-x: auto;
+}
+
+.passage pre,
+.passage table {
+  max-inline-size: 100%;
+  overflow-x: auto;
+}
+
+.quote {
+  background: var(--color-mark-bg, #fff2a8);
+  color: #1a1a1a;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}

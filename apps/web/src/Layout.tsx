@@ -49,6 +49,11 @@ export function Layout() {
                   </Link>
                 </li>
                 <li>
+                  <Link to="/sources" activeProps={{ "aria-current": "page" }}>
+                    {t("common:nav.sources")}
+                  </Link>
+                </li>
+                <li>
                   <Link to="/import" activeProps={{ "aria-current": "page" }}>
                     {t("common:nav.import")}
                   </Link>

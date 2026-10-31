@@ -74,3 +74,31 @@ Built: `packages/knowledge/src/retrieve.ts` (the scope filter, vector search, fu
 - The vector search sets `hnsw.iterative_scan = relaxed_order` for its transaction, since a filtered HNSW scan can otherwise run out of candidates, and re-sorts by distance. With 40 candidates and a small scope, the planner mostly uses the revision and section indexes and an exact sort anyway.
 - A chunk bigger than what's left of the budget is skipped, and smaller ones after it can still fit. So the budget holds strictly, and `llm_context_exceeded` can't come from chunks (the prompt's own share comes in F5).
 - E15's `fits` compares against `contextWindow − maxOutputTokens`. The instructions' share is F5's; here "fits" means the source text alone.
+
+## F3 Sources UI
+
+Built: `apps/web/src/routes/Sources.tsx` (library, add by paste or upload, preview), `SourceDetail.tsx` (status, revisions, new revision, scope, viewer, flagged passages, delete), `ui/ScopeTree.tsx`, `ui/Passage.tsx`, `api/events.ts` (the SSE hook), the `sources` catalog (73 keys with the nav label), two dynamic families. The mock gained `embedDelayMs`, so a run shows progress. Tests: `apps/web/e2e/sources.e2e.ts`.
+
+| # | Result | Evidence |
+|---|---|---|
+| E16 | **pass** | `sources.e2e.ts` "E16 E18 add…": fill, Preview ("Nothing has been saved yet", announced), Save, `Embedding: n of m chunks` then "is ready to use" in the live region, from real SSE. "E16 edit…": Edit as a new revision, Save, revision 2 and 1 both listed; opening a chunk with a quote shows `<mark>` with exactly that sentence, "Cited passage:" and "VB § Chapter 1: Vectors › Inner product". |
+| E17 | **pass** | "E17": real `input[type=checkbox]`s: Tab to one, Space unticks it and "Selected:" changes; a child unticked leaves its heading `indeterminate`; Space on the heading ticks the child again. Fit per role in text. `.katex-mathml math` is attached with `x^T y` in its annotation. |
+| E18 | **partial → pass in F5** | `expectNoAxeViolations`: empty library, preview, preview with a warning, ready, highlighted passage, scope tree, failed embedding, delete dialog; 320 px on the library and on a source, no horizontal overflow. The flagged-passages state needs a flagged chunk, which F5 builds, so it's checked there (see F5's E35). |
+
+**`bun run ci`:** all steps pass, exit 0.
+
+```
+✔ biome check                       ✔ LLM imports stay in packages/llm
+✔ lint rule build is up to date     ✔ typecheck (9 projects)
+✔ lint-rule snapshot                ✔ bun test — 798 pass, 0 fail, 30 files
+✔ suppression baseline              ✔ ruff + ruff format, verify unit tests (73)
+✔ i18n catalog check (731 keys)     ✔ verify escape suite — 40/40
+✔ JSON Schema export is up to date  ✔ Playwright + axe — 40 passed
+```
+
+After that run, two tests changed: E18's failed-embedding state was added, and E16 now asserts the progress announcement itself. `sources.e2e.ts` passed alone, 6 of 6; F4's full run includes them.
+
+**Deviations and notes.**
+- A page opened on a finished source announces nothing; one that saw it unfinished says how it ended.
+- A passage's quote is marked only if it's found verbatim, so a wrong quote can't look grounded. `<mark>` carries an underline too, so it isn't colour alone.
+- The upload is read in the browser and sent as text with its filename, so preview and save share one path. Multipart works too (E2).
