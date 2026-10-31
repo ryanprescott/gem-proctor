@@ -461,7 +461,7 @@ describe.skipIf(!verifyPython || !dbReady)("L7 flow A", () => {
 
   test("renders placeholders outside and inside math", () => {
     const latex = { x: "1", y: String.raw`\begin{bmatrix}1\end{bmatrix}` };
-    expect(renderQuestion("Add {x} and ${y}$, and $x = {x}$.", latex)).toBe(
+    expect(renderQuestion(`Add {x} and $${"{y}"}$, and $x = {x}$.`, latex)).toBe(
       String.raw`Add $1$ and $\begin{bmatrix}1\end{bmatrix}$, and $x = 1$.`,
     );
     expect(renderQuestion(String.raw`Costs \$3 and {x}`, latex)).toBe(String.raw`Costs \$3 and $1$`);

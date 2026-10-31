@@ -58,3 +58,6 @@
   background: var(--color-accent-hover);
   color: var(--color-accent-text);
 }
+.blockers {
+  margin-block: var(--space-3);
+}

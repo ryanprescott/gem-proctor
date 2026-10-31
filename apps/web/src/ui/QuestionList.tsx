@@ -1,4 +1,4 @@
-import { effectiveType } from "@gem/shared";
+import { effectiveType, type VerificationStatus } from "@gem/shared";
 import { useTranslation } from "react-i18next";
 import { uniqueKeys } from "./keys.ts";
 import { Markdown } from "./Markdown.tsx";
@@ -12,6 +12,8 @@ export interface DisplayQuestion {
   correctAnswer?: string;
   type?: string;
   explanation?: string;
+  computable?: boolean;
+  verification?: { status: VerificationStatus };
 }
 
 /** Read-only question list: Markdown + KaTeX (with MathML). The answer is labelled in text, not by color alone. */
@@ -35,6 +37,11 @@ export function QuestionList({
               {q.topic ? <span className={styles.topic}>{t("tests:question.topic", { topic: q.topic })}</span> : null}
             </h3>
             <p className={styles.type}>{t(`tests:types.${type}`)}</p>
+            {q.verification ? (
+              <p className={styles.type}>
+                {t("tests:verification.label")} {t(`tests:verification.status.${q.verification.status}`)}
+              </p>
+            ) : null}
             <div className={styles.text}>
               <Markdown>{q.question}</Markdown>
             </div>

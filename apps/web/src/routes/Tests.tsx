@@ -161,7 +161,21 @@ function TestDetail({ testId }: { testId: string }) {
         <dd>{test.ownerName}</dd>
         <dt>{t("tests:detail.created")}</dt>
         <dd>{formatDate(test.createdAt)}</dd>
+        <dt>{t("tests:detail.proctorReady")}</dt>
+        <dd>{version.proctorReady ? t("tests:proctor.ready") : t("tests:proctor.notReady")}</dd>
       </dl>
+      {version.blockers.length > 0 ? (
+        <details className={styles.blockers}>
+          <summary>{t("tests:proctor.blockers", { count: version.blockers.length })}</summary>
+          <ul>
+            {version.blockers.map((b) => (
+              <li key={b.questionId}>
+                {t("tests:question.heading", { id: b.questionId })}: {t(`tests:proctor.reasons.${b.reason}`)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
       <div className={styles.actions}>
         <a className={styles.exportLink} href={contractUrl(testsExport, { params: { id: testId } })} download>

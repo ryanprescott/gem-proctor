@@ -17,14 +17,17 @@ export type ObjType =
   | "llm_role"
   | "llm_eval"
   | "llm_stats"
-  | "llm_status";
+  | "llm_status"
+  | "verification_job";
 export type Act = "read" | "delete" | "preview" | "create" | "list" | "update" | "export" | "submit" | "run";
 
 /**
  * `resource: "practice_attempt"` loads the attempt by `(id, userId = caller)` (P1.md §5): someone else's
  * attempt is not found, for every caller, admins included.
  */
-export type RoutePermission = { public: true } | { objType: ObjType; act: Act; resource?: "test" | "practice_attempt" };
+export type RoutePermission =
+  | { public: true }
+  | { objType: ObjType; act: Act; resource?: "test" | "practice_attempt" | "verification_job" };
 
 export const ROUTE_PERMISSIONS = {
   health: { public: true },
@@ -38,6 +41,8 @@ export const ROUTE_PERMISSIONS = {
 
   "imports.preview": { objType: "import", act: "preview" },
   "imports.create": { objType: "import", act: "create" },
+  "imports.verify.start": { objType: "verification_job", act: "create" },
+  "imports.verify.get": { objType: "verification_job", act: "read", resource: "verification_job" },
   "tests.list": { objType: "test", act: "list" },
   "tests.get": { objType: "test", act: "read", resource: "test" },
   "tests.update": { objType: "test", act: "update", resource: "test" },

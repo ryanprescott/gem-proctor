@@ -139,8 +139,8 @@ function auditableRole(row: RoleRow | undefined) {
   return { endpointId, model, capabilities, embedding, params };
 }
 
-/** Probe, discovery and eval runs call models: limited per admin (SPEC §11.2). */
-function modelCallLimit(ctx: AppContext): RouteOptions {
+/** Anything that calls a model is limited per user (SPEC §11.2): probes, discovery, evals, verification jobs. */
+export function modelCallLimit(ctx: AppContext): RouteOptions {
   return {
     rateLimit: {
       max: ctx.config.LLM_RATE_LIMIT_MAX ?? DEFAULT_RATE_LIMIT,

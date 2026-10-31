@@ -40,7 +40,8 @@
     "tagsHelp": "Separate tags with commas.",
     "save": "Save details",
     "topics": "Topics covered",
-    "questionsTitle": "Questions"
+    "questionsTitle": "Questions",
+    "proctorReady": "Proctored use"
   },
   "question": {
     "heading": "Question {{id}}",
@@ -61,5 +62,26 @@
     "saved": "Test details saved.",
     "archived": "Test archived.",
     "restored": "Test restored."
+  },
+  "verification": {
+    "label": "Verification:",
+    "status": {
+      "computed": "Computed",
+      "model_agreed": "Model agreed",
+      "unverified": "Unverified",
+      "failed": "Failed"
+    }
+  },
+  "proctor": {
+    "ready": "Ready",
+    "notReady": "Not ready",
+    "blockers_one": "{{count}} question needs verifying",
+    "blockers_other": "{{count}} questions need verifying",
+    "reasons": {
+      "not_verified": "Not verified",
+      "unverified": "Unverified",
+      "failed": "Failed",
+      "model_agreed": "Model agreed only"
+    }
   }
 }

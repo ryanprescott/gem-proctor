@@ -13,6 +13,7 @@ import {
   RoleAssignment,
   InstanceSettings as SettingsTable,
 } from "@gem/db";
+import { DEFAULT_VERIFY_SETTINGS } from "@gem/shared";
 import { eq, sql } from "drizzle-orm";
 import type pg from "pg";
 import { getSettings } from "../src/settings.ts";
@@ -184,13 +185,21 @@ describe.skipIf(!hasDb)("C6: localEndpointsOnly", () => {
     const t = await createTestApp();
     try {
       await t.db.insert(SettingsTable).values({ key: "selfRegistration", value: false });
-      expect(await getSettings(t.db)).toEqual({ selfRegistration: false, localEndpointsOnly: false });
+      expect(await getSettings(t.db)).toEqual({
+        selfRegistration: false,
+        localEndpointsOnly: false,
+        verify: DEFAULT_VERIFY_SETTINGS,
+      });
       await t.db.update(SettingsTable).set({ value: true }).where(eq(SettingsTable.key, "selfRegistration"));
       const { client } = await registerUser(t.app, "admin@example.com");
       const on = await client.put(`${API}/admin/settings`, { selfRegistration: true, localEndpointsOnly: true });
       expect(on.json().settings.localEndpointsOnly).toBe(true);
       const kept = await client.put(`${API}/admin/settings`, { selfRegistration: false });
-      expect(kept.json().settings).toEqual({ selfRegistration: false, localEndpointsOnly: true });
+      expect(kept.json().settings).toEqual({
+        selfRegistration: false,
+        localEndpointsOnly: true,
+        verify: DEFAULT_VERIFY_SETTINGS,
+      });
     } finally {
       await t.close();
     }

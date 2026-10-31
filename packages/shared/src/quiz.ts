@@ -43,8 +43,12 @@ export type TestType = z.infer<typeof TestType>;
 export const Evidence = z.object({ sourceId: z.string(), chunkId: z.string(), quote: z.string() });
 export type Evidence = z.infer<typeof Evidence>;
 
+export const VERIFICATION_STATUSES = ["computed", "model_agreed", "unverified", "failed"] as const;
+export const VerificationStatus = z.enum(VERIFICATION_STATUSES);
+export type VerificationStatus = z.infer<typeof VerificationStatus>;
+
 export const Verification = z.object({
-  status: z.enum(["computed", "model_agreed", "unverified", "failed"]),
+  status: VerificationStatus,
   answerSource: z.enum(["computed", "stated"]).optional(),
   program: z.string().optional(),
   authorProgram: z.string().optional(),

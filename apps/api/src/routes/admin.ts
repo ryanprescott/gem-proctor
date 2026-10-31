@@ -184,15 +184,17 @@ export function adminRoutes(app: FastifyInstance, ctx: AppContext) {
   route(app, adminPutSettings, async ({ body, user, request }) => {
     if (body.localEndpointsOnly) await assertNoCloudRoles(ctx);
     const before = await getSettings(ctx.db);
+    const { verify, ...rest } = body;
+    const values = { ...rest, ...(verify ? { verify: { ...before.verify, ...verify } } : {}) };
     await ctx.db.transaction(async (tx) => {
-      await putSettings(tx, body, user.userId);
+      await putSettings(tx, values, user.userId);
       await writeAudit(tx, {
         actorId: user.userId,
         action: "settings.update",
         targetType: "settings",
         targetId: null,
         before,
-        after: { ...before, ...body },
+        after: { ...before, ...values },
         ...requestMeta(request),
       });
     });

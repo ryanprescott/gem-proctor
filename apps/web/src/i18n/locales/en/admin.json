@@ -30,7 +30,10 @@
     "selfRegistrationOn": "Anyone can create an account. New accounts are students.",
     "selfRegistrationOff": "Only existing accounts can sign in.",
     "save": "Save settings",
-    "saved": "Settings saved."
+    "saved": "Settings saved.",
+    "proctoredGate": "Proctored publish gate",
+    "proctoredGateOn": "A test can be used for proctoring only when its computable questions are verified by computation.",
+    "proctoredGateOff": "Tests can be used for proctoring with unverified questions."
   },
   "audit": {
     "title": "Audit log",

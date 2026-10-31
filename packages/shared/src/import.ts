@@ -9,6 +9,13 @@ export const ImportReport = z.object({
   warnings: z.array(QuizIssue),
   canSave: z.boolean(),
   questionCount: z.number().int(),
+  /** Set on save, when a verification job's results went on the questions (SPEC §3D.1 step 5). */
+  verification: z
+    .object({
+      jobId: z.string(),
+      acceptedFixes: z.array(z.object({ questionId: z.number().int(), from: z.string(), to: z.string() })),
+    })
+    .optional(),
 });
 export type ImportReport = z.infer<typeof ImportReport>;
 
@@ -21,8 +28,14 @@ export interface ImportAnalysis {
 }
 
 /** normalize → validate → report; nothing is saved (SPEC §3D.1 steps 2–5). */
-export function analyzeImport(text: string, opts: { title?: string } = {}): ImportAnalysis {
-  const { value, fixes } = normalizeQuiz(text, opts);
+export function analyzeImport(
+  text: string,
+  opts: { title?: string; transform?: (value: unknown) => unknown } = {},
+): ImportAnalysis {
+  const normalized = normalizeQuiz(text, opts);
+  const { fixes } = normalized;
+  // After normalization and before validation: a fix the creator confirmed is what makes a question valid.
+  const value = normalized.value !== undefined && opts.transform ? opts.transform(normalized.value) : normalized.value;
   if (value === undefined) {
     return {
       value,

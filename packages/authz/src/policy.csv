@@ -10,6 +10,9 @@ p, student, llm_status, read, any
 # Proctors: imports and their own tests.
 p, proctor, import, preview, any
 p, proctor, import, create, any
+# Import verification jobs (P2.1): private to their owner, like imports. Admins through `*`.
+p, proctor, verification_job, create, any
+p, proctor, verification_job, read, owner
 p, proctor, test, list, any
 p, proctor, test, read, owner
 p, proctor, test, update, owner

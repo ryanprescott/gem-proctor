@@ -1,8 +1,8 @@
-import type { ImportReport, NormalizationFix, QuizIssue } from "@gem/shared";
+import type { ImportReport, NormalizationFix, QuizIssue, VerificationItem } from "@gem/shared";
 import { IMPORT_MAX_BYTES, type ImportPreview, importCreate, importPreview } from "@gem/shared/contracts";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { type UIEvent, useId, useMemo, useRef, useState } from "react";
+import { type UIEvent, useCallback, useId, useMemo, useRef, useState } from "react";
 import { FileTrigger } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client.ts";
@@ -13,6 +13,7 @@ import { uniqueKeys } from "../ui/keys.ts";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
 import { type DisplayQuestion, QuestionList } from "../ui/QuestionList.tsx";
 import styles from "./Import.module.css";
+import { type FixChoices, VerifyPanel } from "./ImportVerify.tsx";
 
 type T = (key: string, params?: Record<string, unknown>) => string;
 
@@ -151,6 +152,25 @@ function questionsFrom(text: string | null, preview: ImportPreview | null): Disp
   }
 }
 
+function parseValue(text: string | null): Record<string, unknown> | null {
+  if (!text) return null;
+  try {
+    const v = JSON.parse(text) as Record<string, unknown>;
+    return Array.isArray(v.questions) && v.questions.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The question id an issue is about. */
+function issueQuestion(issue: QuizIssue, questions: DisplayQuestion[]): number | null {
+  if (typeof issue.params.id === "number") return issue.params.id;
+  const index = issue.path[1];
+  return issue.path[0] === "questions" && typeof index === "number" ? (questions[index]?.id ?? null) : null;
+}
+
+const NO_CHOICES: FixChoices = { accepted: {}, kept: {} };
+
 function ImportFlow() {
   const { t } = useTranslation();
   const { announce, notify } = useLive();
@@ -160,6 +180,33 @@ function ImportFlow() {
   const [editor, setEditor] = useState("");
   const [preview, setPreview] = useState<{ result: ImportPreview; forText: string } | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [items, setItems] = useState<{ list: VerificationItem[]; done: boolean }>({ list: [], done: false });
+  const [choices, setChoices] = useState<FixChoices>(NO_CHOICES);
+
+  const resetVerification = useCallback(() => {
+    setJobId(null);
+    setItems({ list: [], done: false });
+    setChoices(NO_CHOICES);
+  }, []);
+  const onItems = useCallback((list: VerificationItem[], done: boolean) => setItems({ list, done }), []);
+  const onJob = useCallback((id: string) => {
+    setJobId(id);
+    setItems({ list: [], done: false });
+    setChoices(NO_CHOICES);
+  }, []);
+  const onAccept = useCallback((id: number, fix: string) => {
+    setChoices((c) => {
+      const { [id]: _kept, ...kept } = c.kept;
+      return { accepted: { ...c.accepted, [id]: fix }, kept };
+    });
+  }, []);
+  const onKeep = useCallback((id: number) => {
+    setChoices((c) => {
+      const { [id]: _fix, ...accepted } = c.accepted;
+      return { accepted, kept: { ...c.kept, [id]: true } };
+    });
+  }, []);
 
   const previewMutation = useMutation({
     mutationFn: (input: { text: string; filename?: string }) => api.call(importPreview, { body: input }),
@@ -167,6 +214,7 @@ function ImportFlow() {
       const shown = result.normalizedText ?? input.text;
       setEditor(shown);
       setPreview({ result, forText: shown });
+      resetVerification();
       const r = result.report;
       announce(
         r.canSave
@@ -184,7 +232,20 @@ function ImportFlow() {
   const saveMutation = useMutation({
     mutationFn: () =>
       api.call(importCreate, {
-        body: { originalText: original?.text ?? editor, text: editor, filename: original?.filename },
+        body: {
+          originalText: original?.text ?? editor,
+          text: editor,
+          filename: original?.filename,
+          ...(jobId !== null && items.done
+            ? {
+                verificationJobId: jobId,
+                acceptedFixes: Object.entries(choices.accepted).map(([id, correctAnswer]) => ({
+                  questionId: Number(id),
+                  correctAnswer,
+                })),
+              }
+            : {}),
+        },
       }),
     onSuccess: async ({ testId }) => {
       const message = t("import:announce.saved");
@@ -215,8 +276,18 @@ function ImportFlow() {
   }
 
   const dirty = preview !== null && preview.forText !== editor;
-  const canSave = !!preview?.result.report.canSave && !dirty && !saveMutation.isPending;
   const questions = questionsFrom(preview?.forText ?? null, preview?.result ?? null);
+  // A confirmed fix clears the error it's for (the server applies it on save); a Wrong answer still open blocks.
+  const openErrors = (preview?.result.report.errors ?? []).filter((issue) => {
+    const id = issueQuestion(issue, questions);
+    return !(issue.code === "answer_not_in_options" && id !== null && choices.accepted[id] !== undefined);
+  });
+  const openFixes = items.list.filter(
+    (i) => i.outcome === "wrong_answer" && choices.accepted[i.questionId] === undefined,
+  );
+  const verifying = jobId !== null && !items.done;
+  const canSave =
+    !!preview && openErrors.length === 0 && openFixes.length === 0 && !verifying && !dirty && !saveMutation.isPending;
 
   return (
     <>
@@ -244,6 +315,15 @@ function ImportFlow() {
       {preview ? (
         <>
           <Report report={preview.result.report} />
+          <VerifyPanel
+            value={parseValue(preview.forText)}
+            jobId={jobId}
+            onJob={onJob}
+            onItems={onItems}
+            choices={choices}
+            onAccept={onAccept}
+            onKeep={onKeep}
+          />
           <Card title={t("import:editor.title")}>
             <JsonEditor value={editor} onChange={setEditor} />
             <div className={styles.row}>
@@ -259,8 +339,9 @@ function ImportFlow() {
               </Button>
             </div>
             {dirty ? <p className={styles.hint}>{t("import:editor.dirty")}</p> : null}
-            {!dirty && !preview.result.report.canSave ? (
-              <p className={styles.hint}>{t("import:editor.fixFirst")}</p>
+            {!dirty && openErrors.length > 0 ? <p className={styles.hint}>{t("import:editor.fixFirst")}</p> : null}
+            {!dirty && openFixes.length > 0 ? (
+              <p className={styles.hint}>{t("import:editor.openFixes", { count: openFixes.length })}</p>
             ) : null}
             <ErrorMessage error={saveMutation.error} />
           </Card>

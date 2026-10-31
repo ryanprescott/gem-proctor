@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { newId, PracticeAttempt } from "@gem/db";
+import { newId, PracticeAttempt, VerificationJob } from "@gem/db";
 import { CONTRACTS } from "@gem/shared/contracts";
 import { API, Client, createTestApp, hasDb, registerUser, signIn, type TestApp } from "./helpers.ts";
 
@@ -78,6 +78,7 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
   let testId = "";
   let targetId = "";
   let attemptId = "";
+  let jobId = "";
 
   beforeAll(async () => {
     t = await createTestApp();
@@ -96,6 +97,10 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
     const created = await clients.owner.post(`${API}/imports`, { originalText: FIXED, text: FIXED });
     expect(created.statusCode).toBe(200);
     testId = created.json().testId;
+    jobId = newId();
+    await t.db
+      .insert(VerificationJob)
+      .values({ id: jobId, ownerId: owner.user.id, status: "done", input: { questions: [] }, inputHash: "h" });
     attemptId = newId();
     await t.db.insert(PracticeAttempt).values({
       id: attemptId,
@@ -214,6 +219,14 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
         body: () => ({ disabled: false }),
         expect: adminOnly,
       },
+      {
+        id: "imports.verify.start",
+        method: "POST",
+        url: () => "/imports/verify",
+        body: () => ({ value: { questions: [{ id: 1 }] } }),
+        expect: proctor,
+      },
+      { id: "imports.verify.get", method: "GET", url: () => `/imports/verify/${jobId}`, expect: ownerOnly },
       { id: "admin.settings.get", method: "GET", url: () => "/admin/settings", expect: adminOnly },
       {
         id: "admin.settings.put",

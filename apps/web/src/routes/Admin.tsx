@@ -204,11 +204,15 @@ function SettingsForm() {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ["admin", "settings"], queryFn: () => api.call(adminGetSettings) });
   const [selfRegistration, setSelfRegistration] = useState(true);
+  const [proctoredGate, setProctoredGate] = useState(true);
   useEffect(() => {
-    if (query.data) setSelfRegistration(query.data.settings.selfRegistration);
+    if (query.data) {
+      setSelfRegistration(query.data.settings.selfRegistration);
+      setProctoredGate(query.data.settings.verify.proctoredGate);
+    }
   }, [query.data]);
   const save = useMutation({
-    mutationFn: () => api.call(adminPutSettings, { body: { selfRegistration } }),
+    mutationFn: () => api.call(adminPutSettings, { body: { selfRegistration, verify: { proctoredGate } } }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["admin", "settings"] });
       const message = t("admin:settings.saved");
@@ -235,6 +239,15 @@ function SettingsForm() {
         </Switch>
         <p className={styles.muted}>
           {selfRegistration ? t("admin:settings.selfRegistrationOn") : t("admin:settings.selfRegistrationOff")}
+        </p>
+        <Switch isSelected={proctoredGate} onChange={setProctoredGate} className={styles.switch}>
+          <span className={styles.track} aria-hidden="true">
+            <span className={styles.thumb} />
+          </span>
+          {t("admin:settings.proctoredGate")}
+        </Switch>
+        <p className={styles.muted}>
+          {proctoredGate ? t("admin:settings.proctoredGateOn") : t("admin:settings.proctoredGateOff")}
         </p>
         <ErrorMessage error={save.error} />
         <Button type="submit" isDisabled={save.isPending}>

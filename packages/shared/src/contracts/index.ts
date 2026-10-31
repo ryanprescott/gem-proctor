@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ErrorCode } from "../errors.ts";
 import { ImportReport } from "../import.ts";
 import {
   EndpointCreate,
@@ -18,6 +19,7 @@ import {
 } from "../llm.ts";
 import { QuestionShape, QuizShape, TestType } from "../quiz.ts";
 import { GRADE_OUTCOMES } from "../result.ts";
+import { ProctorBlocker, VerificationItem, VerificationSummary, VerifySettings } from "../verification.ts";
 
 /**
  * API contracts for every route (P0 §6, P1 §6, P1.5 §6). The server registers routes from these, the web client
@@ -188,8 +190,47 @@ export const importCreate = contract({
     /** The (possibly edited) quiz text to save; normalized and validated again on the server. */
     text: z.string(),
     filename: z.string().max(255).optional(),
+    /** The job whose results go on the saved questions (P2.1.md §5). */
+    verificationJobId: Uuid.optional(),
+    /** Suggested fixes the creator confirmed. Nothing else ever applies one. */
+    acceptedFixes: z.array(z.object({ questionId: z.number().int(), correctAnswer: z.string() })).optional(),
   }),
   response: z.object({ testId: Uuid, versionId: Uuid }),
+});
+
+/** How many questions one verification job may hold: each costs model calls. */
+export const VERIFY_MAX_QUESTIONS = 200;
+
+export const VERIFICATION_JOB_STATUSES = ["queued", "running", "done", "failed"] as const;
+export const VerificationJobStatus = z.enum(VERIFICATION_JOB_STATUSES);
+
+export const importVerifyStart = contract({
+  id: "imports.verify.start",
+  method: "POST",
+  path: "/imports/verify",
+  /** The normalized value: questions that failed `Quiz` validation are checked too (SPEC §3D.1 step 4). */
+  body: z.object({ value: z.looseObject({ questions: z.array(z.unknown()).min(1).max(VERIFY_MAX_QUESTIONS) }) }),
+  response: z.object({ job: z.object({ id: Uuid, status: VerificationJobStatus }) }),
+});
+
+export const VerificationJobView = z.object({
+  id: Uuid,
+  status: VerificationJobStatus,
+  items: z.array(VerificationItem),
+  summary: VerificationSummary.nullable(),
+  errorCode: ErrorCode.nullable(),
+  createdAt: Iso,
+  startedAt: Iso.nullable(),
+  finishedAt: Iso.nullable(),
+});
+export type VerificationJobView = z.infer<typeof VerificationJobView>;
+
+export const importVerifyGet = contract({
+  id: "imports.verify.get",
+  method: "GET",
+  path: "/imports/verify/:id",
+  params: IdParams,
+  response: z.object({ job: VerificationJobView }),
 });
 
 // ── Tests (proctor+, owner or admin) ─────────────────────────────────
@@ -213,6 +254,9 @@ export const TestVersionSummary = z.object({
   versionNumber: z.number().int(),
   createdAt: Iso,
   publishedAt: Iso.nullable(),
+  /** Whether a proctored assignment could use this version (SPEC §3A.3.1; P3 enforces it). */
+  proctorReady: z.boolean(),
+  blockers: z.array(ProctorBlocker),
   imported: z.boolean(),
 });
 
@@ -322,6 +366,7 @@ export const InstanceSettings = z.object({
   selfRegistration: z.boolean(),
   /** While on, no role may use a `cloud` endpoint (SPEC §3B.2). */
   localEndpointsOnly: z.boolean(),
+  verify: VerifySettings,
 });
 export type InstanceSettings = z.infer<typeof InstanceSettings>;
 
@@ -337,7 +382,9 @@ export const adminPutSettings = contract({
   method: "PUT",
   path: "/admin/settings",
   /** A setting left out keeps its value. */
-  body: InstanceSettings.partial({ localEndpointsOnly: true }),
+  body: InstanceSettings.partial({ localEndpointsOnly: true, verify: true }).extend({
+    verify: VerifySettings.partial().optional(),
+  }),
   response: z.object({ settings: InstanceSettings }),
 });
 
@@ -715,6 +762,8 @@ export const CONTRACTS = [
   me,
   importPreview,
   importCreate,
+  importVerifyStart,
+  importVerifyGet,
   testsList,
   testsGet,
   testsUpdate,

@@ -33,7 +33,9 @@
     "help": "Edit the JSON below ({{lines}} lines), then run the preview again.",
     "rerun": "Run preview again",
     "dirty": "You changed the JSON. Run the preview again before saving.",
-    "fixFirst": "Fix the errors above in the JSON, then run the preview again."
+    "fixFirst": "Fix the errors above in the JSON, then run the preview again.",
+    "openFixes_one": "Accept the suggested fix above, or edit the question and run the preview again.",
+    "openFixes_other": "Accept the {{count}} suggested fixes above, or edit those questions and run the preview again."
   },
   "questions": {
     "title_one": "{{count}} question",
@@ -87,5 +89,59 @@
     "ids_renumbered": "Question ids were missing or repeated: renumbered 1 to {{count}}.",
     "total_questions_recomputed": "Set total_questions to {{to}} (it said “{{from}}”).",
     "type_inferred": "Set the question type to {{type}}."
+  },
+  "verify": {
+    "title": "Verify answers",
+    "help": "Computes each computable answer independently and compares it with the stated one. Suggested fixes are only applied if you accept them.",
+    "unassigned": "Verification needs a model for the verify.solve role, and none is assigned. You can still save this quiz; its questions stay unverified. An admin can assign the role under LLM.",
+    "run": "Verify answers",
+    "started": "Verification started.",
+    "progress": "{{done}} of {{total}} questions checked.",
+    "finished_one": "Verification finished: {{total}} questions checked, {{count}} wrong answer.",
+    "finished_other": "Verification finished: {{total}} questions checked, {{count}} wrong answers.",
+    "details": "Check program and result for question {{id}}",
+    "program": "Check program",
+    "result": "Result",
+    "repaired": "The first program failed and was repaired once.",
+    "suggested": "Suggested answer:",
+    "accepted": "Fix accepted. It's applied when you save.",
+    "kept": "You kept your answer. The error stays until you edit the question.",
+    "accept": "Accept fix for question {{id}}",
+    "keep": "Keep mine for question {{id}}",
+    "outcomes": {
+      "verified": "Verified",
+      "wrong_answer": "Wrong answer",
+      "no_match": "No match",
+      "ambiguous": "Ambiguous",
+      "couldnt_check": "Couldn't check",
+      "not_computable": "Not computable",
+      "denied": "Sandbox denied"
+    },
+    "reasons": {
+      "ok": "The computed value matches the stated answer.",
+      "wrong_answer": "The computed value matches another option, not the stated answer.",
+      "no_match": "The computed value matches no option. The question, the options or the check is wrong.",
+      "ambiguous": "The computed value matches more than one option: they're duplicates.",
+      "program_failed": "The check program failed.",
+      "program_timeout": "The check program ran out of time.",
+      "option_unparseable": "An option couldn't be read as a value.",
+      "comparison_guard": "Comparing the values took too long.",
+      "comparison_symbolic": "The check gave a number, and the options are formulas, so they can't be compared.",
+      "no_program": "There's no check program.",
+      "not_computable": "This question can't be checked by computing it.",
+      "model_agreed": "The model picked the stated answer too, without seeing it. That isn't a computed check.",
+      "model_disagreed": "The model picked a different answer. Check this one by hand.",
+      "invalid_question": "This question has no text to check.",
+      "programs_disagree": "The two programs gave different values.",
+      "constraint_unmet": "No input values met the question's constraint.",
+      "constraint_error": "The question's constraint failed.",
+      "source_not_in_quote": "A source value isn't in the cited quote.",
+      "source_unparseable": "A source value couldn't be read.",
+      "target_unreachable": "Sampling couldn't reach both answers.",
+      "not_computable_type": "This question type can't be computed.",
+      "sandbox_denial": "The check program tried something the sandbox blocks. This has been logged.",
+      "calculation_as_concept": "A calculation written as a concept question.",
+      "llm_failed": "The model couldn't complete the check."
+    }
   }
 }

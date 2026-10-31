@@ -12,11 +12,15 @@ import {
   EVAL_METRICS,
   EVAL_STATUSES,
   FIX_CODES,
+  FLOW_B_OUTCOMES,
   GRADE_OUTCOMES,
+  L7_REASONS,
   MODEL_ROLES,
+  PROCTOR_BLOCKERS,
   QUESTION_TYPES,
   QUIZ_ISSUE_CODES,
   STRUCTURED_MODES,
+  VERIFICATION_STATUSES,
 } from "@gem/shared";
 import { AUDIT_ACTIONS, AUDIT_TARGETS, PRACTICE_KINDS, ROLES } from "@gem/shared/contracts";
 import { Glob } from "bun";
@@ -42,6 +46,10 @@ export const DYNAMIC_FAMILIES: Record<string, readonly string[]> = {
   "admin:llm.locations.": ENDPOINT_LOCATIONS,
   "admin:llm.evals.statuses.": EVAL_STATUSES,
   "admin:llm.evals.metrics.": EVAL_METRICS,
+  "import:verify.outcomes.": FLOW_B_OUTCOMES,
+  "import:verify.reasons.": L7_REASONS,
+  "tests:verification.status.": VERIFICATION_STATUSES,
+  "tests:proctor.reasons.": PROCTOR_BLOCKERS,
 };
 
 const PLURAL_SUFFIXES = ["_zero", "_one", "_two", "_few", "_many", "_other"];

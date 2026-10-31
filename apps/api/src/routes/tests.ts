@@ -1,9 +1,12 @@
+import { checkProctorReady } from "@gem/authoring";
 import { newId, Test, TestImportRecord, TestVersion, User } from "@gem/db";
-import { AppError, analyzeImport, formatQuizLike, type Quiz, serializeQuiz } from "@gem/shared";
+import { AppError, analyzeImport, formatQuizLike, type ImportReport, type Quiz, serializeQuiz } from "@gem/shared";
 import {
   IMPORT_MAX_BYTES,
   importCreate,
   importPreview,
+  importVerifyGet,
+  importVerifyStart,
   type TestSummary,
   testsExport,
   testsGet,
@@ -15,6 +18,9 @@ import { and, desc, eq, inArray, isNotNull, isNull, max, type SQL } from "drizzl
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AppContext } from "../context.ts";
 import { route } from "../http/route.ts";
+import { getSettings } from "../settings.ts";
+import { applyVerification, createVerifyJob, loadOwnJob, VERIFY_QUEUE, verifyJobView } from "../verification.ts";
+import { modelCallLimit } from "./llm.ts";
 
 const textBytes = (s: string) => Buffer.byteLength(s, "utf8");
 
@@ -105,13 +111,14 @@ async function version(ctx: AppContext, testId: string, versionNumber?: number) 
   return row;
 }
 
-function versionSummary(v: typeof TestVersion.$inferSelect, imported: boolean) {
+function versionSummary(v: typeof TestVersion.$inferSelect, imported: boolean, gate: boolean) {
   return {
     id: v.id,
     versionNumber: v.versionNumber,
     createdAt: v.createdAt.toISOString(),
     publishedAt: v.publishedAt?.toISOString() ?? null,
     imported,
+    ...checkProctorReady(v.content as Quiz, gate),
   };
 }
 
@@ -153,10 +160,20 @@ export function testRoutes(app: FastifyInstance, ctx: AppContext) {
     async ({ body, user }) => {
       checkSize(body.text);
       checkSize(body.originalText);
-      const analysis = analyzeImport(body.text, { title: titleFromFilename(body.filename) });
+      const job = body.verificationJobId ? await loadOwnJob(ctx, body.verificationJobId, user) : null;
+      if (!job && (body.acceptedFixes ?? []).length > 0) throw new AppError("verify_fix_invalid");
+      const applied: NonNullable<ImportReport["verification"]>["acceptedFixes"] = [];
+      const analysis = analyzeImport(body.text, {
+        title: titleFromFilename(body.filename),
+        ...(job ? { transform: (value) => applyVerification(value, job, body.acceptedFixes ?? [], applied) } : {}),
+      });
       if (!analysis.quiz) {
         throw new AppError("import_invalid_quiz", { errors: analysis.report.errors.length });
       }
+      const report: ImportReport = {
+        ...analysis.report,
+        ...(job ? { verification: { jobId: job.id, acceptedFixes: applied } } : {}),
+      };
       const quiz = analysis.quiz;
       const testId = newId();
       const versionId = newId();
@@ -177,13 +194,27 @@ export function testRoutes(app: FastifyInstance, ctx: AppContext) {
           testVersionId: versionId,
           originalFilename: body.filename ?? null,
           sourceRaw: body.originalText,
-          report: analysis.report,
+          report,
         });
       });
       return { testId, versionId };
     },
     { bodyLimit },
   );
+
+  route(
+    app,
+    importVerifyStart,
+    async ({ body, user }) => {
+      if (!ctx.queue) throw new AppError("service_unavailable");
+      const job = await createVerifyJob(ctx, user.userId, body.value);
+      await ctx.queue.send(VERIFY_QUEUE, { jobId: job.id });
+      return { job: { id: job.id, status: job.status } };
+    },
+    { ...modelCallLimit(ctx), bodyLimit },
+  );
+
+  route(app, importVerifyGet, async ({ params }) => ({ job: await verifyJobView(ctx, params.id) }));
 
   route(app, testsList, async ({ query, user }) => {
     const conds: SQL[] = [];
@@ -198,9 +229,10 @@ export function testRoutes(app: FastifyInstance, ctx: AppContext) {
     const s = await summary(ctx, params.id);
     const { version: v, importId } = await version(ctx, params.id);
     const content = v.content as Quiz;
+    const { verify } = await getSettings(ctx.db);
     return {
       test: { ...s, testType: content.testType ?? null },
-      version: versionSummary(v, importId !== null),
+      version: versionSummary(v, importId !== null, verify.proctoredGate),
       content,
     };
   });
@@ -222,7 +254,8 @@ export function testRoutes(app: FastifyInstance, ctx: AppContext) {
       .leftJoin(TestImportRecord, eq(TestImportRecord.testVersionId, TestVersion.id))
       .where(eq(TestVersion.testId, params.id))
       .orderBy(desc(TestVersion.versionNumber));
-    return { versions: rows.map((r) => versionSummary(r.version, r.importId !== null)) };
+    const { verify } = await getSettings(ctx.db);
+    return { versions: rows.map((r) => versionSummary(r.version, r.importId !== null, verify.proctoredGate)) };
   });
 
   route(app, testsExport, async ({ params, query, reply }) => {

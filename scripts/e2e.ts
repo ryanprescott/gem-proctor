@@ -6,12 +6,12 @@
 // Either way a mock model server runs here for the LLM page; its URL reaches the tests as E2E_LLM_URL.
 // A stack in containers reaches it through E2E_MOCK_HOST (CI: host.docker.internal).
 import { randomBytes } from "node:crypto";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bootstrapDatabase, withDatabase } from "@gem/db";
 import pg from "pg";
-import { MockLlmServer } from "../packages/llm/mock/server.ts";
+import { type ChatReply, MockLlmServer } from "../packages/llm/mock/server.ts";
 import { adminUrl, ROOT, startLocalPg } from "./pg-local.ts";
 import { findVerifyPython, type LocalVerify, superviseVerify } from "./verify-local.ts";
 
@@ -39,6 +39,36 @@ async function waitFor(url: string, timeoutMs: number): Promise<void> {
     }
   }
   throw new Error(`timed out waiting for ${url}`);
+}
+
+const RECORDED = JSON.parse(readFileSync(join(ROOT, "packages/authoring/test/fixtures/l7-recorded.json"), "utf8")) as {
+  quiz: { replies: { promptId: string; question: string; value: unknown }[] };
+};
+
+/** The Verify answers flow: what the reference model wrote for the fixture, then a hostile result (C31). */
+function verifyReply(content: string): ChatReply | null {
+  const prompt = content.includes("Write a short Python program")
+    ? "verify.solve.blind"
+    : content.includes("Decide whether answering")
+      ? "verify.solve.classify"
+      : content.includes("by choosing one of its options")
+        ? "verify.solve.pick"
+        : null;
+  if (!prompt) return null;
+  const question = content.split("Question:\n")[1]?.split("\n\nOptions:")[0]?.trim() ?? "";
+  if (question.includes("HOSTILE")) {
+    if (prompt === "verify.solve.classify") return JSON.stringify({ reason: "a calculation", computable: true });
+    const latex = String.raw`\\href{javascript:alert(1)}{x}`;
+    return {
+      text: JSON.stringify({
+        program: `from sympy import Symbol\nresult = Symbol('<img src=x onerror=alert(1)> ${latex}')`,
+      }),
+      delayMs: 50,
+    };
+  }
+  const recorded = RECORDED.quiz.replies.find((r) => r.promptId === prompt && r.question.trim() === question);
+  // A little delay, so the UI shows progress.
+  return recorded ? { text: JSON.stringify(recorded.value), delayMs: 50 } : null;
 }
 
 /** Enough for the probe and for `generate-smoke`; slow enough that the UI sees a run in progress. */
@@ -72,7 +102,10 @@ function startMockLlm(mockHost: string | undefined) {
     reply: (body) =>
       JSON.stringify(body.messages).includes("2 + 2")
         ? '{"answer": 4}'
-        : { text: JSON.stringify({ questions: [question, question, question, question] }), delayMs: 700 },
+        : (verifyReply((body.messages as { content: string }[]).map((m) => m.content).join("\n")) ?? {
+            text: JSON.stringify({ questions: [question, question, question, question] }),
+            delayMs: 700,
+          }),
   });
   return { mock, url: mockHost ? `http://${mockHost}:${mock.port}/v1` : mock.url };
 }

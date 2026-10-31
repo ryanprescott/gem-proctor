@@ -64,13 +64,12 @@ const KINDS: Record<string, PromptKind> = {
 
 /** Replays recorded replies by prompt and question. A request nothing was recorded for is a test failure. */
 export function replay(replies: RecordedReply[]) {
-  const left = replies.map((r) => ({ ...r, kind: KINDS[r.promptId] }));
+  const recorded = replies.map((r) => ({ ...r, kind: KINDS[r.promptId] }));
   return (body: Record<string, unknown>): ChatReply => {
     const { kind, question } = promptOf(body);
-    const at = left.findIndex((r) => r.kind === kind && r.question.trim() === question);
-    if (at === -1) return { status: 500, body: { error: { message: `nothing recorded: ${kind} ${question}` } } };
-    const [reply] = left.splice(at, 1);
-    return JSON.stringify(reply?.value);
+    const reply = recorded.find((r) => r.kind === kind && r.question.trim() === question);
+    if (!reply) return { status: 500, body: { error: { message: `nothing recorded: ${kind} ${question}` } } };
+    return JSON.stringify(reply.value);
   };
 }
 
@@ -87,7 +86,10 @@ export interface L7Env {
   close(): Promise<void>;
 }
 
-export async function createL7Env(settings: Partial<VerifySettings> = {}): Promise<L7Env> {
+export async function createL7Env(
+  settings: Partial<VerifySettings> = {},
+  env: Record<string, string> = {},
+): Promise<L7Env> {
   const dir = mkdtempSync(join(tmpdir(), "gem-l7-"));
   const socket = join(dir, "verify", "verify.sock");
   const verify: LocalVerify = superviseVerify(verifyPython as string, socket);
@@ -95,7 +97,7 @@ export async function createL7Env(settings: Partial<VerifySettings> = {}): Promi
   for (let i = 0; i < 200 && !(await client.health()); i++) await Bun.sleep(100);
   let reply: (body: Record<string, unknown>) => ChatReply = () => "{}";
   const mock = new MockLlmServer({ reply: (body) => reply(body) });
-  const t = await createTestApp();
+  const t = await createTestApp({ env });
   t.ctx.verify = client;
   const assignSolve = async () => {
     await assign(t.db, "verify.solve", { url: mock.url, timeoutMs: 20_000 });
