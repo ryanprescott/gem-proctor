@@ -19,6 +19,7 @@ import {
 } from "../llm.ts";
 import { QuestionShape, QuizShape, TestType } from "../quiz.ts";
 import { GRADE_OUTCOMES } from "../result.ts";
+import { AuthoringSettings, EmbedError, SourceEmbedStatus, SourceFormat, SourcePreview } from "../sources.ts";
 import { ProctorBlocker, VerificationItem, VerificationSummary, VerifySettings } from "../verification.ts";
 
 /**
@@ -367,6 +368,7 @@ export const InstanceSettings = z.object({
   /** While on, no role may use a `cloud` endpoint (SPEC §3B.2). */
   localEndpointsOnly: z.boolean(),
   verify: VerifySettings,
+  authoring: AuthoringSettings,
 });
 export type InstanceSettings = z.infer<typeof InstanceSettings>;
 
@@ -382,8 +384,9 @@ export const adminPutSettings = contract({
   method: "PUT",
   path: "/admin/settings",
   /** A setting left out keeps its value. */
-  body: InstanceSettings.partial({ localEndpointsOnly: true, verify: true }).extend({
+  body: InstanceSettings.partial({ localEndpointsOnly: true, verify: true, authoring: true }).extend({
     verify: VerifySettings.partial().optional(),
+    authoring: AuthoringSettings.partial().optional(),
   }),
   response: z.object({ settings: InstanceSettings }),
 });
@@ -403,11 +406,24 @@ export const AUDIT_ACTIONS = [
   "llm.role.assign",
   "llm.role.unassign",
   "verify.sandbox_denial",
+  "source.create",
+  "source.delete",
+  "authoring_session.create",
+  "authoring_session.delete",
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
 
-export const AUDIT_TARGETS = ["user", "settings", "llm_endpoint", "llm_role", "verification_job", "question"] as const;
+export const AUDIT_TARGETS = [
+  "user",
+  "settings",
+  "llm_endpoint",
+  "llm_role",
+  "verification_job",
+  "question",
+  "source",
+  "authoring_session",
+] as const;
 
 export const AuditEntry = z.object({
   id: Uuid,
@@ -752,7 +768,197 @@ export const llmRoles = contract({
   response: z.object({ roles: z.array(LlmRoleStatus) }),
 });
 
+// ── Sources (proctor+, owner or admin; P2 §6) ────────────────────────
+
+export const SOURCE_TITLE_MAX = 300;
+export const SOURCE_LABEL_MAX = 60;
+
+const SourceMeta = z.object({
+  title: z.string().trim().min(1).max(SOURCE_TITLE_MAX),
+  /** Short, e.g. "VMLS": shown in citations, and it fills `course` on generated quizzes. */
+  citationLabel: z.string().trim().min(1).max(SOURCE_LABEL_MAX),
+  author: z.string().trim().max(300).optional(),
+  edition: z.string().trim().max(100).optional(),
+  url: z.url().max(2000).optional(),
+});
+
+/** `text` is pasted, or read from an upload (`filename` says which kind it is). Checked against the instance cap. */
+const SourceText = z.object({
+  text: z.string(),
+  filename: z.string().max(255).optional(),
+  format: SourceFormat.optional(),
+});
+
+export const SourceRevisionView = z.object({
+  id: Uuid,
+  number: z.number().int(),
+  format: SourceFormat,
+  embedStatus: SourceEmbedStatus,
+  embedError: EmbedError.nullable(),
+  chunks: z.number().int(),
+  embedded: z.number().int(),
+  tokens: z.number().int(),
+  flagged: z.number().int(),
+  createdAt: Iso,
+});
+export type SourceRevisionView = z.infer<typeof SourceRevisionView>;
+
+export const SourceSummary = z.object({
+  id: Uuid,
+  title: z.string(),
+  citationLabel: z.string(),
+  author: z.string().nullable(),
+  edition: z.string().nullable(),
+  url: z.string().nullable(),
+  ownerId: Uuid,
+  createdAt: Iso,
+  latest: SourceRevisionView,
+  /** Its latest revision is `ready` (P2.md §4). */
+  usable: z.boolean(),
+});
+export type SourceSummary = z.infer<typeof SourceSummary>;
+
+export const SourceSectionView = z.object({
+  id: Uuid,
+  parentId: Uuid.nullable(),
+  level: z.number().int(),
+  title: z.string(),
+  order: z.number().int(),
+  headingPath: z.array(z.string()),
+  chunks: z.number().int(),
+  tokens: z.number().int(),
+});
+export type SourceSectionView = z.infer<typeof SourceSectionView>;
+
+export const SourceChunkView = z.object({
+  id: Uuid,
+  chunkKey: z.string(),
+  sectionId: Uuid,
+  headingPath: z.array(z.string()),
+  charStart: z.number().int(),
+  charEnd: z.number().int(),
+  text: z.string(),
+  tokenCount: z.number().int(),
+  embedded: z.boolean(),
+  flaggedAt: Iso.nullable(),
+  flagReason: z.string().nullable(),
+});
+export type SourceChunkView = z.infer<typeof SourceChunkView>;
+
+const RevisionQuery = z.object({ revision: z.coerce.number().int().positive().optional() });
+
+export const sourcesPreview = contract({
+  id: "sources.preview",
+  method: "POST",
+  path: "/sources/preview",
+  body: SourceText.extend({ title: z.string().max(SOURCE_TITLE_MAX).optional() }),
+  response: SourcePreview,
+});
+
+export const sourcesCreate = contract({
+  id: "sources.create",
+  method: "POST",
+  path: "/sources",
+  body: SourceMeta.extend(SourceText.shape),
+  response: z.object({ source: SourceSummary }),
+});
+
+export const sourcesList = contract({
+  id: "sources.list",
+  method: "GET",
+  path: "/sources",
+  response: z.object({ sources: z.array(SourceSummary) }),
+});
+
+export const sourcesGet = contract({
+  id: "sources.get",
+  method: "GET",
+  path: "/sources/:id",
+  params: IdParams,
+  response: z.object({ source: SourceSummary, revisions: z.array(SourceRevisionView) }),
+});
+
+export const sourcesUpdate = contract({
+  id: "sources.update",
+  method: "PUT",
+  path: "/sources/:id",
+  params: IdParams,
+  body: SourceMeta.partial().extend(SourceText.shape),
+  response: z.object({ source: SourceSummary }),
+});
+
+export const sourcesDelete = contract({
+  id: "sources.delete",
+  method: "DELETE",
+  path: "/sources/:id",
+  params: IdParams,
+  response: Ok,
+});
+
+export const sourcesRevision = contract({
+  id: "sources.revision",
+  method: "GET",
+  path: "/sources/:id/revisions/:n",
+  params: z.object({ id: Uuid, n: z.coerce.number().int().positive() }),
+  response: z.object({ revision: SourceRevisionView, markdown: z.string() }),
+});
+
+export const sourcesSections = contract({
+  id: "sources.sections",
+  method: "GET",
+  path: "/sources/:id/sections",
+  params: IdParams,
+  query: RevisionQuery,
+  response: z.object({ sections: z.array(SourceSectionView) }),
+});
+
+export const sourcesChunks = contract({
+  id: "sources.chunks",
+  method: "GET",
+  path: "/sources/:id/chunks",
+  params: IdParams,
+  query: RevisionQuery.extend({
+    /** Comma-separated. */
+    sectionIds: z.string().max(40_000).optional(),
+    flagged: z.enum(["true", "false"]).optional(),
+  }),
+  response: z.object({ chunks: z.array(SourceChunkView) }),
+});
+
+export const sourcesEmbedRetry = contract({
+  id: "sources.embedRetry",
+  method: "POST",
+  path: "/sources/:id/embed:retry",
+  params: IdParams,
+  response: z.object({ source: SourceSummary }),
+});
+
+/** `once`: send the current state and close, for a client that can't hold a stream. */
+export const EventsQuery = z.object({ once: z.enum(["true"]).optional() });
+
+/** Server-sent events: the source's state at once, and again on every change. */
+export const sourcesEvents = contract({
+  id: "sources.events",
+  method: "GET",
+  path: "/sources/:id/events",
+  params: IdParams,
+  query: EventsQuery,
+  response: z.string(),
+  responseKind: "text",
+});
+
 export const CONTRACTS = [
+  sourcesPreview,
+  sourcesCreate,
+  sourcesList,
+  sourcesGet,
+  sourcesUpdate,
+  sourcesDelete,
+  sourcesRevision,
+  sourcesSections,
+  sourcesChunks,
+  sourcesEmbedRetry,
+  sourcesEvents,
   health,
   register,
   login,

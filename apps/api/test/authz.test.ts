@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { newId, PracticeAttempt, VerificationJob } from "@gem/db";
+import { newId, PracticeAttempt, Source, SourceRevision, VerificationJob } from "@gem/db";
 import { CONTRACTS } from "@gem/shared/contracts";
 import { API, Client, createTestApp, hasDb, registerUser, signIn, type TestApp } from "./helpers.ts";
 
@@ -69,8 +69,46 @@ function llmRows(admin: Record<Who, Expect>, signedIn: Record<Who, Expect>) {
 
 type Who = "anonymous" | "student" | "owner" | "other" | "admin";
 const WHO: Who[] = ["anonymous", "student", "owner", "other", "admin"];
-/** `missing`: 404 `not_found`, for a resource that exists but is private to someone else (P1.md §5). */
-type Expect = "allow" | "deny" | "missing";
+/**
+ * `missing`: 404 `not_found`, for a resource that exists but is private to someone else (P1.md §5).
+ * `hidden`: the same with the resource's own code (P2.md §5).
+ */
+type Expect = "allow" | "deny" | "missing" | "hidden";
+
+/** The source routes (P2.md E9). Delete comes last, since it ends the source for the rows after it. */
+function sourceRows(id: () => string, proctor: Record<Who, Expect>, own: Record<Who, Expect>) {
+  return [
+    {
+      id: "sources.preview",
+      method: "POST",
+      url: () => "/sources/preview",
+      body: () => ({ text: "# A\n\nx" }),
+      expect: proctor,
+    },
+    {
+      id: "sources.create",
+      method: "POST",
+      url: () => "/sources",
+      body: () => ({ title: "T", citationLabel: "L", text: "# A\n\nx" }),
+      expect: proctor,
+    },
+    { id: "sources.list", method: "GET", url: () => "/sources", expect: proctor },
+    { id: "sources.get", method: "GET", url: () => `/sources/${id()}`, expect: own },
+    {
+      id: "sources.update",
+      method: "PUT",
+      url: () => `/sources/${id()}`,
+      body: () => ({ text: "# B\n\ny" }),
+      expect: own,
+    },
+    { id: "sources.revision", method: "GET", url: () => `/sources/${id()}/revisions/1`, expect: own },
+    { id: "sources.sections", method: "GET", url: () => `/sources/${id()}/sections`, expect: own },
+    { id: "sources.chunks", method: "GET", url: () => `/sources/${id()}/chunks`, expect: own },
+    { id: "sources.embedRetry", method: "POST", url: () => `/sources/${id()}/embed:retry`, expect: own },
+    { id: "sources.events", method: "GET", url: () => `/sources/${id()}/events?once=true`, expect: own },
+    { id: "sources.delete", method: "DELETE", url: () => `/sources/${id()}`, expect: own },
+  ];
+}
 
 describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () => {
   let t: TestApp;
@@ -79,6 +117,7 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
   let targetId = "";
   let attemptId = "";
   let jobId = "";
+  let sourceId = "";
 
   beforeAll(async () => {
     t = await createTestApp();
@@ -101,6 +140,18 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
     await t.db
       .insert(VerificationJob)
       .values({ id: jobId, ownerId: owner.user.id, status: "done", input: { questions: [] }, inputHash: "h" });
+    sourceId = newId();
+    await t.db.insert(Source).values({ id: sourceId, ownerId: owner.user.id, title: "S", citationLabel: "S" });
+    await t.db.insert(SourceRevision).values({
+      id: newId(),
+      sourceId,
+      number: 1,
+      markdown: "# A\n\nx",
+      format: "markdown",
+      contentHash: "h",
+      embedStatus: "ready",
+      createdBy: owner.user.id,
+    });
     attemptId = newId();
     await t.db.insert(PracticeAttempt).values({
       id: attemptId,
@@ -148,6 +199,14 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
     student: "deny",
     owner: "deny",
     other: "deny",
+    admin: "allow",
+  };
+  // A source: another proctor gets 404, as if it didn't exist; an admin may reach it (P2.md §5).
+  const ownSource: Record<Who, Expect> = {
+    anonymous: "deny",
+    student: "deny",
+    owner: "allow",
+    other: "hidden",
     admin: "allow",
   };
 
@@ -280,6 +339,7 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
         expect: ownAttempt,
       },
       ...llmRows(adminOnly, signedIn),
+      ...sourceRows(() => sourceId, proctor, ownSource),
       // Last: it ends each session.
       { id: "auth.logout", method: "POST", url: () => "/auth/logout", expect: signedIn },
     ];
@@ -305,6 +365,8 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
         } else if (want === "missing") {
           expect(res.statusCode).toBe(404);
           expect(code).toBe("not_found");
+        } else if (want === "hidden") {
+          expect(res.statusCode).toBe(404);
         } else if (who === "anonymous") {
           expect(res.statusCode).toBe(401);
           expect(res.json().code).toBe("unauthenticated");

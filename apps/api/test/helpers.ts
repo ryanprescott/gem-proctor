@@ -9,6 +9,7 @@ import { type BuildOptions, buildApp } from "../src/app.ts";
 import { SessionStore } from "../src/auth/sessions.ts";
 import { type Config, loadConfig } from "../src/config.ts";
 import type { AppContext } from "../src/context.ts";
+import { EventHub } from "../src/events.ts";
 import type { VerifyClient } from "../src/verify-client.ts";
 
 /**
@@ -113,6 +114,7 @@ export async function createTestApp(
     queue: null,
     verify,
     llm: createLlmRuntime({ store: dbStore(db), secretKey: config.ENDPOINT_SECRET_KEY }),
+    events: new EventHub(),
     now: () => new Date(),
   };
   const app = await buildApp(ctx, opts.build);

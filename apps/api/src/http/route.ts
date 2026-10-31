@@ -1,8 +1,8 @@
 import { permissionFor, type RoutePermission } from "@gem/authz";
-import { PracticeAttempt, Test, VerificationJob } from "@gem/db";
+import { PracticeAttempt, Source, Test, VerificationJob } from "@gem/db";
 import { AppError, type ErrorCode } from "@gem/shared";
 import type { Contract, Role } from "@gem/shared/contracts";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteShorthandOptions } from "fastify";
 import type { z } from "zod";
 import type { SessionUser } from "../auth/sessions.ts";
@@ -105,6 +105,14 @@ async function relationship(ctx: AppContext, permission: RoutePermission, reques
       .limit(1);
     return rows[0] ? { rel: "owner" as const, found: true } : { rel: "none" as const, found: false };
   }
+  if (permission.resource === "source") {
+    const rows = await ctx.db
+      .select({ ownerId: Source.ownerId })
+      .from(Source)
+      .where(and(eq(Source.id, id), isNull(Source.deletedAt)))
+      .limit(1);
+    return privateTo(rows[0]?.ownerId, user);
+  }
   const table = permission.resource === "verification_job" ? VerificationJob : Test;
   const rows = await ctx.db.select({ ownerId: table.ownerId }).from(table).where(eq(table.id, id)).limit(1);
   const row = rows[0];
@@ -112,10 +120,17 @@ async function relationship(ctx: AppContext, permission: RoutePermission, reques
   return { rel: row.ownerId === user.userId ? ("owner" as const) : ("none" as const), found: true };
 }
 
+/** Sources and sessions: someone else's doesn't exist, except to an admin, who may read any (P2.md §5). */
+function privateTo(ownerId: string | undefined, user: CurrentUser) {
+  if (ownerId === user.userId) return { rel: "owner" as const, found: true };
+  return { rel: "none" as const, found: ownerId !== undefined && user.role === "admin" };
+}
+
 const NOT_FOUND: Record<NonNullable<Extract<RoutePermission, { objType: string }>["resource"]>, ErrorCode> = {
   test: "test_not_found",
   practice_attempt: "not_found",
   verification_job: "verify_job_not_found",
+  source: "source_not_found",
 };
 
 /**

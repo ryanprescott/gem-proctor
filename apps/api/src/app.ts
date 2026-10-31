@@ -17,6 +17,7 @@ import { authRoutes } from "./routes/auth.ts";
 import { llmRoutes } from "./routes/llm.ts";
 import { practiceRoutes } from "./routes/practice.ts";
 import { publicRoutes } from "./routes/public.ts";
+import { sourcesRoutes } from "./routes/sources.ts";
 import { testRoutes } from "./routes/tests.ts";
 
 export interface BuildOptions {
@@ -68,6 +69,7 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   adminRoutes(app, ctx);
   practiceRoutes(app, ctx);
   llmRoutes(app, ctx);
+  sourcesRoutes(app, ctx);
   opts.extraRoutes?.(app);
 
   app.get("/api/openapi.json", { config: { permission: { public: true } } }, async () => app.swagger());

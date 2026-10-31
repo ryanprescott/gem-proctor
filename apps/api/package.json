@@ -16,6 +16,7 @@
     "@gem/authoring": "workspace:*",
     "@gem/authz": "workspace:*",
     "@gem/db": "workspace:*",
+    "@gem/knowledge": "workspace:*",
     "@gem/llm": "workspace:*",
     "@gem/shared": "workspace:*",
     "drizzle-orm": "0.45.4",

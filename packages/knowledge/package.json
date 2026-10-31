@@ -2,5 +2,18 @@
   "name": "@gem/knowledge",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@gem/db": "workspace:*",
+    "@gem/llm": "workspace:*",
+    "@gem/shared": "workspace:*",
+    "drizzle-orm": "0.45.4",
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0",
+    "remark-parse": "11.0.0",
+    "unified": "11.0.5"
+  }
 }

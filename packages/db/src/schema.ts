@@ -4,22 +4,26 @@ import {
   boolean,
   check,
   customType,
+  foreignKey,
   index,
   integer,
   jsonb,
   numeric,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
   unique,
   uniqueIndex,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
 
 /**
- * P0 tables (P0.md §4), P1's practice tables (P1.md §4), P1.5's LLM tables (P1.5.md §4) and P2.1's verification
- * tables (P2.1.md §4), from SPEC §10. Postgres names are snake_case; TypeScript names follow SPEC §10.
+ * P0 tables (P0.md §4), P1's practice tables (P1.md §4), P1.5's LLM tables (P1.5.md §4), P2.1's verification
+ * tables (P2.1.md §4) and P2's knowledge base and authoring tables (P2.md §4), from SPEC §10.
+ * Postgres names are snake_case; TypeScript names follow SPEC §10.
  * Ids are UUID v7, generated in the app.
  */
 
@@ -91,10 +95,17 @@ export const Test = pgTable(
     tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
     createdAt: ts("created_at").notNull().defaultNow(),
     archivedAt: ts("archived_at"),
-    /** Set for tests published from authoring (P2). No FK yet: that table doesn't exist in P0. */
+    /** Set for tests published from authoring (P2). */
     authoringSessionId: uuid("authoring_session_id"),
   },
-  (t) => [index("test_owner_idx").on(t.ownerId)],
+  (t) => [
+    index("test_owner_idx").on(t.ownerId),
+    foreignKey({
+      columns: [t.authoringSessionId],
+      foreignColumns: [AuthoringSession.id],
+      name: "test_authoring_session_fk",
+    }),
+  ],
 );
 
 export const TestVersion = pgTable(
@@ -399,7 +410,7 @@ export const VerificationJob = pgTable(
 
 /**
  * One program run in the sandbox: provenance, append-only for the app's DB user (grants migration). `result` is
- * text as the runner serialized it, stored and shown, never evaluated. P2 adds `draft_question_id`.
+ * text as the runner serialized it, stored and shown, never evaluated.
  */
 export const VerificationRun = pgTable(
   "verification_run",
@@ -407,7 +418,8 @@ export const VerificationRun = pgTable(
     id: uuid("id").primaryKey(),
     jobId: uuid("job_id").references(() => VerificationJob.id),
     testVersionId: uuid("test_version_id").references(() => TestVersion.id),
-    /** The question's `id` within its quiz (SPEC §2.3). */
+    draftQuestionId: uuid("draft_question_id").references(() => DraftQuestion.id),
+    /** The question's `id` within its quiz (SPEC §2.3), or a draft's position in its session. */
     questionId: integer("question_id").notNull(),
     programKind: text("program_kind", { enum: ["author", "blind"] }).notNull(),
     program: text("program").notNull(),
@@ -423,10 +435,353 @@ export const VerificationRun = pgTable(
   (t) => [
     index("verification_run_job_idx").on(t.jobId),
     index("verification_run_version_idx").on(t.testVersionId),
+    index("verification_run_draft_idx").on(t.draftQuestionId),
     check("verification_run_kind_check", sql`${t.programKind} IN ('author', 'blind')`),
     check(
       "verification_run_status_check",
       sql`${t.status} IN ('ok', 'program_error', 'timeout', 'sandbox_denial', 'invalid_output')`,
     ),
+  ],
+);
+
+// ── Sources and knowledge base (P2.md §4) ────────────────────────────
+
+/** Fixed to the reference embedding model (SPEC §3C.2). A role with other dimensions fails `knowledge_dimension_mismatch`. */
+export const EMBEDDING_DIMENSIONS = 768;
+
+const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
+
+/** Private to its owner (SPEC §13 Q6). Soft-deleted: published tests keep citing its chunks. */
+export const Source = pgTable(
+  "source",
+  {
+    id: uuid("id").primaryKey(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => User.id),
+    title: text("title").notNull(),
+    citationLabel: text("citation_label").notNull(),
+    author: text("author"),
+    edition: text("edition"),
+    url: text("url"),
+    visibility: text("visibility", { enum: ["private"] })
+      .notNull()
+      .default("private"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    deletedAt: ts("deleted_at"),
+  },
+  (t) => [
+    index("source_owner_idx").on(t.ownerId, t.createdAt),
+    check("source_visibility_check", sql`${t.visibility} IN ('private')`),
+  ],
+);
+
+export const SourceRevision = pgTable(
+  "source_revision",
+  {
+    id: uuid("id").primaryKey(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => Source.id),
+    number: integer("number").notNull(),
+    markdown: text("markdown").notNull(),
+    format: text("format", { enum: ["markdown", "text"] }).notNull(),
+    contentHash: text("content_hash").notNull(),
+    embedStatus: text("embed_status", { enum: ["pending", "embedding", "ready", "failed"] }).notNull(),
+    /** `{ code, params }`, as the API sends it. */
+    embedError: jsonValue("embed_error"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => User.id),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("source_revision_number_unique").on(t.sourceId, t.number),
+    check("source_revision_status_check", sql`${t.embedStatus} IN ('pending', 'embedding', 'ready', 'failed')`),
+    check("source_revision_format_check", sql`${t.format} IN ('markdown', 'text')`),
+  ],
+);
+
+export const SourceSection = pgTable(
+  "source_section",
+  {
+    id: uuid("id").primaryKey(),
+    revisionId: uuid("revision_id")
+      .notNull()
+      .references(() => SourceRevision.id),
+    parentId: uuid("parent_id"),
+    level: integer("level").notNull(),
+    title: text("title").notNull(),
+    slug: text("slug").notNull(),
+    order: integer("order").notNull(),
+    /** Heading titles from the top, for citations. */
+    headingPath: text("heading_path").array().notNull(),
+    charStart: integer("char_start").notNull(),
+    charEnd: integer("char_end").notNull(),
+  },
+  (t) => [
+    uniqueIndex("source_section_order_unique").on(t.revisionId, t.order),
+    foreignKey({ columns: [t.parentId], foreignColumns: [t.id], name: "source_section_parent_fk" }),
+  ],
+);
+
+/**
+ * One chunk: a provenance record, immutable (SPEC §3C.2). `gem_app` may only `UPDATE` the embedding and flag columns,
+ * by column grant. `tsv` indexes the stored text in both configs: `english` stems words, `simple` keeps notation.
+ */
+export const SourceChunk = pgTable(
+  "source_chunk",
+  {
+    id: uuid("id").primaryKey(),
+    revisionId: uuid("revision_id")
+      .notNull()
+      .references(() => SourceRevision.id),
+    sectionId: uuid("section_id")
+      .notNull()
+      .references(() => SourceSection.id),
+    chunkKey: text("chunk_key").notNull(),
+    charStart: integer("char_start").notNull(),
+    charEnd: integer("char_end").notNull(),
+    contentHash: text("content_hash").notNull(),
+    text: text("text").notNull(),
+    /** An estimate at ingest; the embedding endpoint's own count once embedded (P2.md §5). */
+    tokenCount: integer("token_count").notNull(),
+    embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }),
+    embeddingModel: text("embedding_model"),
+    tsv: tsvector("tsv").notNull().generatedAlwaysAs(sql`to_tsvector('english', text) || to_tsvector('simple', text)`),
+    flaggedAt: ts("flagged_at"),
+    flagReason: text("flag_reason"),
+  },
+  (t) => [
+    uniqueIndex("source_chunk_key_unique").on(t.revisionId, t.chunkKey),
+    index("source_chunk_section_idx").on(t.sectionId),
+    index("source_chunk_hash_idx").on(t.contentHash, t.embeddingModel),
+    index("source_chunk_embedding_idx").using("hnsw", t.embedding.op("vector_cosine_ops")),
+    index("source_chunk_tsv_idx").using("gin", t.tsv),
+    check("source_chunk_offsets_check", sql`${t.charStart} >= 0 AND ${t.charEnd} > ${t.charStart}`),
+  ],
+);
+
+// ── Authoring (P2.md §4) ─────────────────────────────────────────────
+
+/**
+ * One authoring session. Soft-deleted: `RetrievalLog`, `QuestionEvent` and `ValidationResult` are append-only, so
+ * their rows can't go, and a published version's frozen trail doesn't need them (SPEC §3A.1).
+ */
+export const AuthoringSession = pgTable(
+  "authoring_session",
+  {
+    id: uuid("id").primaryKey(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => User.id),
+    title: text("title").notNull(),
+    status: text("status", { enum: ["draft", "generating", "review", "published"] }).notNull(),
+    model: text("model"),
+    testType: text("test_type", {
+      enum: ["chapter_quiz", "homework", "unit_test", "midterm", "final", "custom"],
+    }).notNull(),
+    blueprint: jsonValue("blueprint"),
+    /** Value sets and source values used so far, so each is used once per test (SPEC §3A.3.1). */
+    usedValues: jsonValue("used_values").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    deletedAt: ts("deleted_at"),
+  },
+  (t) => [
+    index("authoring_session_owner_idx").on(t.ownerId, t.createdAt),
+    check("authoring_session_status_check", sql`${t.status} IN ('draft', 'generating', 'review', 'published')`),
+  ],
+);
+
+/** A session's scope: which revision of a source, and which of its sections (null: all of them). */
+export const AuthoringSessionSource = pgTable(
+  "authoring_session_source",
+  {
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => AuthoringSession.id),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => Source.id),
+    revisionId: uuid("revision_id")
+      .notNull()
+      .references(() => SourceRevision.id),
+    sectionIds: uuid("section_ids").array(),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.sourceId] })],
+);
+
+export const Objective = pgTable(
+  "objective",
+  {
+    id: uuid("id").primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => AuthoringSession.id),
+    label: text("label").notNull(),
+    description: text("description").notNull().default(""),
+    /** The chunks it comes from: `{ chunkId }[]`. */
+    evidence: jsonValue("evidence").notNull(),
+    origin: text("origin", { enum: ["llm", "human", "heading"] }).notNull(),
+    order: integer("order").notNull(),
+    sectionIds: uuid("section_ids").array().notNull(),
+  },
+  (t) => [
+    index("objective_session_idx").on(t.sessionId, t.order),
+    check("objective_origin_check", sql`${t.origin} IN ('llm', 'human', 'heading')`),
+  ],
+);
+
+/** One numbered round of a session (SPEC §3A.1). */
+export const Revision = pgTable(
+  "revision",
+  {
+    id: uuid("id").primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => AuthoringSession.id),
+    number: integer("number").notNull(),
+    trigger: text("trigger", { enum: ["generate", "revise"] }).notNull(),
+    request: jsonValue("request").notNull(),
+    usage: jsonValue("usage"),
+    /** Seeds inputs, distractors and option order (P2.md §5). */
+    seed: text("seed").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("revision_number_unique").on(t.sessionId, t.number),
+    check("revision_trigger_check", sql`${t.trigger} IN ('generate', 'revise')`),
+  ],
+);
+
+/** One generation call. A failure stays here, with its code, until it's retried (SPEC §3A.2). */
+export const AuthoringBatch = pgTable(
+  "authoring_batch",
+  {
+    id: uuid("id").primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => AuthoringSession.id),
+    revisionId: uuid("revision_id")
+      .notNull()
+      .references(() => Revision.id),
+    status: text("status", { enum: ["queued", "running", "done", "failed", "cancelled"] }).notNull(),
+    plan: jsonValue("plan").notNull(),
+    errorCode: text("error_code"),
+    /** Items the salvage kept out, and partials the truncation path dropped. */
+    failedItems: jsonValue("failed_items").notNull(),
+    callLogId: uuid("call_log_id"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    startedAt: ts("started_at"),
+    finishedAt: ts("finished_at"),
+  },
+  (t) => [
+    index("authoring_batch_session_idx").on(t.sessionId),
+    check("authoring_batch_status_check", sql`${t.status} IN ('queued', 'running', 'done', 'failed', 'cancelled')`),
+  ],
+);
+
+/** What retrieval gave the model, per call: append-only (SPEC §3C.3). */
+export const RetrievalLog = pgTable(
+  "retrieval_log",
+  {
+    id: uuid("id").primaryKey(),
+    revisionId: uuid("revision_id").references(() => Revision.id),
+    /** No FK, like `audit_log.actor_id`: a creator can remove an objective, and this row stays. */
+    objectiveId: uuid("objective_id"),
+    query: text("query").notNull(),
+    scope: jsonValue("scope").notNull(),
+    results: jsonValue("results").notNull(),
+    embeddingModel: text("embedding_model").notNull(),
+    at: ts("at").notNull().defaultNow(),
+  },
+  (t) => [index("retrieval_log_revision_idx").on(t.revisionId)],
+);
+
+export const DraftQuestion = pgTable(
+  "draft_question",
+  {
+    id: uuid("id").primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => AuthoringSession.id),
+    revisionId: uuid("revision_id")
+      .notNull()
+      .references(() => Revision.id),
+    batchId: uuid("batch_id").references(() => AuthoringBatch.id),
+    tempId: text("temp_id").notNull(),
+    /** Its place in the session; `VerificationRun.questionId` for runs before there's a quiz id. */
+    position: integer("position").notNull(),
+    content: jsonValue("content").notNull(),
+    status: text("status", { enum: ["proposed", "accepted", "rejected", "locked"] }).notNull(),
+    creatorNote: text("creator_note"),
+    supersedesId: uuid("supersedes_id"),
+    editedBy: uuid("edited_by").references(() => User.id),
+    editedAt: ts("edited_at"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("draft_question_session_idx").on(t.sessionId, t.position),
+    uniqueIndex("draft_question_position_unique").on(t.sessionId, t.position),
+    foreignKey({ columns: [t.supersedesId], foreignColumns: [t.id], name: "draft_question_supersedes_fk" }),
+    check("draft_question_status_check", sql`${t.status} IN ('proposed', 'accepted', 'rejected', 'locked')`),
+  ],
+);
+
+/** The provenance trail: append-only (SPEC §3A.1). `actor_id` has no FK, like `audit_log`. */
+export const QuestionEvent = pgTable(
+  "question_event",
+  {
+    id: uuid("id").primaryKey(),
+    draftQuestionId: uuid("draft_question_id")
+      .notNull()
+      .references(() => DraftQuestion.id),
+    kind: text("kind", {
+      enum: [
+        "generated",
+        "regenerated",
+        "edited",
+        "accepted",
+        "rejected",
+        "locked",
+        "fix_accepted",
+        "answer_computed",
+        "reclassified",
+      ],
+    }).notNull(),
+    actorId: uuid("actor_id"),
+    revisionId: uuid("revision_id").references(() => Revision.id),
+    before: jsonValue("before"),
+    after: jsonValue("after"),
+    note: text("note"),
+    at: ts("at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("question_event_question_idx").on(t.draftQuestionId, t.at),
+    check(
+      "question_event_kind_check",
+      sql`${t.kind} IN ('generated', 'regenerated', 'edited', 'accepted', 'rejected', 'locked', 'fix_accepted', 'answer_computed', 'reclassified')`,
+    ),
+  ],
+);
+
+/** One layer's result, per question per revision: append-only, the newest row is the current one (SPEC §3A.3). */
+export const ValidationResult = pgTable(
+  "validation_result",
+  {
+    id: uuid("id").primaryKey(),
+    draftQuestionId: uuid("draft_question_id")
+      .notNull()
+      .references(() => DraftQuestion.id),
+    revisionId: uuid("revision_id").references(() => Revision.id),
+    layer: text("layer", { enum: ["L1", "L2", "L3", "L7"] }).notNull(),
+    outcome: text("outcome", { enum: ["pass", "warn", "fail"] }).notNull(),
+    detail: jsonValue("detail").notNull(),
+    at: ts("at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("validation_result_question_idx").on(t.draftQuestionId, t.at),
+    check("validation_result_layer_check", sql`${t.layer} IN ('L1', 'L2', 'L3', 'L7')`),
+    check("validation_result_outcome_check", sql`${t.outcome} IN ('pass', 'warn', 'fail')`),
   ],
 );

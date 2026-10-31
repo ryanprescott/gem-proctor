@@ -49,5 +49,12 @@
   "verify_unavailable": "The answer checker isn't available right now. Try again in a minute.",
   "verify_program_too_large": "A check program is too long to run.",
   "verify_job_not_found": "That verification run wasn't found.",
-  "verify_fix_invalid": "That suggested fix doesn't match the verification results."
+  "verify_fix_invalid": "That suggested fix doesn't match the verification results.",
+  "source_not_found": "That source doesn't exist.",
+  "source_empty": "There's no text to add.",
+  "source_too_large": "That source is too large. The limit is {{maxBytes}} bytes.",
+  "source_bad_type": "Only .md and .txt files can be added.",
+  "source_not_ready": "That source isn't ready yet. It can be used once its latest revision is embedded.",
+  "knowledge_unit_too_large": "A block in “{{heading}}” is about {{tokens}} tokens and can't be split, so it can't be embedded whole. The limit is {{maxTokens}}. Shorten it and try again.",
+  "knowledge_dimension_mismatch": "The embedding model makes vectors of {{actual}} dimensions, but this installation stores {{expected}}. An administrator needs to assign a matching model."
 }

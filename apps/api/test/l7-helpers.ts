@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { L7Deps } from "@gem/authoring";
-import { type ChatReply, MockLlmServer } from "@gem/llm/mock";
+import { type ChatReply, MockLlmServer, type MockOptions } from "@gem/llm/mock";
 import { DEFAULT_VERIFY_SETTINGS, type VerifySettings } from "@gem/shared";
 import { assign } from "../../../packages/llm/test/helpers.ts";
 import { findVerifyPython, type LocalVerify, superviseVerify } from "../../../scripts/verify-local.ts";
@@ -89,6 +89,7 @@ export interface L7Env {
 export async function createL7Env(
   settings: Partial<VerifySettings> = {},
   env: Record<string, string> = {},
+  mockOptions: MockOptions = {},
 ): Promise<L7Env> {
   const dir = mkdtempSync(join(tmpdir(), "gem-l7-"));
   const socket = join(dir, "verify", "verify.sock");
@@ -96,7 +97,7 @@ export async function createL7Env(
   const client = new SocketVerifyClient(socket, { timeoutMs: 1000 });
   for (let i = 0; i < 200 && !(await client.health()); i++) await Bun.sleep(100);
   let reply: (body: Record<string, unknown>) => ChatReply = () => "{}";
-  const mock = new MockLlmServer({ reply: (body) => reply(body) });
+  const mock = new MockLlmServer({ ...mockOptions, reply: (body) => reply(body) });
   const t = await createTestApp({ env });
   t.ctx.verify = client;
   const assignSolve = async () => {

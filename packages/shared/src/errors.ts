@@ -55,6 +55,13 @@ export const ERROR_CODES = [
   "verify_program_too_large",
   "verify_job_not_found",
   "verify_fix_invalid",
+  "source_not_found",
+  "source_empty",
+  "source_too_large",
+  "source_bad_type",
+  "source_not_ready",
+  "knowledge_unit_too_large",
+  "knowledge_dimension_mismatch",
 ] as const;
 
 export const ErrorCode = z.enum(ERROR_CODES);
@@ -121,6 +128,13 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   verify_program_too_large: 422,
   verify_job_not_found: 404,
   verify_fix_invalid: 422,
+  source_not_found: 404,
+  source_empty: 400,
+  source_too_large: 413,
+  source_bad_type: 415,
+  source_not_ready: 409,
+  knowledge_unit_too_large: 422,
+  knowledge_dimension_mismatch: 409,
 };
 
 /** The only error type route handlers throw (SPEC §11.6, companion check). */

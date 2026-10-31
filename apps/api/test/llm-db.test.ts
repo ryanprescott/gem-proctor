@@ -13,7 +13,7 @@ import {
   RoleAssignment,
   InstanceSettings as SettingsTable,
 } from "@gem/db";
-import { DEFAULT_VERIFY_SETTINGS } from "@gem/shared";
+import { DEFAULT_AUTHORING_SETTINGS, DEFAULT_VERIFY_SETTINGS } from "@gem/shared";
 import { eq, sql } from "drizzle-orm";
 import type pg from "pg";
 import { getSettings } from "../src/settings.ts";
@@ -189,6 +189,7 @@ describe.skipIf(!hasDb)("C6: localEndpointsOnly", () => {
         selfRegistration: false,
         localEndpointsOnly: false,
         verify: DEFAULT_VERIFY_SETTINGS,
+        authoring: DEFAULT_AUTHORING_SETTINGS,
       });
       await t.db.update(SettingsTable).set({ value: true }).where(eq(SettingsTable.key, "selfRegistration"));
       const { client } = await registerUser(t.app, "admin@example.com");
@@ -199,6 +200,7 @@ describe.skipIf(!hasDb)("C6: localEndpointsOnly", () => {
         selfRegistration: false,
         localEndpointsOnly: true,
         verify: DEFAULT_VERIFY_SETTINGS,
+        authoring: DEFAULT_AUTHORING_SETTINGS,
       });
     } finally {
       await t.close();

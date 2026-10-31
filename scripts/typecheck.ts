@@ -8,6 +8,7 @@ export const PROJECTS = [
   "packages/db/tsconfig.json",
   "packages/authz/tsconfig.json",
   "packages/llm/tsconfig.json",
+  "packages/knowledge/tsconfig.json",
   "packages/authoring/tsconfig.json",
   "apps/api/tsconfig.json",
   "apps/web/tsconfig.json",

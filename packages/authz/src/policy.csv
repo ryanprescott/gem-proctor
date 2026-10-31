@@ -18,6 +18,14 @@ p, proctor, test, read, owner
 p, proctor, test, update, owner
 p, proctor, test, export, owner
 
+# Sources (P2): private to their owner. Someone else's is not found, not forbidden; admins through `*`.
+p, proctor, source, create, any
+p, proctor, source, preview, any
+p, proctor, source, list, any
+p, proctor, source, read, owner
+p, proctor, source, update, owner
+p, proctor, source, delete, owner
+
 # Practice (P1): proctors practise their own tests. Attempts are private: the API loads an attempt by
 # (id, caller), so `owner` here is always the caller, and admins' `*` line can't reach anyone else's.
 p, proctor, test, practice, owner

@@ -3,6 +3,7 @@ import type { Db } from "@gem/db";
 import type { Runtime } from "@gem/llm";
 import type { SessionStore } from "./auth/sessions.ts";
 import type { Config } from "./config.ts";
+import type { EventHub } from "./events.ts";
 import type { Queue } from "./queue.ts";
 import type { VerifyClient } from "./verify-client.ts";
 
@@ -15,5 +16,6 @@ export interface AppContext {
   queue: Queue | null;
   verify: VerifyClient;
   llm: Runtime;
+  events: EventHub;
   now: () => Date;
 }

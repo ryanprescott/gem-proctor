@@ -18,16 +18,18 @@ export type ObjType =
   | "llm_eval"
   | "llm_stats"
   | "llm_status"
-  | "verification_job";
+  | "verification_job"
+  | "source";
 export type Act = "read" | "delete" | "preview" | "create" | "list" | "update" | "export" | "submit" | "run";
 
 /**
  * `resource: "practice_attempt"` loads the attempt by `(id, userId = caller)` (P1.md §5): someone else's
- * attempt is not found, for every caller, admins included.
+ * attempt is not found, for every caller, admins included. `resource: "source"` is private the same way, except
+ * that an admin may reach any (P2.md §5): another proctor gets 404, not 403.
  */
 export type RoutePermission =
   | { public: true }
-  | { objType: ObjType; act: Act; resource?: "test" | "practice_attempt" | "verification_job" };
+  | { objType: ObjType; act: Act; resource?: "test" | "practice_attempt" | "verification_job" | "source" };
 
 export const ROUTE_PERMISSIONS = {
   health: { public: true },
@@ -43,6 +45,17 @@ export const ROUTE_PERMISSIONS = {
   "imports.create": { objType: "import", act: "create" },
   "imports.verify.start": { objType: "verification_job", act: "create" },
   "imports.verify.get": { objType: "verification_job", act: "read", resource: "verification_job" },
+  "sources.preview": { objType: "source", act: "preview" },
+  "sources.create": { objType: "source", act: "create" },
+  "sources.list": { objType: "source", act: "list" },
+  "sources.get": { objType: "source", act: "read", resource: "source" },
+  "sources.update": { objType: "source", act: "update", resource: "source" },
+  "sources.delete": { objType: "source", act: "delete", resource: "source" },
+  "sources.revision": { objType: "source", act: "read", resource: "source" },
+  "sources.sections": { objType: "source", act: "read", resource: "source" },
+  "sources.chunks": { objType: "source", act: "read", resource: "source" },
+  "sources.embedRetry": { objType: "source", act: "update", resource: "source" },
+  "sources.events": { objType: "source", act: "read", resource: "source" },
   "tests.list": { objType: "test", act: "list" },
   "tests.get": { objType: "test", act: "read", resource: "test" },
   "tests.update": { objType: "test", act: "update", resource: "test" },

@@ -87,6 +87,14 @@
     },
     "verify": {
       "sandbox_denial": "Sandbox denial"
+    },
+    "source": {
+      "create": "Source added",
+      "delete": "Source deleted"
+    },
+    "authoring_session": {
+      "create": "Authoring session created",
+      "delete": "Authoring session deleted"
     }
   },
   "targets": {
@@ -95,7 +103,9 @@
     "llm_endpoint": "LLM endpoint",
     "llm_role": "LLM role",
     "verification_job": "Verification job",
-    "question": "Question"
+    "question": "Question",
+    "source": "Source",
+    "authoring_session": "Authoring session"
   },
   "llm": {
     "title": "LLM",
