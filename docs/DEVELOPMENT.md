@@ -36,6 +36,7 @@ cp .env.example .env        # then fill in SESSION_SECRET (openssl rand -base64 
 | `bun run dev:api` | API with reload (needs `DATABASE_URL*` pointing at a migrated database). |
 | `bun run dev:web` | Vite on :5173, proxying `/api` to the API. |
 | `bun run ci` | Everything CI runs (below). |
+| `bun run verify:escape` | The escape suite against the real Compose `verify` service (`--runtime runsc` for gVisor). See "Sandbox" below. |
 | `bun run e2e` | Playwright + axe. Starts a throwaway stack (fresh database, built web app, API on :3100, the real verify parent), or uses `E2E_BASE_URL`. Either way it runs a mock model server for the LLM page (`E2E_MOCK_HOST` is the name a stack in containers reaches it by; CI uses `host.docker.internal`). |
 
 ## LLM (P1.5)
@@ -45,8 +46,10 @@ Nothing in `bun run ci` needs a model server: tests and e2e use the mock in `pac
 | Command | What it does |
 |---|---|
 | `bun run llm:seed` | Creates the `LLM_DEV_*` endpoint(s) and role assignments once (also on API start in development). Never overwrites an assignment. |
-| `bun run llm:eval <set> [--trials n] [--dev]` | Runs an eval set (`generate-smoke`, `retrieval-mini`) from the database's assignments and stores the run; with `--dev`, from `LLM_DEV_*`, with nothing stored. |
-| `bun run llm:live [--trials n] [--embed-model tag]…` | The live checks against the `LLM_DEV_*` server: discovery, chat probe, `generate-smoke`, embeddings probes, `retrieval-mini`. Stores nothing; exits 1 if a check failed. |
+| `bun run llm:eval <set> [--trials n] [--dev]` | Runs an eval set (`generate-smoke`, `retrieval-mini`, `l7-smoke`, which needs the sandbox at `VERIFY_SOCKET`) from the database's assignments and stores the run; with `--dev`, from `LLM_DEV_*`, with nothing stored. |
+| `bun run llm:live [--trials n] [--embed-model tag]… [--only name]` | The live checks against the `LLM_DEV_*` server: discovery, chat probe, `generate-smoke`, embeddings probes, `retrieval-mini`. `--only` runs the checks whose name contains it. Stores nothing; exits 1 if a check failed. |
+
+`llm:live` also runs flow A on `generate-smoke` (programs, the sandbox, built options) and `l7-smoke`, on a local verify parent: it runs what a trusted dev model wrote, so don't point it at anything else.
 
 Keys: `ENDPOINT_SECRET_KEY` (32 random bytes, base64) is needed to save an endpoint key. Cloud keys stay in the shell environment or the admin UI, never in the repo.
 
@@ -80,9 +83,20 @@ LLM_DEV_EMBED_DOCUMENT_PREFIX="title: none | text: "
 
 Other servers set their context at launch (vLLM `--max-model-len`, `llama-server -c`); the probe reports what they were started with. The cloud setup is an `anthropic` or OpenAI-compatible endpoint with `location: cloud` and the role's `maxOutputTokens` set for that model. These are starting points, not guarantees (SPEC §3B.2).
 
+## Sandbox (P2.1)
+
+`apps/verify` runs model-written programs (SPEC §3A.3.1). Security comes from the container, not from the code: no network, read-only root, no capabilities but `SETUID`/`SETGID`, a fresh unprivileged process per run, recycling. The parent (`server.py`) is single-threaded and never runs a program; `child.py` drops everything and runs one request.
+
+- **Contract:** Zod in `packages/shared/src/verify.ts`. After changing it, run `bun run schema:export`, which rewrites `apps/verify/gem_verify/contract.json`; a stale file fails `bun run ci`.
+- **Local mode:** `bun test` and `bun run e2e` run the real parent from `scripts/verify-local.ts`, as your own user and with your network, restarted when it exits to recycle. Limits and recycling are real there, isolation isn't: it prints a warning, and a test for what isolation does belongs in the escape suite.
+- **Escape suite:** `bun run verify:escape` brings up the `verify` service from `docker/compose.yaml` under its own project name, and sends hostile programs from a second container sharing the socket volume, like the API. Each must end the expected way, and a normal run after it must give the right value. It's a `bun run ci` step when a Docker daemon answers, and required in GitHub CI. A new way to attack the sandbox is a new line in `scripts/verify-escape.ts`.
+- **gVisor:** production's `docker/compose.prod.yaml` sets `runtime: runsc`. The suite under it is `bun run verify:escape --runtime runsc`. Check the socket when you first run it: the API reaches the runner over a Unix socket across containers, which gVisor restricts by default, so it may need `runsc --host-uds=open` in `daemon.json`.
+- **Python:** the libraries are pinned in `apps/verify/requirements.txt`; adding one is a reviewed change (SPEC §13). Import `gem_verify` before NumPy: the package limits OpenBLAS's threads, and a child has no budget for them.
+- **Recording replies:** `tools/probes/l7/record.ts` rewrites `packages/authoring/test/fixtures/l7-recorded.json` from the live model, for the tests that replay it.
+
 ## Checks (`bun run ci`)
 
-biome check · lint-rule build staleness · lint-rule snapshot · suppression baseline · i18n catalog check · JSON Schema export staleness · LLM import boundary (`ai` and `@ai-sdk/*` only in `packages/llm`) · typecheck (strict, every project) · `bun test` (unit + integration against real Postgres) · ruff + ruff format · verify unit tests · Playwright + axe.
+biome check · lint-rule build staleness · lint-rule snapshot · suppression baseline · i18n catalog check · JSON Schema export staleness · LLM import boundary (`ai` and `@ai-sdk/*` only in `packages/llm`) · typecheck (strict, every project) · `bun test` (unit + integration against real Postgres) · ruff + ruff format · verify unit tests · the escape suite, when Docker answers · Playwright + axe.
 
 Integration tests use `TEST_PG_ADMIN_URL` (a superuser URL). `bun run ci` sets it to the local cluster if it isn't set; in CI it's the Compose postgres. Each test file creates its own database with `docker/postgres/init.sql` and the migrations, and connects as `gem_app`, like the API.
 

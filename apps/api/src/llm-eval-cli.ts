@@ -15,7 +15,8 @@ import {
 } from "@gem/llm";
 import { loadConfig } from "./config.ts";
 import { devRuntime } from "./llm-dev.ts";
-import { createEvalRun, processEvalRun } from "./llm-evals.ts";
+import { createEvalRun, l7Runner, processEvalRun } from "./llm-evals.ts";
+import { SocketVerifyClient } from "./verify-client.ts";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 
@@ -32,13 +33,15 @@ if (!name) {
 const trials = values.trials === undefined ? undefined : Number(values.trials);
 const config = loadConfig(process.env, process.env.ENV_FILE ?? join(ROOT, ".env"));
 const set = loadEvalSet(name);
+// An `l7` set needs the sandbox: the socket in VERIFY_SOCKET.
+const verify = new SocketVerifyClient(config.VERIFY_SOCKET);
 
 async function report(): Promise<{ text: string; report: EvalReport | null }> {
   const head = { promptVersion: evalPromptVersion(set) };
   if (values.dev) {
     const llm = devRuntime(config);
     const target = await llm.resolve(set.role);
-    const out = await runEval(llm, set, { trials });
+    const out = await runEval(llm, set, { trials, l7: l7Runner({ llm, verify }) });
     const where = { model: target.model, endpoint: target.endpoint.label, ...head };
     return { text: formatEvalReport(set, where, out), report: out };
   }
@@ -48,7 +51,7 @@ async function report(): Promise<{ text: string; report: EvalReport | null }> {
   try {
     const target = await llm.resolve(set.role);
     const run = await createEvalRun({ db, llm }, { evalSet: name as string, trials, startedBy: null });
-    const out = await processEvalRun({ db, llm }, run.id);
+    const out = await processEvalRun({ db, llm, verify }, run.id);
     if (!out) return { text: `eval ${name} failed: see run ${run.id}`, report: null };
     const where = { model: target.model, endpoint: target.endpoint.label, ...head };
     return { text: formatEvalReport(set, where, out), report: out };

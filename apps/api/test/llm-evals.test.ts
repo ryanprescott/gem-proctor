@@ -74,7 +74,7 @@ describe("C28: prompts", () => {
   });
 
   test("the eval sets parse, with the sizes §5 asks for", () => {
-    expect(listEvalSets()).toEqual(["generate-smoke", "retrieval-mini"]);
+    expect(listEvalSets()).toEqual(["generate-smoke", "l7-smoke", "retrieval-mini"]);
     const r = loadEvalSet("retrieval-mini");
     if (r.kind !== "retrieval") throw new Error("kind");
     expect(r.fixtures.chunks.length).toBeGreaterThanOrEqual(14);
@@ -211,7 +211,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
   test("an unknown set is 404; the list is newest first and filters by role", async () => {
     expect((await start({ evalSet: "nope" })).statusCode).toBe(404);
     const body = (await admin.get(`${API}/admin/llm/evals`)).json();
-    expect(body.evalSets).toEqual(["generate-smoke", "retrieval-mini"]);
+    expect(body.evalSets).toEqual(["generate-smoke", "l7-smoke", "retrieval-mini"]);
     const stamps = body.runs.map((r: { createdAt: string }) => r.createdAt);
     expect([...stamps].sort().reverse()).toEqual(stamps);
     const only = (await admin.get(`${API}/admin/llm/evals?role=embeddings`)).json().runs;

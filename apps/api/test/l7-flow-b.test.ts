@@ -2,7 +2,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { checkProctorReady, checkQuestion, type ImportedQuestion, importedQuestion } from "@gem/authoring";
 import { AuditLog, VerificationRun } from "@gem/db";
+import { type L7EvalSet, loadEvalSet, runEval } from "@gem/llm";
+import { EVAL_METRICS } from "@gem/shared";
 import { eq } from "drizzle-orm";
+import { l7Runner } from "../src/llm-evals.ts";
 import { createL7Env, type L7Env, promptOf, verifyPython } from "./l7-helpers.ts";
 
 const dbReady = !!process.env.TEST_PG_ADMIN_URL;
@@ -243,4 +246,60 @@ describe("the proctored gate", () => {
     });
     expect(checkProctorReady({ questions: [{ id: 1 }] }, false).proctorReady).toBe(true);
   });
+});
+
+describe.skipIf(!verifyPython || !dbReady)("C33: l7-smoke", () => {
+  let env: L7Env;
+  beforeAll(async () => {
+    env = await createL7Env();
+  }, 30_000);
+  afterAll(async () => {
+    await env?.close();
+  });
+
+  /** A model that's right, from its fixtures: author programs, and the Q7 program. */
+  const model = (set: L7EvalSet) => (body: Record<string, unknown>) => {
+    const p = promptOf(body);
+    if (p.kind === "classify") {
+      const q = set.fixtures.classification.find((c) => c.question === p.question);
+      return JSON.stringify({ reason: "r", computable: q?.computable ?? true });
+    }
+    const q = set.fixtures.questions.find((x) => x.question === p.question);
+    return JSON.stringify({ program: q?.authorProgram ?? "result = -1" });
+  };
+
+  test("runs through runEval on the mock, and reports every metric", async () => {
+    const set = loadEvalSet("l7-smoke");
+    if (set.kind !== "l7") throw new Error("kind");
+    env.setReply(model(set));
+    const report = await runEval(env.deps.llm, set, {
+      trials: 1,
+      l7: l7Runner({ llm: env.deps.llm, verify: env.client }),
+    });
+    expect(report.summary).toEqual({
+      trials: 1,
+      blindValid: 1,
+      agreement: 1,
+      repairRate: 0,
+      classification: 1,
+      q7Outcome: 1,
+    });
+    for (const metric of set.metrics) expect(EVAL_METRICS).toContain(metric as never);
+  }, 30_000);
+
+  test("a wrong model shows in the numbers", async () => {
+    const set = loadEvalSet("l7-smoke");
+    if (set.kind !== "l7") throw new Error("kind");
+    env.setReply((body) => {
+      const p = promptOf(body);
+      if (p.kind === "classify") return JSON.stringify({ reason: "r", computable: false });
+      if (p.kind === "pick") return JSON.stringify({ reason: "r", option: 1 });
+      return JSON.stringify({ program: "result = 12345" });
+    });
+    const report = await runEval(env.deps.llm, set, {
+      trials: 1,
+      l7: l7Runner({ llm: env.deps.llm, verify: env.client }),
+    });
+    expect(report.summary).toMatchObject({ blindValid: 1, agreement: 0, q7Outcome: 0, classification: 0.5 });
+  }, 30_000);
 });

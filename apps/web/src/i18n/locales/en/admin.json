@@ -296,7 +296,12 @@
         "top1": "Top-1",
         "mrr": "MRR",
         "top1NoPrefix": "Top-1 without prefixes",
-        "mrrNoPrefix": "MRR without prefixes"
+        "mrrNoPrefix": "MRR without prefixes",
+        "blindValid": "Blind programs that ran",
+        "agreement": "Programs that agreed",
+        "repairRate": "Programs repaired",
+        "classification": "Classified correctly",
+        "q7Outcome": "Sample Q7 caught, with its fix"
       }
     }
   }

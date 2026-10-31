@@ -268,6 +268,11 @@ export const EVAL_METRICS = [
   "mrr",
   "top1NoPrefix",
   "mrrNoPrefix",
+  "blindValid",
+  "agreement",
+  "repairRate",
+  "classification",
+  "q7Outcome",
 ] as const;
 export type EvalMetric = (typeof EVAL_METRICS)[number];
 

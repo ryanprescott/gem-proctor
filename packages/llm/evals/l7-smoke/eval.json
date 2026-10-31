@@ -1,0 +1,148 @@
+{
+  "name": "l7-smoke",
+  "kind": "l7",
+  "role": "verify.solve",
+  "prompt": "verify.solve.blind",
+  "defaultTrials": 3,
+  "fixtures": {
+    "passage": "For two n-vectors a and b, the inner product is the number a^T b = a_1 b_1 + a_2 b_2 + ... + a_n b_n: multiply the matching entries and add up the products. The Euclidean norm of a vector is ||a|| = sqrt(a^T a). Two vectors are called orthogonal when their inner product is zero.",
+    "questions": [
+      {
+        "id": "p1",
+        "question": "What is the inner product of $\\begin{bmatrix}2 & -1 & 2\\end{bmatrix}^T$ and $\\begin{bmatrix}1 & 4 & 1\\end{bmatrix}^T$?",
+        "type": "single_choice",
+        "authorProgram": "from sympy import Matrix\nx = Matrix([2, -1, 2]); y = Matrix([1, 4, 1])\nresult = x.dot(y)"
+      },
+      {
+        "id": "p2",
+        "question": "What is the Euclidean norm of $\\begin{bmatrix}2 & -9 & 6\\end{bmatrix}^T$?",
+        "type": "numeric",
+        "authorProgram": "from sympy import Matrix\nresult = Matrix([2, -9, 6]).norm()"
+      },
+      {
+        "id": "p3",
+        "question": "True or false: $\\begin{bmatrix}-2 & -4\\end{bmatrix}^T$ and $\\begin{bmatrix}4 & -2\\end{bmatrix}^T$ are orthogonal.",
+        "type": "true_false",
+        "authorProgram": "from sympy import Matrix\nresult = Matrix([-2, -4]).dot(Matrix([4, -2])) == 0"
+      },
+      {
+        "id": "p4",
+        "question": "What is the sum of $\\begin{bmatrix}1 & -3\\end{bmatrix}^T$ and $\\begin{bmatrix}4 & 7\\end{bmatrix}^T$?",
+        "type": "short_answer",
+        "authorProgram": "from sympy import Matrix\nresult = Matrix([1, -3]) + Matrix([4, 7])"
+      },
+      {
+        "id": "p5",
+        "question": "What is the inner product of $\\begin{bmatrix}3 & -2 & 5 & 1\\end{bmatrix}^T$ and $\\begin{bmatrix}-1 & 4 & 2 & 6\\end{bmatrix}^T$?",
+        "type": "numeric",
+        "authorProgram": "from sympy import Matrix\nresult = Matrix([3, -2, 5, 1]).dot(Matrix([-1, 4, 2, 6]))"
+      },
+      {
+        "id": "p6",
+        "question": "What is the norm of $\\begin{bmatrix}1 & 5 & -2\\end{bmatrix}^T$?",
+        "type": "numeric",
+        "authorProgram": "from sympy import Matrix\nresult = Matrix([1, 5, -2]).norm()"
+      }
+    ],
+    "classification": [
+      {
+        "id": 1,
+        "question": "What is the dimension of a column vector $z$ given by $z = \\begin{bmatrix} -4 & 2 & 7 & 0 & 9 & -1 \\end{bmatrix}^T$?",
+        "options": ["5", "6", "7", "4"],
+        "computable": true
+      },
+      {
+        "id": 5,
+        "question": "If $x = \\begin{bmatrix} 5 \\\\ -2 \\\\ 4 \\end{bmatrix}$, what is the scalar multiple $-4x$?",
+        "options": [
+          "$\\begin{bmatrix} 1 \\\\ -6 \\\\ 0 \\end{bmatrix}$",
+          "$\\begin{bmatrix} -20 \\\\ 8 \\\\ -16 \\end{bmatrix}$",
+          "$\\begin{bmatrix} 20 \\\\ -8 \\\\ 16 \\end{bmatrix}$",
+          "$\\begin{bmatrix} -9 \\\\ 2 \\\\ 0 \\end{bmatrix}$"
+        ],
+        "computable": true
+      },
+      {
+        "id": 6,
+        "question": "Compute the linear combination $3u - 2v$ where $u = \\begin{bmatrix} 2 \\\\ -1 \\end{bmatrix}$ and $v = \\begin{bmatrix} -3 \\\\ 4 \\end{bmatrix}$.",
+        "options": [
+          "$\\begin{bmatrix} 0 \\\\ 5 \\end{bmatrix}$",
+          "$\\begin{bmatrix} 12 \\\\ -11 \\end{bmatrix}$",
+          "$\\begin{bmatrix} 0 \\\\ -11 \\end{bmatrix}$",
+          "$\\begin{bmatrix} 6 \\\\ -2 \\end{bmatrix}$"
+        ],
+        "computable": true
+      },
+      {
+        "id": 7,
+        "question": "What is the inner product $x^T y$ for $x = \\begin{bmatrix} 2 \\\\ 4 \\\\ -3 \\end{bmatrix}$ and $y = \\begin{bmatrix} 5 \\\\ -2 \\\\ 1 \\end{bmatrix}$?",
+        "options": ["5", "3", "7", "-1"],
+        "computable": true
+      },
+      {
+        "id": 15,
+        "question": "If $1$ denotes the 3-dimensional all-ones vector and $x = \\begin{bmatrix} 4 \\\\ -2 \\\\ 5 \\end{bmatrix}$, what is $1^T x$?",
+        "options": ["7", "11", "-3", "1"],
+        "computable": true
+      },
+      {
+        "id": 3,
+        "question": "When are two vectors $x$ and $y$ considered equal according to Boyd VMLS definitions?",
+        "options": [
+          "When they have the same dimension and identical corresponding entries ($x_i = y_i$ for all $i$).",
+          "When their inner product is equal to 1.",
+          "When they have the same sum of entries.",
+          "When they have the same Euclidean length."
+        ],
+        "computable": false
+      },
+      {
+        "id": 8,
+        "question": "If two vectors $u$ and $v$ of the same dimension satisfy $u^T v = 0$ (and neither is the zero vector), they are called:",
+        "options": ["Orthogonal", "Parallel", "Collinear", "Scalar multiples"],
+        "computable": false
+      },
+      {
+        "id": 16,
+        "question": "Why is the vector sum $x + y$ undefined when $x$ is 3-dimensional and $y$ is 4-dimensional?",
+        "options": [
+          "Vector addition requires both vectors to have the exact same dimension.",
+          "Inner products must be calculated first.",
+          "Vectors cannot contain negative numbers.",
+          "Scalar multiplication is required."
+        ],
+        "computable": false
+      },
+      {
+        "id": 18,
+        "question": "In machine learning and data analysis, what does a feature vector typically represent?",
+        "options": [
+          "A list of numerical attributes or measurements describing an object or data point",
+          "A single scalar threshold",
+          "An undefined mathematical error",
+          "A matrix inverse"
+        ],
+        "computable": false
+      },
+      {
+        "id": 17,
+        "question": "Which of the following represents the associative property of vector addition for vectors $x, y, z$ of the same dimension?",
+        "options": [
+          "$(x + y) + z = x + (y + z)$",
+          "$x + y = y + x$",
+          "$\\alpha(x + y) = \\alpha x + \\alpha y$",
+          "$x^T y = y^T x$"
+        ],
+        "computable": false
+      }
+    ],
+    "q7": {
+      "id": 7,
+      "question": "What is the inner product $x^T y$ for $x = \\begin{bmatrix} 2 \\\\ 4 \\\\ -3 \\end{bmatrix}$ and $y = \\begin{bmatrix} 5 \\\\ -2 \\\\ 1 \\end{bmatrix}$?",
+      "options": ["5", "3", "7", "-1"],
+      "correctAnswer": "1",
+      "suggestedFix": "-1"
+    }
+  },
+  "metrics": ["trials", "blindValid", "agreement", "repairRate", "classification", "q7Outcome"]
+}

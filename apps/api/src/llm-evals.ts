@@ -1,10 +1,42 @@
+import { runL7Eval } from "@gem/authoring";
 import { type Db, Endpoint, LlmEvalRun, newId } from "@gem/db";
-import { type EvalReport, evalPromptVersion, LlmError, loadEvalSet, runEval } from "@gem/llm";
-import { AppError, type ErrorCode, type EvalRunDetail, type EvalRunSummary, type EvalSummary } from "@gem/shared";
+import {
+  type EvalReport,
+  type EvalRunOptions,
+  evalPromptVersion,
+  LlmError,
+  type LlmRuntime,
+  loadEvalSet,
+  runEval,
+} from "@gem/llm";
+import {
+  AppError,
+  DEFAULT_VERIFY_SETTINGS,
+  type ErrorCode,
+  type EvalRunDetail,
+  type EvalRunSummary,
+  type EvalSummary,
+  type VerifyClient,
+} from "@gem/shared";
 import { desc, eq } from "drizzle-orm";
 import type { AppContext } from "./context.ts";
 
 /** Eval runs (P1.5.md §5): a row per run, a pg-boss job for the work, one run at a time per role. */
+
+/** `l7` sets need the sandbox. What they run isn't a question's check, so no `VerificationRun` rows. */
+export function l7Runner(ctx: { llm: LlmRuntime; verify: VerifyClient }): EvalRunOptions["l7"] {
+  return (set, opts) =>
+    runL7Eval(
+      {
+        llm: ctx.llm,
+        verify: ctx.verify,
+        settings: DEFAULT_VERIFY_SETTINGS,
+        recorder: { run: async () => "eval", denial: async () => {} },
+      },
+      set,
+      opts,
+    );
+}
 
 export const EVAL_QUEUE = "llm.eval";
 
@@ -46,13 +78,16 @@ export async function createEvalRun(
 }
 
 /** Runs a queued eval to the end. Never throws: every outcome is on the row. */
-export async function processEvalRun(ctx: Pick<AppContext, "db" | "llm">, runId: string): Promise<EvalReport | null> {
+export async function processEvalRun(
+  ctx: Pick<AppContext, "db" | "llm" | "verify">,
+  runId: string,
+): Promise<EvalReport | null> {
   const [run] = await ctx.db.select().from(LlmEvalRun).where(eq(LlmEvalRun.id, runId));
   if (!run) return null;
   await ctx.db.update(LlmEvalRun).set({ status: "running", startedAt: new Date() }).where(eq(LlmEvalRun.id, runId));
   try {
     const set = loadEvalSet(run.evalSet);
-    const report = await runEval(ctx.llm, set, { trials: run.trials, evalRunId: run.id });
+    const report = await runEval(ctx.llm, set, { trials: run.trials, evalRunId: run.id, l7: l7Runner(ctx) });
     await ctx.db
       .update(LlmEvalRun)
       .set({ status: "done", summary: report.summary, items: report.items, finishedAt: new Date() })

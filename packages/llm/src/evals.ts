@@ -37,7 +37,48 @@ const RetrievalSet = z.object({
   metrics: z.array(z.string()),
 });
 
-export const EvalSet = z.discriminatedUnion("kind", [GenerateSet, RetrievalSet]);
+/** `verify.solve` on labelled questions (P2.1.md C33). It needs the sandbox, so `runEval` calls the caller's runner. */
+const L7Set = z.object({
+  name: z.string(),
+  kind: z.literal("l7"),
+  role: z.literal("verify.solve"),
+  prompt: z.string(),
+  defaultTrials: z.number().int().positive(),
+  fixtures: z.object({
+    passage: z.string(),
+    questions: z
+      .array(
+        z.object({
+          id: z.string(),
+          question: z.string(),
+          type: z.enum(["single_choice", "numeric", "true_false", "short_answer"]),
+          authorProgram: z.string(),
+        }),
+      )
+      .min(1),
+    classification: z
+      .array(
+        z.object({
+          id: z.number().int(),
+          question: z.string(),
+          options: z.array(z.string()),
+          computable: z.boolean(),
+        }),
+      )
+      .min(1),
+    q7: z.object({
+      id: z.number().int(),
+      question: z.string(),
+      options: z.array(z.string()),
+      correctAnswer: z.string(),
+      suggestedFix: z.string(),
+    }),
+  }),
+  metrics: z.array(z.string()),
+});
+export type L7EvalSet = z.infer<typeof L7Set>;
+
+export const EvalSet = z.discriminatedUnion("kind", [GenerateSet, RetrievalSet, L7Set]);
 export type EvalSet = z.infer<typeof EvalSet>;
 
 export function listEvalSets(dir = EVALS_DIR): string[] {
@@ -54,7 +95,7 @@ export function loadEvalSet(name: string, dir = EVALS_DIR): EvalSet {
 
 /** The version a run reports; embeddings use no prompt. */
 export function evalPromptVersion(set: EvalSet): string {
-  return set.kind === "generate" ? (ACTIVE_PROMPTS[set.prompt] ?? "unknown") : "none";
+  return set.kind === "retrieval" ? "none" : (ACTIVE_PROMPTS[set.prompt] ?? "unknown");
 }
 
 export function evalRole(set: EvalSet): ModelRole {
@@ -70,6 +111,8 @@ export interface EvalRunOptions {
   trials?: number;
   evalRunId?: string;
   userId?: string;
+  /** Runs an `l7` set: `packages/authoring` has the engine, and it depends on this package. */
+  l7?: (set: L7EvalSet, opts: EvalRunOptions) => Promise<EvalReport>;
 }
 
 const round = (x: number, digits = 4) => Number(x.toFixed(digits));
@@ -203,7 +246,10 @@ async function runRetrieval(
 }
 
 export function runEval(runtime: LlmRuntime, set: EvalSet, opts: EvalRunOptions = {}): Promise<EvalReport> {
-  return set.kind === "generate" ? runGenerate(runtime, set, opts) : runRetrieval(runtime, set, opts);
+  if (set.kind === "generate") return runGenerate(runtime, set, opts);
+  if (set.kind === "retrieval") return runRetrieval(runtime, set, opts);
+  if (!opts.l7) throw new Error("an l7 eval needs the sandbox");
+  return opts.l7(set, opts);
 }
 
 /** The plain-text report the CLI prints. */

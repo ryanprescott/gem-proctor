@@ -19,16 +19,18 @@ Audit of P0.md §8, done on 2026-10-29 right after the build (P0.md §10). Each 
 
 | | pass | partial | blocked | fail |
 |---|---|---|---|---|
-| Count | 30 | 1 | 2 | 0 |
+| Count | 33 | 0 | 0 | 0 |
 
-**Blocked:** A2 (Compose up + health), A33 (container settings). **Partial:** A1 (the Compose half: Playwright ran against a local stack, not Compose). Their Compose checks are scripted (`scripts/check-compose.ts`) and run in CI, but haven't been seen to pass yet.
+Updated 2026-10-31 (P2.1 C35), now that Docker is available: A1, A2 and A33 pass on a real Compose stack. The notes on those rows give the run; the rest of this audit is as written on 2026-10-29.
+
+**At the original audit:** blocked A2 (Compose up + health), A33 (container settings); partial A1 (the Compose half: Playwright ran against a local stack, not Compose).
 
 ## Repo & tooling
 
 | # | Result | Evidence |
 |---|---|---|
-| A1 | **partial** | `bun install && bun run ci` passes (above), including every listed step: biome check, rule build staleness, lint-rule snapshot, suppression baseline, catalog check, typecheck, `bun test`, ruff, Playwright + axe. Playwright ran against a throwaway local stack (`scripts/e2e.ts`: fresh database, built web app, API, verify parent), **not against Compose**: blocked here. `bun install --frozen-lockfile` is clean. `ci` needs Postgres: `TEST_PG_ADMIN_URL`, or local binaries (docs/DEVELOPMENT.md). |
-| A2 | **blocked** | No Docker. Built: `compose.yaml` (root, includes `docker/compose.yaml`) with `postgres` (pgvector 0.8.1-pg17), `web` (static build into a volume), `api` (serves it), `verify`; Dockerfiles in `docker/`. `/api/v1/health` reports `db`, `queue` and `verify` and is 503 unless all three are ok (`apps/api/src/routes/public.ts`); proven against real Postgres + pg-boss + a socket in `apps/api/test/health.test.ts` ("health is 503 until the queue has processed a heartbeat, then ok"). `scripts/check-compose.ts` checks it against Compose in CI. |
+| A1 | **pass** (was partial) | **2026-10-31:** Playwright + axe ran against Compose: `E2E_BASE_URL=http://localhost:3210 E2E_MOCK_HOST=host.docker.internal bun run e2e`, 35 passed, on a fresh stack (P2.1 audit, C35). Original evidence: `bun install && bun run ci` passes (above), including every listed step: biome check, rule build staleness, lint-rule snapshot, suppression baseline, catalog check, typecheck, `bun test`, ruff, Playwright + axe. Playwright ran against a throwaway local stack (`scripts/e2e.ts`: fresh database, built web app, API, verify parent), **not against Compose**: blocked here. `bun install --frozen-lockfile` is clean. `ci` needs Postgres: `TEST_PG_ADMIN_URL`, or local binaries (docs/DEVELOPMENT.md). |
+| A2 | **pass** (was blocked) | **2026-10-31:** `docker compose up --build --detach` on a fresh project, then `bun scripts/check-compose.ts`: health reports db, queue and verify ok, `compose checks passed` (P2.1 audit, C35). Built: `compose.yaml` (root, includes `docker/compose.yaml`) with `postgres` (pgvector 0.8.1-pg17), `web` (static build into a volume), `api` (serves it), `verify`; Dockerfiles in `docker/`. `/api/v1/health` reports `db`, `queue` and `verify` and is 503 unless all three are ok (`apps/api/src/routes/public.ts`); proven against real Postgres + pg-boss + a socket in `apps/api/test/health.test.ts` ("health is 503 until the queue has processed a heartbeat, then ok"). `scripts/check-compose.ts` checks it against Compose in CI. |
 | A3 | **pass** | `strict` (+ `noUncheckedIndexedAccess`) in `tsconfig.base.json`, extended by every project; `bun run typecheck` checks all 6. `any`: Biome `noExplicitAny` is an error repo-wide, and `packages/shared` uses `z.unknown()` where a type is open. `grep -rnw any packages/shared/src` finds only comments and the `unrepresentable: "any"` option of `z.toJSONSchema`. |
 | A4 | **pass** | `docs/P0-test-runs.md`: both runs, with versions, results and evidence. No contingency was taken; SPEC §11.6 now reads "Active implementation: primary (GritQL plugin), since 2026-10-29", and §15.2 logs both results. |
 
@@ -94,7 +96,7 @@ Audit of P0.md §8, done on 2026-10-29 right after the build (P0.md §10). Each 
 
 | # | Result | Evidence |
 |---|---|---|
-| A33 | **blocked** (container) / pass (health) | Health: `apps/api/test/verify-skeleton.test.ts` spawns the real parent (`apps/verify/gem_verify/server.py`) with an **empty environment** (`-I -B`, `env: {}`) and gets `{ ok: true, sympy: "1.13.3", numpy: "2.1.3" }` over the Unix socket through the API's client, matching the pins in `apps/verify/requirements.txt`. Container: `docker/compose.yaml` sets `network_mode: none`, `read_only: true`, `/tmp` tmpfs, no `environment`, `cap_drop: [ALL]`, `cap_add: [SETUID, SETGID]`, `no-new-privileges`, `pids_limit`, `mem_limit`, `cpus`; the image's entrypoint runs under `env -i`; `docker/compose.prod.yaml` adds `runtime: runsc`. Not run here (no Docker); `scripts/check-compose.ts` inspects all of these, plus `/proc/1/environ` empty and only `lo` present, in CI. |
+| A33 | **pass** (was blocked for the container) | **2026-10-31:** `scripts/check-compose.ts` on the real container: `network_mode none`, read-only root, tmpfs, `cap_drop ALL`, `SETUID`/`SETGID` only, `no-new-privileges`, limits, no secrets, an empty parent environment, loopback only, and a real child as `runner` with no capabilities (P2.1 audit, C35). Original evidence: Health: `apps/api/test/verify-skeleton.test.ts` spawns the real parent (`apps/verify/gem_verify/server.py`) with an **empty environment** (`-I -B`, `env: {}`) and gets `{ ok: true, sympy: "1.13.3", numpy: "2.1.3" }` over the Unix socket through the API's client, matching the pins in `apps/verify/requirements.txt`. Container: `docker/compose.yaml` sets `network_mode: none`, `read_only: true`, `/tmp` tmpfs, no `environment`, `cap_drop: [ALL]`, `cap_add: [SETUID, SETGID]`, `no-new-privileges`, `pids_limit`, `mem_limit`, `cpus`; the image's entrypoint runs under `env -i`; `docker/compose.prod.yaml` adds `runtime: runsc`. Not run here (no Docker); `scripts/check-compose.ts` inspects all of these, plus `/proc/1/environ` empty and only `lo` present, in CI. |
 
 ## Deviations from SPEC (all fixed or logged)
 
