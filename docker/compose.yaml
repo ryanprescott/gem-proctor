@@ -56,7 +56,8 @@ services:
       - "${API_PORT:-3000}:${API_PORT:-3000}"
     restart: unless-stopped
 
-  # Runs model-written programs from P2.1 on; isolation is the security (SPEC §3A.3.1).
+  # Runs model-written programs; isolation is the security (SPEC §3A.3.1). The parent exits to recycle, and the
+  # restart policy brings it back with a fresh tmpfs. The API holds no Docker socket.
   verify:
     build: { context: .., dockerfile: docker/verify.Dockerfile }
     network_mode: none # no interface besides loopback

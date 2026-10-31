@@ -51,6 +51,10 @@ export const ERROR_CODES = [
   "llm_embedding_truncated",
   "llm_secret_key_missing",
   "llm_eval_running",
+  "verify_unavailable",
+  "verify_program_too_large",
+  "verify_job_not_found",
+  "verify_fix_invalid",
 ] as const;
 
 export const ErrorCode = z.enum(ERROR_CODES);
@@ -113,6 +117,10 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   llm_embedding_truncated: 422,
   llm_secret_key_missing: 409,
   llm_eval_running: 409,
+  verify_unavailable: 503,
+  verify_program_too_large: 422,
+  verify_job_not_found: 404,
+  verify_fix_invalid: 422,
 };
 
 /** The only error type route handlers throw (SPEC §11.6, companion check). */

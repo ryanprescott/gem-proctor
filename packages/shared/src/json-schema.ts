@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { QuizShape, ResultShape } from "./quiz.ts";
+import { VerifyChildReplies, VerifyRequest } from "./verify.ts";
 
 /**
  * JSON Schemas generated from the shared Zod models (SPEC §4, §12: `GET /schema/quiz.json`, `/schema/result.json`).
@@ -19,4 +20,12 @@ export function quizJsonSchema(): Record<string, unknown> {
 
 export function resultJsonSchema(): Record<string, unknown> {
   return exportSchema(ResultShape, "https://gem-proctor.local/schema/result.json", "gem-proctor Result");
+}
+
+/** What `apps/verify` validates against (P2.1.md §5): requests, and each kind's child reply. */
+export function verifyContractSchema(): Record<string, unknown> {
+  return {
+    request: jsonSchemaOf(VerifyRequest),
+    replies: Object.fromEntries(Object.entries(VerifyChildReplies).map(([kind, s]) => [kind, jsonSchemaOf(s)])),
+  };
 }

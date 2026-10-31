@@ -45,5 +45,9 @@
   "llm_context_exceeded": "The prompt doesn't fit in the context window once max output tokens are reserved. Lower the role's max output tokens, or use a larger context window.",
   "llm_embedding_truncated": "A text is too long for the embedding model and would be cut off.",
   "llm_secret_key_missing": "ENDPOINT_SECRET_KEY isn't configured, so a key can't be saved.",
-  "llm_eval_running": "An evaluation is already running for this role."
+  "llm_eval_running": "An evaluation is already running for this role.",
+  "verify_unavailable": "The answer checker isn't available right now. Try again in a minute.",
+  "verify_program_too_large": "A check program is too long to run.",
+  "verify_job_not_found": "That verification run wasn't found.",
+  "verify_fix_invalid": "That suggested fix doesn't match the verification results."
 }

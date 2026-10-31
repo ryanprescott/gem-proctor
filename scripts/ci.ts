@@ -9,7 +9,9 @@ const env: Record<string, string> = { ...(process.env as Record<string, string>)
 // Standalone tools (ruff, python3.12, Postgres) may live in ~/.local/bin.
 env.PATH = [env.PATH, join(env.HOME ?? "", ".local", "bin")].filter(Boolean).join(delimiter);
 
-const steps: { name: string; cmd: string[]; cwd?: string }[] = [
+const dockerUp = () => Bun.spawnSync(["docker", "info"], { stdout: "ignore", stderr: "ignore", env }).exitCode === 0;
+
+const steps: { name: string; cmd: string[]; cwd?: string; when?: () => boolean; skipped?: string }[] = [
   { name: "biome check", cmd: ["bunx", "--bun", "biome", "check", "."] },
   { name: "lint rule build is up to date", cmd: ["bun", "tools/biome/build-rule.ts", "--check"] },
   { name: "lint-rule snapshot", cmd: ["bun", "tools/biome/snapshot.ts", "--check"] },
@@ -29,6 +31,13 @@ const steps: { name: string; cmd: string[]; cwd?: string }[] = [
     cmd: ["python3.12", "-B", "-m", "unittest", "discover", "-s", "tests", "-t", "."],
     cwd: "apps/verify",
   },
+  {
+    name: "verify escape suite",
+    cmd: ["bun", "scripts/verify-escape.ts"],
+    // Always in GitHub CI (a missing Docker fails there); on a machine without Docker it's skipped, and says so.
+    when: () => env.CI === "true" || dockerUp(),
+    skipped: "no Docker daemon: run `bun run verify:escape` where there is one",
+  },
   { name: "Playwright + axe", cmd: ["bun", "scripts/e2e.ts"] },
 ];
 
@@ -47,6 +56,10 @@ env.REQUIRE_DB_TESTS = "1";
 const only = process.argv.slice(2);
 for (const step of steps) {
   if (only.length > 0 && !only.some((o) => step.name.includes(o))) continue;
+  if (step.when && !step.when()) {
+    console.log(`\n▷ ${step.name}: skipped (${step.skipped})`);
+    continue;
+  }
   const started = Date.now();
   console.log(`\n▶ ${step.name}`);
   const proc = Bun.spawn(step.cmd, { cwd: join(ROOT, step.cwd ?? ""), env, stdout: "inherit", stderr: "inherit" });

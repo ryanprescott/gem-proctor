@@ -1,7 +1,7 @@
 [project]
 name = "gem-verify"
 version = "0.0.0"
-description = "gem-proctor verification sandbox (P0 skeleton: health only)"
+description = "gem-proctor verification sandbox"
 requires-python = ">=3.12"
 
 [tool.ruff]
@@ -11,3 +11,7 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
 ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests run hostile programs and seeded draws on purpose.
+"tests/*" = ["S", "RUF001", "RUF002", "E501"]

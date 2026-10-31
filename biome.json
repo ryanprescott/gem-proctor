@@ -15,6 +15,7 @@
       "!**/*.grit",
       "!packages/db/migrations/meta",
       "!packages/shared/schema",
+      "!apps/verify/gem_verify/contract.json",
       "!tests/*.json"
     ]
   },

@@ -73,9 +73,12 @@ check(
   "verify: no-new-privileges",
 );
 check((hc.PidsLimit ?? 0) > 0 && hc.Memory > 0 && hc.NanoCpus > 0, "verify: pids, memory and CPU limits");
-const secretish = (info.Config.Env ?? []).filter((e) =>
-  /SECRET|PASSWORD|DATABASE|KEY|TOKEN/i.test(e.split("=")[0] ?? ""),
-);
+// GPG_KEY is the official Python image's own: the public id of its release signing key. The entrypoint's
+// `env -i` keeps even that from the process, which the /proc/1/environ check below covers.
+const secretish = (info.Config.Env ?? []).filter((e) => {
+  const name = e.split("=")[0] ?? "";
+  return name !== "GPG_KEY" && /SECRET|PASSWORD|DATABASE|KEY|TOKEN/i.test(name);
+});
 check(secretish.length === 0, "verify: no secrets in the container config");
 const py = (code: string) =>
   docker(["compose", "exec", "-T", "verify", "/usr/local/bin/python", "-I", "-B", "-c", code]).trim();
@@ -86,6 +89,20 @@ check(
 check(
   py("import socket; print(','.join(n for _, n in socket.if_nameindex()))") === "lo",
   "verify: no interface besides loopback",
+);
+const config = JSON.parse(docker(["inspect", "-f", "{{json .Config.Entrypoint}}", id])) as string[];
+check(config.includes("--require-privdrop"), "verify: the parent runs with --require-privdrop");
+// A real child, through the real socket: it must be `runner`, with no capabilities (P2.1.md C13).
+const program =
+  "import re\ncap = int(re.search(r'CapEff:\\s+(\\w+)', open('/proc/self/status').read())[1], 16)\nresult = [__import__('os').getuid(), __import__('os').getgid(), cap]";
+const request = JSON.stringify({ kind: "run", program }).replaceAll("\\", "\\\\").replaceAll("'", "\\'");
+const reply = py(
+  `import socket; s = socket.socket(socket.AF_UNIX); s.connect('/run/verify/verify.sock'); s.sendall('${request}\\n'.encode()); print(s.makefile().readline())`,
+);
+check(
+  JSON.stringify((JSON.parse(reply) as { value?: { value?: unknown } }).value?.value) ===
+    JSON.stringify(["10002", "10002", "0"]),
+  "verify: children drop to runner (uid and gid 10002) with no capabilities",
 );
 
 if (problems.length > 0) {

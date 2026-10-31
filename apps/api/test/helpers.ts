@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { Authz } from "@gem/authz";
 import { bootstrapDatabase, createDb, createPool, type Db, runMigrations, withDatabase } from "@gem/db";
 import { createLlmRuntime, dbStore } from "@gem/llm";
+import { AppError } from "@gem/shared";
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from "fastify";
 import pg from "pg";
 import { type BuildOptions, buildApp } from "../src/app.ts";
@@ -66,6 +67,14 @@ export class FakeVerify implements VerifyClient {
   async health() {
     return this.reply;
   }
+  private down(): never {
+    throw new AppError("verify_unavailable");
+  }
+  run = async () => this.down();
+  sampleInputs = async () => this.down();
+  parseOptions = async () => this.down();
+  compare = async () => this.down();
+  buildOptions = async () => this.down();
 }
 
 export interface TestApp {
