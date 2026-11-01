@@ -273,6 +273,13 @@ export const EVAL_METRICS = [
   "repairRate",
   "classification",
   "q7Outcome",
+  "l1Pass",
+  "l2Pass",
+  "l3Pass",
+  "top1Pgvector",
+  "mrrPgvector",
+  "top1Hybrid",
+  "mrrHybrid",
 ] as const;
 export type EvalMetric = (typeof EVAL_METRICS)[number];
 

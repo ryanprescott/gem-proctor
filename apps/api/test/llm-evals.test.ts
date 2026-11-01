@@ -75,7 +75,7 @@ describe("C28: prompts", () => {
   });
 
   test("the eval sets parse, with the sizes §5 asks for", () => {
-    expect(listEvalSets()).toEqual(["generate-smoke", "l7-smoke", "retrieval-mini"]);
+    expect(listEvalSets()).toEqual(["generate-smoke", "grounding-smoke", "l7-smoke", "retrieval-mini"]);
     const r = loadEvalSet("retrieval-mini");
     if (r.kind !== "retrieval") throw new Error("kind");
     expect(r.fixtures.chunks.length).toBeGreaterThanOrEqual(14);
@@ -183,7 +183,10 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
     for (const k of ["top1", "mrr", "top1NoPrefix", "mrrNoPrefix"]) expect(run.summary[k]).toBeNumber();
     expect(run.summary.queries).toBe(16);
     expect(EVAL_METRICS).toEqual(expect.arrayContaining(Object.keys(run.summary)));
-    expect(run.items).toHaveLength(16);
+    // This role's vectors have 16 dimensions, and the database holds 768: that pass says so and is skipped.
+    expect(run.items).toHaveLength(17);
+    expect(run.items.at(-1)).toEqual({ database: "skipped", error: "knowledge_dimension_mismatch" });
+    expect(run.summary.top1Hybrid).toBeUndefined();
     const sent = embed.requests.map((r) => (r.body.input as string[])[0] as string);
     expect(sent.some((s) => s.startsWith("d: "))).toBe(true);
     expect(sent.some((s) => s.startsWith("q: "))).toBe(true);
@@ -191,6 +194,28 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
     const calls = await t.db.select().from(LlmCallLog).where(eq(LlmCallLog.evalRunId, run.id));
     expect(calls).toHaveLength(4);
     expect(calls.every((c) => c.kind === "eval" && c.requestBody === null)).toBe(true);
+  });
+
+  test("E51: grounding-smoke: L1 to L3 pass rates of the generated questions, through the job", async () => {
+    const run = await finished((await start({ evalSet: "grounding-smoke", trials: 2 })).json().run.id);
+    expect(run.status).toBe("done");
+    expect(run.promptVersion).toBe("gen-v9");
+    // The mock's batch: four questions on the fixture's first chunk, the last quoting words that aren't in it.
+    expect(run.summary).toMatchObject({
+      trials: 2,
+      validFirstTry: 1,
+      validAfterRepairs: 1,
+      l1Pass: 1,
+      l2Pass: 0.75,
+      l3Pass: 1,
+    });
+    expect(EVAL_METRICS).toEqual(expect.arrayContaining(Object.keys(run.summary)));
+    const request = mock.chatRequests().at(-1)?.body as { messages: { content: string }[] };
+    const sent = request.messages.map((m) => m.content).join("\n");
+    expect(sent).toContain("Source chunk [evals:inner-products:c1]:");
+    expect(sent).toContain("Source chunk [evals:matrices:c1]:");
+    expect(sent).toContain("O2: Matrix size, addition and multiplication");
+    expect(sent).toContain("Write 4 questions: 2 single_choice, 1 true_false, 1 short_answer.");
   });
 
   test("C31: a second run for the same role is 409 llm_eval_running", async () => {
@@ -212,7 +237,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
   test("an unknown set is 404; the list is newest first and filters by role", async () => {
     expect((await start({ evalSet: "nope" })).statusCode).toBe(404);
     const body = (await admin.get(`${API}/admin/llm/evals`)).json();
-    expect(body.evalSets).toEqual(["generate-smoke", "l7-smoke", "retrieval-mini"]);
+    expect(body.evalSets).toEqual(["generate-smoke", "grounding-smoke", "l7-smoke", "retrieval-mini"]);
     const stamps = body.runs.map((r: { createdAt: string }) => r.createdAt);
     expect([...stamps].sort().reverse()).toEqual(stamps);
     const only = (await admin.get(`${API}/admin/llm/evals?role=embeddings`)).json().runs;

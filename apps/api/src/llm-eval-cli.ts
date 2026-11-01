@@ -15,6 +15,7 @@ import {
 } from "@gem/llm";
 import { loadConfig } from "./config.ts";
 import { devRuntime } from "./llm-dev.ts";
+import { groundingRunner } from "./llm-eval-database.ts";
 import { createEvalRun, l7Runner, processEvalRun } from "./llm-evals.ts";
 import { SocketVerifyClient } from "./verify-client.ts";
 
@@ -41,7 +42,7 @@ async function report(): Promise<{ text: string; report: EvalReport | null }> {
   if (values.dev) {
     const llm = devRuntime(config);
     const target = await llm.resolve(set.role);
-    const out = await runEval(llm, set, { trials, l7: l7Runner({ llm, verify }) });
+    const out = await runEval(llm, set, { trials, l7: l7Runner({ llm, verify }), grounding: groundingRunner({ llm }) });
     const where = { model: target.model, endpoint: target.endpoint.label, ...head };
     return { text: formatEvalReport(set, where, out), report: out };
   }

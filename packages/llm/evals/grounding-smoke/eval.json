@@ -1,0 +1,40 @@
+{
+  "name": "grounding-smoke",
+  "kind": "grounding",
+  "role": "authoring.generate",
+  "prompt": "authoring.generate",
+  "schema": "strict8",
+  "defaultTrials": 3,
+  "request": {
+    "vars": {
+      "allowedImports": "fractions, itertools, math, numpy, statistics, sympy",
+      "resultTypeRules": "for single_choice, numeric and short_answer: a number, Fraction, list (vector), list of lists (matrix) or sympy expression; for true_false: True or False (a bool, not a number)",
+      "styleGuidance": "Test type: chapter quiz. Test individual concepts and definitions, evenly across the chapter's sections."
+    },
+    "count": 4,
+    "counts": "2 single_choice, 1 true_false, 1 short_answer"
+  },
+  "fixtures": {
+    "chunks": [
+      {
+        "id": "evals:inner-products:c1",
+        "text": "For two n-vectors a and b, the inner product is the number a^T b = a_1 b_1 + a_2 b_2 + ... + a_n b_n: multiply the matching entries and add up the products. The Euclidean norm of a vector is ||a|| = sqrt(a^T a), so a vector's norm is never negative, and it is zero only for the zero vector. Two vectors are called orthogonal when their inner product is zero. As a worked example, take a = (2, -1, 2) and b = (1, 4, 1). Then a^T b = 2*1 + (-1)*4 + 2*1 = 0, so a and b are orthogonal, and ||a|| = sqrt(4 + 1 + 4) = 3."
+      },
+      {
+        "id": "evals:matrices:c1",
+        "text": "A matrix is a rectangular array of numbers. An m by n matrix has m rows and n columns. Two matrices of the same size are added entry by entry. The product of an m by n matrix A and an n by p matrix B is the m by p matrix whose entry in row i and column j is the inner product of row i of A with column j of B. Matrix multiplication is not commutative: AB and BA are usually different, and one of them may not even be defined."
+      }
+    ],
+    "objectives": [
+      {
+        "id": "O1",
+        "label": "Inner products, norms and orthogonality of vectors"
+      },
+      {
+        "id": "O2",
+        "label": "Matrix size, addition and multiplication"
+      }
+    ]
+  },
+  "metrics": ["validFirstTry", "validAfterRepairs", "l1Pass", "l2Pass", "l3Pass", "secondsPerQuestion"]
+}

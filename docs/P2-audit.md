@@ -230,3 +230,43 @@ Built: `publishSession` in `review.ts`: accepted and locked questions → mapper
 - **`TestVersion.provenance` is built at publish, not read from the session later**, from rows that can't change under it (events and results are append-only; a question's content is copied).
 - **A published session isn't editable**: no route accepts it for generate, revise or publish. A new version of a published test comes from a new session (P2.5's compare view may change that).
 - **Proctored publishing** (SPEC §3A.3.1's setting) is P3's gate on assignments: here it's `proctorReady` and `blockers`, as P2.1 left it.
+
+## F8 Evals, live & phase close
+
+Built: the `grounding-smoke` eval set (`packages/llm/evals/grounding-smoke`, runner `packages/authoring/src/grounding-eval.ts`), `retrieval-mini` through the database (`apps/api/src/llm-eval-database.ts`), seven new eval metrics, `scripts/live-authoring.ts` and `scripts/live-retrieval.ts` (`bun run live:authoring`, `bun run live:retrieval`), the fixture `packages/authoring/test/fixtures/linear-algebra.md`. Tests: `llm-evals.test.ts`, `eval-database.test.ts`.
+
+| # | Result | Evidence |
+|---|---|---|
+| E51 | **pass** | `llm-evals.test.ts` "E51: grounding-smoke" runs the set through the job on the mock: valid first try 1, `l1Pass` 1, `l2Pass` 0.75 (the mock's fourth question quotes words that aren't in its chunk), `l3Pass` 1; the request carries both chunks as `Source chunk [key]:`, the objectives and "Write 4 questions: 2 single_choice, 1 true_false, 1 short_answer." `eval-database.test.ts`: `retrieval-mini` through pgvector and the hybrid search on the mock's vectors reports `top1Pgvector`, `mrrPgvector`, `top1Hybrid`, `mrrHybrid` for 16 queries, and the corpus's source is soft-deleted after. A role whose vectors aren't 768 wide gets the in-memory metrics and an item `{ database: "skipped", error: "knowledge_dimension_mismatch" }`. Both are in `bun run ci`. |
+| E52 | **pass** | Two runs of `bun run live:authoring` on the reference box (`qwen3.5-9b-32k`, `embeddinggemma2-4k`, Ollama), 2026-11-01, below. The second generated 10 questions, accepted 8, published (`proctorReady: true`) and took the test in practice, 8 of 8 against its key. The first generated 9 (a call timed out) and accepted 5. |
+| E53 | **pass** | SPEC §13 Q4 and Q5 hold what was measured, including that vector with full text did worse than vector alone on `retrieval-mini`. |
+| E54 | **pass** | A Compose stack under its own project name (`COMPOSE_PROJECT_NAME=gem-p2 API_PORT=3400 docker compose up --build`): `bun scripts/check-compose.ts` all `ok` (health, and the verify container's isolation: no network, read-only root, `cap_drop ALL`, children as `runner` with no capabilities). `authoring.e2e.ts` against it with the mock (`E2E_MOCK_HOST=host.docker.internal`): 6 passed, including the prompt-injected source, where the denial now comes from the real container. The journey is with the mock, not live; the live journey (E52) ran on a local stack. |
+
+**E52 in numbers.** Same fixture, same roles from `LLM_DEV_*` (thinking off), a `chapter_quiz` of 10 questions, one question per call.
+
+| | Run 1 | Run 2 |
+|---|---|---|
+| Ingest (source ready) | 3.1 s | 2 s |
+| Objectives | 14 in 299.5 s, 0 citations dropped | 15 in 263.4 s, 0 dropped |
+| Generation calls | 9 of 10 done; 1 `llm_endpoint_timeout` (120 s), not retried by the script | 10 of 10 done |
+| Questions | 9: 8 single_choice, 1 true_false; 6 computable | 10: 9 single_choice, 1 true_false; 4 computable |
+| Generation time | 921 s, 102 s per question | 668 s, 67 s per question |
+| L1 (no fail) | 7 of 9 (`no_placeholders`, `input_unused`) | 9 of 10 (`no_placeholders`) |
+| L2 (no fail) | 8 of 9 (`quote_not_found`) | 8 of 10 (`quote_not_found`) |
+| L3 (no fail) | 9 of 9 (1 warn) | 10 of 10 (2 warn) |
+| L7 (no fail, of those that reached it) | 6 of 6 (4 pass, 2 warn) | 7 of 7 |
+| Blocked after generation | 5 | 3 |
+| One revise round | 5 sent, 1 recovered, 426 s | 3 sent, 1 recovered, 107 s |
+| Accepted → published → practice | 5 → `proctorReady` true → 5 of 5 | 8 → `proctorReady` true → 8 of 8 |
+
+Together, 19 questions: L1 16 (84%), L2 16 (84%), L3 19 (100%), L7 13 of 13 of those that reached it; 13 accepted (68%). The L1 failures are calculations written without the `{placeholders}` the prompt asks for, or with inputs the text doesn't use; the L2 failures are quotes that aren't in the passage they cite. Neither is a defect in the checks: that's what they are for.
+
+`bun run live:retrieval` (14 chunks, 16 queries, `embeddinggemma2-4k`): in memory top-1 0.875, MRR 0.927 (0.8125 and 0.896 without prefixes); pgvector alone 0.875 and 0.927, the same ranking; **vector with full text 0.75 and 0.854**.
+
+**Deviations and notes.**
+- **The time is in the calls.** 67 to 102 s per question, against 6.5 s for `generate-smoke`: each call re-sends the instructions and its retrieved passages, one at a time on one endpoint, with L7's model calls queued behind them. A 10-question quiz takes about 11 to 15 minutes on this box. Not changed in P2; the batch size is the planner's (one question per objective when objectives outnumber questions).
+- **Fourteen or fifteen objectives from five sections is a lot for 10 questions**: the preset's even spread gives one each to ten of them and none to the rest. Merging objectives is the creator's step; the proposal isn't capped below four per section (`MAX_OBJECTIVES_PER_SECTION`).
+- **Fusion hurts on this corpus.** On 14 chunks that share most of their words, the OR-ed full-text terms add noise to the rank fusion. Left as built (RRF, k = 60, equal weights) and recorded in SPEC §13 Q4 for a measurement on real course material.
+- **The script retries nothing and revises once.** Run 1's timed-out call was left, as the script is a measurement, not a creator; the product's retry (E25) is what a creator would press. A later change that retries and revises twice was not run, so it isn't in the script.
+- **The live scripts reuse the test helpers** (`createSourceEnv`: a throwaway database, the real workers, the local sandbox parent) and put the `LLM_DEV_*` roles in over the mock's. The sandbox parent runs as the same user there, so they are for a trusted dev model only. They store nothing in your dev database and write `~/.cache/live-authoring-report.json`.
+- **The Compose run left `gem-check-*` containers alone**: they were already running from an earlier session, under another project name.

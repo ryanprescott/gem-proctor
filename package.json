@@ -29,7 +29,9 @@
     "dev:web": "bun --filter @gem/web dev",
     "e2e": "bun scripts/e2e.ts",
     "verify:lint": "ruff check apps/verify && ruff format --check apps/verify",
-    "verify:escape": "bun scripts/verify-escape.ts"
+    "verify:escape": "bun scripts/verify-escape.ts",
+    "live:authoring": "bun scripts/live-authoring.ts",
+    "live:retrieval": "bun scripts/live-retrieval.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

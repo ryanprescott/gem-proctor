@@ -312,7 +312,14 @@
         "agreement": "Programs that agreed",
         "repairRate": "Programs repaired",
         "classification": "Classified correctly",
-        "q7Outcome": "Sample Q7 caught, with its fix"
+        "q7Outcome": "Sample Q7 caught, with its fix",
+        "l1Pass": "Questions that pass structure (L1)",
+        "l2Pass": "Questions whose quotes are in their passage (L2)",
+        "l3Pass": "Questions that pass wording (L3)",
+        "top1Pgvector": "Top-1, vector search in the database",
+        "mrrPgvector": "MRR, vector search in the database",
+        "top1Hybrid": "Top-1, vector and full text together",
+        "mrrHybrid": "MRR, vector and full text together"
       }
     }
   }

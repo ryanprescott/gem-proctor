@@ -37,6 +37,31 @@ const RetrievalSet = z.object({
   metrics: z.array(z.string()),
 });
 
+/**
+ * What a generation run on retrieved chunks is checked against: L1 to L3 on each question (P2.md E51). The checks are in
+ * `packages/authoring`, which depends on this package, so `runEval` calls the caller's runner, as for `l7`.
+ */
+const GroundingSet = z.object({
+  name: z.string(),
+  kind: z.literal("grounding"),
+  role: z.literal("authoring.generate"),
+  prompt: z.string(),
+  schema: z.literal("strict8"),
+  defaultTrials: z.number().int().positive(),
+  request: z.object({
+    vars: z.record(z.string(), z.string()),
+    /** "2 single_choice, 1 true_false", as a batch plan writes it. */
+    counts: z.string(),
+    count: z.number().int().positive(),
+  }),
+  fixtures: z.object({
+    chunks: z.array(Chunk).min(2),
+    objectives: z.array(z.object({ id: z.string(), label: z.string() })).min(1),
+  }),
+  metrics: z.array(z.string()),
+});
+export type GroundingEvalSet = z.infer<typeof GroundingSet>;
+
 /** `verify.solve` on labelled questions (P2.1.md C33). It needs the sandbox, so `runEval` calls the caller's runner. */
 const L7Set = z.object({
   name: z.string(),
@@ -77,8 +102,9 @@ const L7Set = z.object({
   metrics: z.array(z.string()),
 });
 export type L7EvalSet = z.infer<typeof L7Set>;
+export type RetrievalEvalSet = z.infer<typeof RetrievalSet>;
 
-export const EvalSet = z.discriminatedUnion("kind", [GenerateSet, RetrievalSet, L7Set]);
+export const EvalSet = z.discriminatedUnion("kind", [GenerateSet, RetrievalSet, L7Set, GroundingSet]);
 export type EvalSet = z.infer<typeof EvalSet>;
 
 export function listEvalSets(dir = EVALS_DIR): string[] {
@@ -113,6 +139,13 @@ export interface EvalRunOptions {
   userId?: string;
   /** Runs an `l7` set: `packages/authoring` has the engine, and it depends on this package. */
   l7?: (set: L7EvalSet, opts: EvalRunOptions) => Promise<EvalReport>;
+  /** Runs a `grounding` set: the validators are in `packages/authoring`. */
+  grounding?: (set: GroundingEvalSet, opts: EvalRunOptions) => Promise<EvalReport>;
+  /**
+   * The same queries through the database: pgvector, and vector with full text, as authoring retrieves. Without it a
+   * retrieval set reports only the in-memory passes.
+   */
+  hybrid?: (set: RetrievalEvalSet, opts: EvalRunOptions) => Promise<EvalSummary>;
 }
 
 const round = (x: number, digits = 4) => Number(x.toFixed(digits));
@@ -233,6 +266,18 @@ async function runRetrieval(
   const without = await retrievalPass(runtime, set, true, opts);
   const top1 = (rows: { rank: number }[]) => round(rows.filter((r) => r.rank === 1).length / rows.length);
   const mrr = (rows: { rank: number }[]) => mean(rows.map((r) => 1 / r.rank));
+  // The database pass can fail for what the setup is (the vectors' size, no model): the in-memory results stand, and the
+  // report says what was skipped and why.
+  let database: EvalSummary = {};
+  let skipped: string | null = null;
+  if (opts.hybrid) {
+    try {
+      database = await opts.hybrid(set, opts);
+    } catch (err) {
+      if (!(err instanceof LlmError || err instanceof AppError)) throw err;
+      skipped = err.code;
+    }
+  }
   return {
     summary: {
       queries: withPrefix.length,
@@ -240,14 +285,22 @@ async function runRetrieval(
       mrr: mrr(withPrefix),
       top1NoPrefix: top1(without),
       mrrNoPrefix: mrr(without),
+      ...database,
     },
-    items: withPrefix.map((r, i) => ({ ...r, rankNoPrefix: without[i]?.rank })),
+    items: [
+      ...withPrefix.map((r, i) => ({ ...r, rankNoPrefix: without[i]?.rank })),
+      ...(skipped === null ? [] : [{ database: "skipped", error: skipped }]),
+    ],
   };
 }
 
 export function runEval(runtime: LlmRuntime, set: EvalSet, opts: EvalRunOptions = {}): Promise<EvalReport> {
   if (set.kind === "generate") return runGenerate(runtime, set, opts);
   if (set.kind === "retrieval") return runRetrieval(runtime, set, opts);
+  if (set.kind === "grounding") {
+    if (!opts.grounding) throw new Error("a grounding eval needs the validators");
+    return opts.grounding(set, opts);
+  }
   if (!opts.l7) throw new Error("an l7 eval needs the sandbox");
   return opts.l7(set, opts);
 }

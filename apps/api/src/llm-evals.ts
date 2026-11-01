@@ -20,6 +20,7 @@ import {
 } from "@gem/shared";
 import { desc, eq } from "drizzle-orm";
 import type { AppContext } from "./context.ts";
+import { groundingRunner, hybridRunner } from "./llm-eval-database.ts";
 
 /** Eval runs (P1.5.md §5): a row per run, a pg-boss job for the work, one run at a time per role. */
 
@@ -87,7 +88,13 @@ export async function processEvalRun(
   await ctx.db.update(LlmEvalRun).set({ status: "running", startedAt: new Date() }).where(eq(LlmEvalRun.id, runId));
   try {
     const set = loadEvalSet(run.evalSet);
-    const report = await runEval(ctx.llm, set, { trials: run.trials, evalRunId: run.id, l7: l7Runner(ctx) });
+    const report = await runEval(ctx.llm, set, {
+      trials: run.trials,
+      evalRunId: run.id,
+      l7: l7Runner(ctx),
+      grounding: groundingRunner(ctx),
+      hybrid: hybridRunner(ctx, run.startedBy),
+    });
     await ctx.db
       .update(LlmEvalRun)
       .set({ status: "done", summary: report.summary, items: report.items, finishedAt: new Date() })

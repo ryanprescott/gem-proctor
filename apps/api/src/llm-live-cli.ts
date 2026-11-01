@@ -11,6 +11,7 @@ import { DEFAULT_VERIFY_SETTINGS, GenerationBatch } from "@gem/shared";
 import { findVerifyPython, superviseVerify } from "../../../scripts/verify-local.ts";
 import { loadConfig } from "./config.ts";
 import { devRuntime } from "./llm-dev.ts";
+import { groundingRunner } from "./llm-eval-database.ts";
 import { l7Runner } from "./llm-evals.ts";
 import { SocketVerifyClient } from "./verify-client.ts";
 
@@ -52,7 +53,11 @@ async function evalCheck(name: string) {
   const set = loadEvalSet(name);
   await check(`eval ${name}`, async () => {
     const target = await llm.resolve(set.role);
-    const report = await runEval(llm, set, { trials, l7: verify ? l7Runner({ llm, verify }) : undefined });
+    const report = await runEval(llm, set, {
+      trials,
+      l7: verify ? l7Runner({ llm, verify }) : undefined,
+      grounding: groundingRunner({ llm }),
+    });
     const head = { model: target.model, endpoint: target.endpoint.label, promptVersion: evalPromptVersion(set) };
     return `${formatEvalReport(set, head, report)}\n${JSON.stringify(report.items)}`;
   });
