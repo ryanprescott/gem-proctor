@@ -3,7 +3,7 @@
   "kind": "generate",
   "role": "authoring.generate",
   "prompt": "authoring.generate",
-  "schema": "strict7",
+  "schema": "strict8",
   "defaultTrials": 5,
   "request": {
     "vars": {

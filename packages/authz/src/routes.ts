@@ -33,7 +33,14 @@ export type RoutePermission =
   | {
       objType: ObjType;
       act: Act;
-      resource?: "test" | "practice_attempt" | "verification_job" | "source" | "authoring_session";
+      resource?:
+        | "test"
+        | "practice_attempt"
+        | "verification_job"
+        | "source"
+        | "authoring_session"
+        | "authoring_batch"
+        | "draft_question";
     };
 
 export const ROUTE_PERMISSIONS = {
@@ -70,6 +77,20 @@ export const ROUTE_PERMISSIONS = {
   "authoring.objectives.propose": { objType: "authoring_session", act: "run", resource: "authoring_session" },
   "authoring.objectives.put": { objType: "authoring_session", act: "update", resource: "authoring_session" },
   "authoring.blueprint": { objType: "authoring_session", act: "update", resource: "authoring_session" },
+  "authoring.generate": { objType: "authoring_session", act: "run", resource: "authoring_session" },
+  "authoring.generate.cancel": { objType: "authoring_session", act: "run", resource: "authoring_session" },
+  "authoring.batches.retry": { objType: "authoring_session", act: "run", resource: "authoring_batch" },
+  "authoring.events": { objType: "authoring_session", act: "read", resource: "authoring_session" },
+  "authoring.revise": { objType: "authoring_session", act: "run", resource: "authoring_session" },
+  "authoring.revalidate": { objType: "authoring_session", act: "run", resource: "authoring_session" },
+  "authoring.publish": { objType: "authoring_session", act: "update", resource: "authoring_session" },
+  "authoring.questions.patch": { objType: "authoring_session", act: "update", resource: "draft_question" },
+  "authoring.questions.validate": { objType: "authoring_session", act: "run", resource: "draft_question" },
+  "authoring.questions.verify": { objType: "authoring_session", act: "run", resource: "draft_question" },
+  "authoring.questions.acceptFix": { objType: "authoring_session", act: "run", resource: "draft_question" },
+  "authoring.questions.chooseProgram": { objType: "authoring_session", act: "update", resource: "draft_question" },
+  "authoring.questions.reclassify": { objType: "authoring_session", act: "update", resource: "draft_question" },
+  "authoring.questions.history": { objType: "authoring_session", act: "read", resource: "draft_question" },
   "tests.list": { objType: "test", act: "list" },
   "tests.get": { objType: "test", act: "read", resource: "test" },
   "tests.update": { objType: "test", act: "update", resource: "test" },

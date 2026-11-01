@@ -41,6 +41,27 @@ describe("A7: SPEC §3D.2 normalization table", () => {
     expect((r.value as AnyQuiz).questions).toHaveLength(1);
   });
 
+  test("P2 E36: <think> inside a JSON string is the model's value, not its reasoning", () => {
+    const text = `{"questions":[{"question":"Which tag opens a <think> block, as in <think>x</think>?","n":1}]}`;
+    const r = extractJson(text);
+    expect((r.value as { questions: { question: string }[] }).questions[0]?.question).toBe(
+      "Which tag opens a <think> block, as in <think>x</think>?",
+    );
+    expect(r.fixes.map((f) => f.code)).not.toContain("think_stripped");
+    // A real block before the JSON still goes, even with a stray quote in it.
+    const both = `<think>he said "hi {</think>{"a":"<think>kept</think>"}`;
+    const b = extractJson(both);
+    expect(b.value).toEqual({ a: "<think>kept</think>" });
+    expect(b.fixes.map((f) => f.code)).toContain("think_stripped");
+  });
+
+  test("P2 E36: a reply cut off mid-question keeps the complete ones and says what it dropped", () => {
+    const text = `{"questions":[{"id":1,"q":"a"},{"id":2,"q":"b"},{"id":3,"q":"cu`;
+    const r = extractJson(text);
+    expect((r.value as { questions: unknown[] }).questions).toHaveLength(2);
+    expect(r.fixes.map((f) => f.code)).toContain("truncated");
+  });
+
   test("row 2: trailing commas, single quotes, unquoted keys, comments → tolerant parse", () => {
     const text = `{
       // a comment

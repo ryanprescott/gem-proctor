@@ -2,7 +2,7 @@
 // says otherwise, so a hit by vector is one the test arranged.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { EMBEDDING_DIMENSIONS, RetrievalLog, SourceChunk } from "@gem/db";
-import { embeddingModelId, expandSections, fuse, retrieve, type ScopeEntry } from "@gem/knowledge";
+import { embeddingModelId, estimateChunkTokens, expandSections, fuse, retrieve, type ScopeEntry } from "@gem/knowledge";
 import { mockVector } from "@gem/llm/mock";
 import { eq, sql } from "drizzle-orm";
 import { assign } from "../../../packages/llm/test/helpers.ts";
@@ -175,11 +175,12 @@ describe.skipIf(!hasDb || !verifyPython)("retrieval", () => {
   }, 20_000);
 
   describe("E15: the budget", () => {
-    const tokens = (list: { tokenCount: number }[]) => list.reduce((n, c) => n + c.tokenCount, 0);
+    const tokens = (list: { tokenCount: number; text: string }[]) =>
+      list.reduce((n, c) => n + estimateChunkTokens(c), 0);
 
     test("the chunks fit a small window and a large one, and a larger one gets more", async () => {
       const all = await env.t.db.select().from(SourceChunk).where(eq(SourceChunk.revisionId, source.latest.id));
-      const smallest = Math.min(...all.map((c) => c.tokenCount));
+      const smallest = Math.min(...all.map(estimateChunkTokens));
       const small = await ask("vector", [scope], smallest + 2);
       expect(small.chunks.length).toBeGreaterThanOrEqual(1);
       expect(tokens(small.chunks)).toBeLessThanOrEqual(smallest + 2);
@@ -194,9 +195,12 @@ describe.skipIf(!hasDb || !verifyPython)("retrieval", () => {
       const res = await env.proctor.post(`${API}/sources`, { title: "Long", citationLabel: "LG", text });
       const long = await env.settled(env.proctor, res.json().source.id);
       expect(long.latest.chunks).toBeGreaterThan(45);
-      const { chunks } = await ask("nothing matches this", [
-        { sourceId: long.id, revisionId: long.latest.id, sectionIds: null },
-      ]);
+      // A budget past what the 40 ranked chunks take, counted as a prompt counts them (chars ÷ 3 at least).
+      const { chunks } = await ask(
+        "nothing matches this",
+        [{ sourceId: long.id, revisionId: long.latest.id, sectionIds: null }],
+        100_000,
+      );
       const neighbours = chunks.filter((c) => c.rank === null);
       expect(neighbours.length).toBeGreaterThan(0);
       for (const n of neighbours) {

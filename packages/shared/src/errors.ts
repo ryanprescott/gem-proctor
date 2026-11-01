@@ -69,6 +69,14 @@ export const ERROR_CODES = [
   "authoring_objective_unknown",
   "authoring_no_objectives",
   "authoring_blueprint_invalid",
+  "authoring_batch_not_found",
+  "authoring_question_not_found",
+  "authoring_question_blocked",
+  "authoring_no_blueprint",
+  "authoring_question_locked",
+  "authoring_nothing_accepted",
+  "authoring_not_in_review",
+  "authoring_fix_unavailable",
 ] as const;
 
 export const ErrorCode = z.enum(ERROR_CODES);
@@ -149,6 +157,14 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   authoring_objective_unknown: 422,
   authoring_no_objectives: 409,
   authoring_blueprint_invalid: 422,
+  authoring_batch_not_found: 404,
+  authoring_question_not_found: 404,
+  authoring_question_blocked: 409,
+  authoring_no_blueprint: 409,
+  authoring_question_locked: 409,
+  authoring_nothing_accepted: 409,
+  authoring_not_in_review: 409,
+  authoring_fix_unavailable: 409,
 };
 
 /** The only error type route handlers throw (SPEC §11.6, companion check). */

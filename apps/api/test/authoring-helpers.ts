@@ -3,6 +3,8 @@
 import { EMBEDDING_DIMENSIONS } from "@gem/db";
 import type { Capabilities, EmbeddingConfig } from "@gem/shared";
 import { assign } from "../../../packages/llm/test/helpers.ts";
+import { startGenerateWorker } from "../src/authoring/generate.ts";
+import { startL7Worker } from "../src/authoring/l7.ts";
 import { Queue } from "../src/queue.ts";
 import { startSourceWorker } from "../src/sources.ts";
 import { API, type Client, registerUser, signIn } from "./helpers.ts";
@@ -48,6 +50,8 @@ export async function createSourceEnv(env: Record<string, string> = {}): Promise
   const queue = await Queue.start(l7.t.database.appUrl, () => {});
   l7.t.ctx.queue = queue;
   await startSourceWorker(l7.t.ctx);
+  await startGenerateWorker(l7.t.ctx);
+  await startL7Worker(l7.t.ctx);
   const assignEmbeddings: SourceEnv["assignEmbeddings"] = async (o = {}) => {
     await assign(l7.t.db, "embeddings", {
       url: l7.mock.url,

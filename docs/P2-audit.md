@@ -134,3 +134,45 @@ This run includes F3's two later e2e changes (41 is 35 plus `sources.e2e.ts`'s 6
 - `POST …/objectives:propose` runs in the request, section by section, not as a job. It's rate limited, and the wizard shows it as pending. A long source on a slow model takes as long as its sections do.
 - Saving objectives clears the blueprint, since its counts are per objective.
 - A proposal that keeps nothing for a section leaves its heading objective, so a section is never left with no coverage target.
+
+## F5 Generation & validation
+
+Built: `packages/shared/src/generation.ts` (`strict8`, `gen-v9`), `draft.ts` (draft content, layers, issue codes), contracts and 11 error codes for generation. `packages/authoring`: `batches.ts` (the blueprint → calls), `mapper.ts` (generation → quiz), `validate/` (L1 structure, L2 grounding, L3 form). `apps/api/src/authoring/`: `generate.ts` (batches as `llm.generate` jobs, retrieval within the window, salvage, cancel, retry, progress), `l7.ts` (L7 on a draft: flow A, flow B for edits, the notation scan, the injection flag), `drafts.ts`, and in `routes/authoring.ts` generate, cancel, batch retry and the events stream. `normalize.ts`: `<think>` inside a JSON string. The F6 and F7 routes (`review.ts`) are in the same tree and are tested here too, but their criteria are audited with the review UI.
+
+| # | Result | Evidence |
+|---|---|---|
+| E24 | **partial** | `authoring-generate.test.ts` "E24": two objectives make two batches, one call each, with the style line in the prompt and the blueprint's `styleVersion`; every cited chunk is in `RetrievalLog`; a 5,000-token window gets no more chunks than a 32,000 one and its prompt stays under window − output; a citation to a chunk that wasn't sent fails L1 and L2. **Not asserted:** that calls wait in the per-endpoint queue (the runtime's own tests cover the queue; no test here counts concurrent calls). |
+| E25 | **pass** | "E25": a failed batch of each kind shows with its code (`llm_output_incomplete`, `llm_output_invalid`, `llm_endpoint_timeout`), the session stays in `draft`, and `POST /authoring/batches/:id/retry` finishes it; a batch that isn't failed is 409; salvage keeps the valid questions and lists the dropped item (`kind: "invalid"`, its index); a cut-off reply keeps its complete questions and lists `truncated`. |
+| E26 | **pass** | "E26": with a call held in flight, cancel makes every batch `cancelled`, writes no question, returns the session to `draft`, and the model never sees a second generation request. |
+| E27 | **pass** | "E27": the hub publishes on every change (more than four events for two batches); a connection starts with the state; a second read gives the same state; another proctor is 404, a student 403. The matrix covers the routes. A live stream is not held open in a test: `inject` can't finish one, so `once=true` stands in, as for sources. |
+| E28 | **pass** | `validate.test.ts` "E28": all five types map to a quiz that parses, ids 1..n, `topics_covered` from the objectives, `correctAnswer` from the correct option or the computed value, a student's text with its values filled in; a draft with no answer is refused. |
+| E29 | **pass** | "E29: L1": a passing and a failing case for each rule: one correct, unique options, true/false options, multi-choice, objective and chunk ids, the calculation rules, undeclared and unused placeholders, the batch with none, the number outside a placeholder, a source value not in a quote, and the rule after L7. |
+| E30 | **pass** | "E30: L2": exact, normalized, fuzzy above and below the threshold, a missing chunk, an empty quote. |
+| E31 | **pass** | "E31: L3": each heuristic, the longest-option set check (four or more), and the P6 number check, which accepts a number in the question, an option, or the cited passage. |
+| E32 | **pass** | "E32": through generation the answer is computed, four options are built with one correct, the question text has its values, `verification` is `computed`, the events are `generated` and `answer_computed`, and the sandbox runs carry the draft's id (this needed `draftQuestionId` written by the recorder: it wasn't). |
+| E33 | **partial** | "E33": two calculations in one session use two different value sets, recorded in the session. **Not exercised through generation:** values taken from the cited chunk first; the engine's own tests (P2.1 C-criteria) cover that, and the test source has no value written out to take. |
+| E34 | **pass** | "E34": a concept question with notation that the solver classifies as a calculation fails L7 with `calculation_as_concept` and can't be accepted; a symbols-only definition classified as a concept passes. Programs that disagree fail with `programs_disagree`, no answer, and 409 on accept. |
+| E35 | **pass** | "E35": an author program that forks is a sandbox denial: L7 fails with `sandbox_denial`, the question is blocked, one `verify.sandbox_denial` audit row is added with no program text, and the cited chunks have `flaggedAt` and `flagReason`. The flagged state's axe check on the source page is still F3's open E18 item. |
+| E36 | **pass** | `normalize.test.ts`: `<think>` inside a JSON string is kept and a real block with a stray quote is still stripped; a reply cut off mid-question keeps the complete ones and logs `truncated`; and the batch reports what was dropped (E25). |
+
+**E23** (F4, partial): **pass.** The style line reaches the prompt: E24 finds the marker line in the request body, and the blueprint carries `styleVersion: "style-v1"`.
+
+**`bun run ci`:** all steps pass, exit 0 (third run; see the notes).
+
+```
+✔ biome check                       ✔ LLM imports stay in packages/llm
+✔ lint rule build is up to date     ✔ typecheck (9 projects)
+✔ lint-rule snapshot                ✔ bun test — 983 pass, 0 fail, 35 files
+✔ suppression baseline              ✔ ruff + ruff format, verify unit tests
+✔ i18n catalog check                ✔ verify escape suite — 40/40
+✔ JSON Schema export is up to date  ✔ Playwright + axe — 41 passed
+```
+
+**Deviations and notes.**
+- **`gen-v9`, `strict8`:** `objectiveIds` after `tempId`, and branches for the other four type combinations. `strict7` stays as the pinned baseline its probe fixture measured; `generate-smoke` runs on `strict8`. The eval expectation in `llm-evals.test.ts` moved from `gen-v8`.
+- **Retrieval counts a chunk as a prompt does** (`estimateChunkTokens`: the endpoint's count, never below chars ÷ 3), so what fits retrieval fits the prompt. E15's budget test and the "neighbours" test gave a budget the new count no longer left room in; the neighbours test now gives one larger than the 40 ranked chunks.
+- **Salvage waits for the repair round.** A reply with one bad item is repaired once before the valid items are kept; the model is asked about the same reply. This is the runtime's existing rule (P1.5), not new.
+- **`authoring.l7` is its own queue**, one job per draft, so a slow program doesn't hold a generation batch. A re-run and "regenerate the check" are the same call: the blind program is written again each time, not cached (SPEC says it is cached with the question). Not changed, since P2.1's engine has no cache.
+- **A concept question carries `verification: { status: "unverified", answerSource: "stated" }`** once L7's notation scan has seen it, so the proctored gate (which treats a question with no `verification` as not verified) doesn't block every concept quiz.
+- **Found by the tests:** the recorder dropped `draftQuestionId`; the session's detail read questions before progress, so "nothing pending" could arrive with questions that still said pending (the review test failed about one run in six; ten of ten pass after the reorder); the cancel test cancelled before the call had left. A generation request needs the `llm.generate` queue to exist, so the test environment starts the workers.
+- **A session generates once** (`draft` only). More questions come from retry or revise: generating again would double them.

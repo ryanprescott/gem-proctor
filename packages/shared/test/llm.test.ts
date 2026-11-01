@@ -3,7 +3,11 @@ import { join } from "node:path";
 import { z } from "zod";
 import * as contracts from "../src/contracts/index.ts";
 import { CONTRACTS } from "../src/contracts/index.ts";
-import { GeneratedQuestion, GenerationBatch } from "../src/generation.ts";
+import {
+  GeneratedQuestionStrict7 as GeneratedQuestion,
+  GenerationBatchStrict7 as GenerationBatch,
+  GenerationBatch as GenerationBatchStrict8,
+} from "../src/generation.ts";
 import { jsonSchemaOf } from "../src/json-schema.ts";
 import {
   Capabilities,
@@ -206,5 +210,27 @@ describe("C28: the strict7 schema", () => {
     expect(GeneratedQuestion.safeParse(concept).success).toBe(true);
     expect(GeneratedQuestion.safeParse({ ...concept, inputs: [input] }).success).toBe(false);
     expect(GeneratedQuestion.safeParse({ ...concept, answerProgram: "x" }).success).toBe(false);
+  });
+});
+
+describe("P2: the strict8 schema", () => {
+  const branches = (s: unknown) =>
+    (s as { properties: { questions: { items: { anyOf: { properties: Record<string, unknown> }[] } } } }).properties
+      .questions.items.anyOf;
+
+  test("it's strict7 with objectiveIds after tempId, then the other types' branches", () => {
+    const strict7 = branches(jsonSchemaOf(GenerationBatch));
+    const strict8 = branches(jsonSchemaOf(GenerationBatchStrict8));
+    expect(strict7).toHaveLength(4);
+    expect(strict8).toHaveLength(8);
+    for (const [i, before] of strict7.entries()) {
+      const { objectiveIds, ...rest } = (strict8[i] as { properties: Record<string, unknown> }).properties;
+      expect(objectiveIds).toBeDefined();
+      expect(rest).toEqual(before.properties);
+      expect(Object.keys((strict8[i] as { properties: object }).properties).slice(0, 2)).toEqual([
+        "tempId",
+        "objectiveIds",
+      ]);
+    }
   });
 });

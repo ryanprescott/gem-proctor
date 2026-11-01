@@ -136,7 +136,7 @@ export async function flowABatch(
       const notation = await checkConceptNotation(
         deps,
         q.question,
-        q.options.map((o) => o.text),
+        (q.options as { text: string }[]).map((o) => o.text),
       );
       if (notation.classified !== null) summary.conceptNotation += 1;
       if (notation.classified) summary.classifiedCalculation += 1;

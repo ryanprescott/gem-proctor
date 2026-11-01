@@ -17,7 +17,7 @@ const GenerateSet = z.object({
   kind: z.literal("generate"),
   role: z.literal("authoring.generate"),
   prompt: z.string(),
-  schema: z.literal("strict7"),
+  schema: z.literal("strict8"),
   defaultTrials: z.number().int().positive(),
   questionsPerTrial: z.number().int().positive(),
   request: z.object({ vars: z.record(z.string(), z.string()), user: z.string() }),

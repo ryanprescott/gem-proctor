@@ -1,7 +1,17 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AuthoringSession, newId, PracticeAttempt, Source, SourceRevision, VerificationJob } from "@gem/db";
+import {
+  AuthoringBatch,
+  AuthoringSession,
+  DraftQuestion,
+  newId,
+  PracticeAttempt,
+  Revision,
+  Source,
+  SourceRevision,
+  VerificationJob,
+} from "@gem/db";
 import { CONTRACTS } from "@gem/shared/contracts";
 import { API, Client, createTestApp, hasDb, registerUser, signIn, type TestApp } from "./helpers.ts";
 
@@ -76,8 +86,15 @@ const WHO: Who[] = ["anonymous", "student", "owner", "other", "admin"];
 type Expect = "allow" | "deny" | "missing" | "hidden";
 
 /** The session routes (P2.md E19). Delete comes last, as for sources. */
-function sessionRows(id: () => string, source: () => string, proctor: Record<Who, Expect>, own: Record<Who, Expect>) {
+function sessionRows(
+  id: () => string,
+  source: () => string,
+  proctor: Record<Who, Expect>,
+  own: Record<Who, Expect>,
+  ids: { draft: () => string; batch: () => string },
+) {
   const base = () => `/authoring/sessions/${id()}`;
+  const question = (rest = "") => `/authoring/questions/${ids.draft()}${rest}`;
   return [
     { id: "authoring.sessions.list", method: "GET", url: () => "/authoring/sessions", expect: proctor },
     {
@@ -110,6 +127,55 @@ function sessionRows(id: () => string, source: () => string, proctor: Record<Who
       body: () => ({ testType: "custom" }),
       expect: own,
     },
+    { id: "authoring.generate", method: "POST", url: () => `${base()}/generate`, expect: own },
+    { id: "authoring.generate.cancel", method: "POST", url: () => `${base()}/generate:cancel`, expect: own },
+    {
+      id: "authoring.batches.retry",
+      method: "POST",
+      url: () => `/authoring/batches/${ids.batch()}/retry`,
+      expect: own,
+    },
+    { id: "authoring.events", method: "GET", url: () => `${base()}/events?once=true`, expect: own },
+    {
+      id: "authoring.revise",
+      method: "POST",
+      url: () => `${base()}/revise`,
+      body: () => ({ questions: [{ id: ids.draft() }] }),
+      expect: own,
+    },
+    { id: "authoring.revalidate", method: "POST", url: () => `${base()}/revalidate`, expect: own },
+    { id: "authoring.publish", method: "POST", url: () => `${base()}/publish`, body: () => ({}), expect: own },
+    {
+      id: "authoring.questions.patch",
+      method: "PATCH",
+      url: () => question(),
+      body: () => ({ status: "rejected" }),
+      expect: own,
+    },
+    { id: "authoring.questions.validate", method: "POST", url: () => question("/validate"), expect: own },
+    { id: "authoring.questions.verify", method: "POST", url: () => question("/verify"), expect: own },
+    {
+      id: "authoring.questions.acceptFix",
+      method: "POST",
+      url: () => question("/verify/accept-fix"),
+      body: () => ({ confirm: true }),
+      expect: own,
+    },
+    {
+      id: "authoring.questions.chooseProgram",
+      method: "POST",
+      url: () => question("/verify/choose-program"),
+      body: () => ({ which: "author" }),
+      expect: own,
+    },
+    {
+      id: "authoring.questions.reclassify",
+      method: "POST",
+      url: () => question("/reclassify"),
+      body: () => ({ note: "x" }),
+      expect: own,
+    },
+    { id: "authoring.questions.history", method: "GET", url: () => question("/history"), expect: own },
     { id: "authoring.sessions.delete", method: "DELETE", url: base, expect: own },
   ];
 }
@@ -165,6 +231,8 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
   let jobId = "";
   let sourceId = "";
   let sessionId = "";
+  let draftId = "";
+  let batchId = "";
 
   beforeAll(async () => {
     t = await createTestApp();
@@ -208,6 +276,50 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
       testType: "custom",
       usedValues: { keys: [], source: [] },
     });
+    const revisionId = newId();
+    await t.db
+      .insert(Revision)
+      .values({ id: revisionId, sessionId, number: 1, trigger: "generate", request: {}, seed: "s" });
+    draftId = newId();
+    await t.db.insert(DraftQuestion).values({
+      id: draftId,
+      sessionId,
+      revisionId,
+      tempId: "q1",
+      position: 1,
+      status: "proposed",
+      content: {
+        type: "single_choice",
+        topic: "T",
+        computable: false,
+        objectiveIds: [],
+        template: "Which?",
+        question: "Which?",
+        options: [
+          { text: "A", isCorrect: true },
+          { text: "B", isCorrect: false },
+        ],
+        correctAnswer: "A",
+        numericTolerance: null,
+        explanation: "",
+        evidence: [],
+        inputs: [],
+        constraint: "",
+        answerProgram: "",
+        mistakes: [],
+        verification: null,
+        l7: null,
+        l7Pending: false,
+        provenance: "llm",
+        callLogId: null,
+        promptVersion: null,
+        model: null,
+      },
+    });
+    batchId = newId();
+    await t.db
+      .insert(AuthoringBatch)
+      .values({ id: batchId, sessionId, revisionId, status: "done", plan: {}, failedItems: [] });
     attemptId = newId();
     await t.db.insert(PracticeAttempt).values({
       id: attemptId,
@@ -400,6 +512,7 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
         () => sourceId,
         proctor,
         ownSource,
+        { draft: () => draftId, batch: () => batchId },
       ),
       ...sourceRows(() => sourceId, proctor, ownSource),
       // Last: it ends each session.

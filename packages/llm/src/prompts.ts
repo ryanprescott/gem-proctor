@@ -6,7 +6,7 @@ import { join } from "node:path";
 export const PROMPTS_DIR = join(import.meta.dir, "..", "prompts");
 
 export const ACTIVE_PROMPTS: Record<string, string> = {
-  "authoring.generate": "gen-v8",
+  "authoring.generate": "gen-v9",
   "authoring.objectives": "objectives-v1",
   "authoring.style": "style-v1",
   "verify.solve.blind": "blind-v2",

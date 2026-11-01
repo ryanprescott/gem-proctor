@@ -143,6 +143,36 @@ function candidateStarts(text: string): number[] {
   return starts;
 }
 
+/**
+ * Removes `<think>` blocks, but not the words `<think>` inside a JSON string: that's a model's value, not its reasoning.
+ * Strings only count inside a bracket: prose before the JSON can hold a stray quote.
+ */
+function stripThink(text: string): string {
+  let out = "";
+  let depth = 0;
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i] as string;
+    if (inString) {
+      out += c;
+      if (c === "\\") out += text[++i] ?? "";
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === "<" && text.slice(i, i + 7).toLowerCase() === "<think>") {
+      const end = text.toLowerCase().indexOf("</think>", i);
+      if (end === -1) break;
+      i = end + 7;
+      continue;
+    }
+    if (c === '"' && depth > 0) inString = true;
+    if (c === "{" || c === "[") depth += 1;
+    if ((c === "}" || c === "]") && depth > 0) depth -= 1;
+    out += c;
+  }
+  return out;
+}
+
 function extractAndParse(text: string, log: FixLog): unknown {
   // Already clean JSON: nothing to record.
   try {
@@ -150,7 +180,7 @@ function extractAndParse(text: string, log: FixLog): unknown {
   } catch {}
 
   let body = text;
-  const withoutThink = body.replace(/<think>[\s\S]*?(<\/think>|$)/gi, "");
+  const withoutThink = stripThink(body);
   if (withoutThink !== body) {
     log.info("think_stripped");
     body = withoutThink;

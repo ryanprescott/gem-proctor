@@ -94,7 +94,8 @@
     },
     "authoring_session": {
       "create": "Authoring session created",
-      "delete": "Authoring session deleted"
+      "delete": "Authoring session deleted",
+      "publish": "Authoring session published"
     }
   },
   "targets": {

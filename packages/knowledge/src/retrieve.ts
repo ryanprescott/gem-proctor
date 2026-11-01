@@ -1,6 +1,6 @@
 import { type Db, newId, RetrievalLog, SourceChunk, SourceSection } from "@gem/db";
 import { and, asc, eq, inArray, isNotNull, or, type SQL, sql } from "drizzle-orm";
-import { type EmbeddingRuntime, embeddingModelId } from "./ingest.ts";
+import { type EmbeddingRuntime, embeddingModelId, estimateChunkTokens } from "./ingest.ts";
 
 /**
  * Hybrid retrieval (SPEC §3C.3, P2.md §5). The scope filter is in the SQL of both searches, so a chunk outside it can
@@ -36,7 +36,10 @@ export interface RetrievedChunk {
 export interface RetrievalRequest {
   query: string;
   scope: ScopeEntry[];
-  /** Most tokens of chunk text to return; what doesn't fit stays out (P2.md §5). */
+  /**
+   * Most tokens of chunk text to return; what doesn't fit stays out (P2.md §5). Counted like the runtime counts a
+   * prompt (`estimateChunkTokens`), so that what fits here fits there.
+   */
   budgetTokens: number;
   /** Where `RetrievalLog` hangs from; without it nothing is logged. */
   log?: { revisionId: string | null; objectiveId: string | null };
@@ -164,7 +167,7 @@ async function addNeighbours(
   filter: SQL,
   budget: number,
 ): Promise<RetrievedChunk[]> {
-  let left = budget - picked.reduce((n, c) => n + c.tokenCount, 0);
+  let left = budget - picked.reduce((n, c) => n + estimateChunkTokens(c), 0);
   if (left <= 0 || picked.length === 0) return picked;
   const sections = [...new Set(picked.map((c) => c.sectionId))];
   const rows = await db
@@ -179,9 +182,9 @@ async function addNeighbours(
     const inSection = rows.filter((r) => r.sectionId === c.sectionId);
     const at = inSection.findIndex((r) => r.id === c.id);
     for (const n of [inSection[at + 1], inSection[at - 1]]) {
-      if (!n || have.has(n.id) || n.tokenCount > left) continue;
+      if (!n || have.has(n.id) || estimateChunkTokens(n) > left) continue;
       have.add(n.id);
-      left -= n.tokenCount;
+      left -= estimateChunkTokens(n);
       out.push({
         ...n,
         sourceId: sourceOf.get(n.revisionId) as string,
@@ -222,8 +225,9 @@ export async function retrieve(
   for (const [i, f] of fused.entries()) {
     const row = byId.get(f.id);
     if (!row) continue;
-    if (used + row.tokenCount > req.budgetTokens) continue;
-    used += row.tokenCount;
+    const size = estimateChunkTokens(row);
+    if (used + size > req.budgetTokens) continue;
+    used += size;
     picked.push({ ...row, sourceId: sourceOf.get(row.revisionId) as string, ...f, rank: i + 1 });
   }
   const chunks = await addNeighbours(db, picked, req.scope, filter, req.budgetTokens);

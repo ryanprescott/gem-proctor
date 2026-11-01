@@ -27,6 +27,7 @@ export function dbRecorder(db: Db): RunRecorder {
         id,
         jobId: record.jobId ?? null,
         testVersionId: record.testVersionId ?? null,
+        draftQuestionId: record.draftQuestionId ?? null,
         questionId: record.questionId,
         programKind: record.programKind,
         program: record.program,

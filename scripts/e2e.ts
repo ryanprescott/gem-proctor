@@ -76,6 +76,7 @@ function startMockLlm(mockHost: string | undefined) {
   const quote = "For two n-vectors a and b, the inner product";
   const question = {
     tempId: "q1",
+    objectiveIds: ["O1"],
     type: "single_choice",
     topic: "Inner product",
     computable: false,

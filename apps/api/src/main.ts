@@ -4,6 +4,8 @@ import { createDb, createPool, runMigrations } from "@gem/db";
 import { createLlmRuntime, dbStore } from "@gem/llm";
 import { buildApp } from "./app.ts";
 import { SessionStore } from "./auth/sessions.ts";
+import { startGenerateWorker } from "./authoring/generate.ts";
+import { startL7Worker } from "./authoring/l7.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import type { AppContext } from "./context.ts";
 import { EventHub } from "./events.ts";
@@ -52,6 +54,8 @@ ctx.queue = await Queue.start(config.DATABASE_URL, (msg, err) => app.log.error({
 await startEvalWorker(ctx);
 await startVerifyWorker(ctx);
 await startSourceWorker(ctx);
+await startGenerateWorker(ctx);
+await startL7Worker(ctx);
 await bootstrapEnvAdmin(ctx);
 // A key that can't be read makes that endpoint `llm_endpoint_auth`, not the API fail to start (P1.5.md §5).
 const unreadable = await ctx.llm.unreadableEndpoints();

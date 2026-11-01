@@ -63,5 +63,13 @@
   "authoring_chunk_unknown": "That passage isn't in this session's scope.",
   "authoring_objective_unknown": "That objective isn't part of this session.",
   "authoring_no_objectives": "Add at least one objective first.",
-  "authoring_blueprint_invalid": "The counts don't add up to the question total."
+  "authoring_blueprint_invalid": "The counts don't add up to the question total.",
+  "authoring_batch_not_found": "That batch doesn't exist.",
+  "authoring_question_not_found": "That question doesn't exist.",
+  "authoring_question_blocked": "This question can't be accepted yet: it has a failed check, or no answer.",
+  "authoring_no_blueprint": "Set the blueprint first.",
+  "authoring_question_locked": "This question is locked. Unlock it to change it.",
+  "authoring_nothing_accepted": "Accept at least one question before publishing.",
+  "authoring_not_in_review": "This can only be done while the session is in review.",
+  "authoring_fix_unavailable": "There's no suggested fix to apply to this question."
 }

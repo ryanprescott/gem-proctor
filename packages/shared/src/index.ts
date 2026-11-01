@@ -1,5 +1,6 @@
 export * from "./authoring.ts";
 export { PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH } from "./contracts/index.ts";
+export * from "./draft.ts";
 export * from "./errors.ts";
 export * from "./generation.ts";
 export * from "./import.ts";

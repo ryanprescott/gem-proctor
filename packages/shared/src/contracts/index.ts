@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AuthoringStatus, Blueprint, ObjectiveOrigin } from "../authoring.ts";
+import { DraftContent, DraftStatus, LayerResult, QuestionEventKind } from "../draft.ts";
 import { ErrorCode } from "../errors.ts";
 import { ImportReport } from "../import.ts";
 import {
@@ -411,6 +412,7 @@ export const AUDIT_ACTIONS = [
   "source.delete",
   "authoring_session.create",
   "authoring_session.delete",
+  "authoring_session.publish",
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -1023,11 +1025,73 @@ export const SessionSummary = z.object({
 });
 export type SessionSummary = z.infer<typeof SessionSummary>;
 
+export const BATCH_STATUSES = ["queued", "running", "done", "failed", "cancelled"] as const;
+export const BatchStatus = z.enum(BATCH_STATUSES);
+
+/** What a batch lost: an item salvage kept out, or the partial question a cut-off reply dropped (P2.md §5). */
+export const BatchFailedItem = z.object({
+  kind: z.enum(["invalid", "truncated"]),
+  index: z.number().int(),
+  issues: z.array(z.object({ path: z.string(), message: z.string() })),
+});
+export type BatchFailedItem = z.infer<typeof BatchFailedItem>;
+
+export const BatchView = z.object({
+  id: Uuid,
+  revision: z.number().int(),
+  status: BatchStatus,
+  objectiveIds: z.array(Uuid),
+  size: z.number().int(),
+  written: z.number().int(),
+  errorCode: ErrorCode.nullable(),
+  failedItems: z.array(BatchFailedItem),
+});
+export type BatchView = z.infer<typeof BatchView>;
+
+export const RevisionView = z.object({
+  id: Uuid,
+  number: z.number().int(),
+  trigger: z.enum(["generate", "revise"]),
+  createdAt: Iso,
+});
+export type RevisionView = z.infer<typeof RevisionView>;
+
+export const DraftView = z.object({
+  id: Uuid,
+  revision: z.number().int(),
+  position: z.number().int(),
+  tempId: z.string(),
+  status: DraftStatus,
+  content: DraftContent,
+  /** The newest result per layer. */
+  validations: z.array(LayerResult),
+  /** A `fail`, no answer yet, or L7 still running: accepting is refused (P2.md §5). */
+  blocked: z.boolean(),
+  creatorNote: z.string().nullable(),
+  supersedesId: Uuid.nullable(),
+  editedAt: Iso.nullable(),
+});
+export type DraftView = z.infer<typeof DraftView>;
+
+/** The numbers that move during a run: this is what the event stream sends. */
+export const SessionProgress = z.object({
+  status: AuthoringStatus,
+  batches: z.array(BatchView),
+  written: z.number().int(),
+  checked: z.number().int(),
+  pending: z.number().int(),
+});
+export type SessionProgress = z.infer<typeof SessionProgress>;
+
 export const SessionDetail = z.object({
   session: SessionSummary,
   sources: z.array(SessionSourceView),
   objectives: z.array(ObjectiveView),
   blueprint: Blueprint.nullable(),
+  revisions: z.array(RevisionView),
+  progress: SessionProgress,
+  /** The current version of each question; regenerated ones are in its history. */
+  questions: z.array(DraftView),
 });
 export type SessionDetail = z.infer<typeof SessionDetail>;
 
@@ -1113,7 +1177,194 @@ export const authoringBlueprint = contract({
   response: z.object({ blueprint: Blueprint }),
 });
 
+export const authoringGenerate = contract({
+  id: "authoring.generate",
+  method: "POST",
+  path: "/authoring/sessions/:id/generate",
+  params: IdParams,
+  response: SessionDetail,
+});
+
+export const authoringGenerateCancel = contract({
+  id: "authoring.generate.cancel",
+  method: "POST",
+  path: "/authoring/sessions/:id/generate:cancel",
+  params: IdParams,
+  response: SessionDetail,
+});
+
+export const authoringBatchRetry = contract({
+  id: "authoring.batches.retry",
+  method: "POST",
+  path: "/authoring/batches/:id/retry",
+  params: IdParams,
+  response: z.object({ batch: BatchView }),
+});
+
+/** Server-sent events: `SessionProgress` at once, and again on every change. */
+export const authoringEvents = contract({
+  id: "authoring.events",
+  method: "GET",
+  path: "/authoring/sessions/:id/events",
+  params: IdParams,
+  query: EventsQuery,
+  response: z.string(),
+  responseKind: "text",
+});
+
+export const QuestionEdit = z.object({
+  topic: z.string().trim().min(1).max(200).optional(),
+  /** What a student sees: for a computable question, the text with its values filled in. */
+  question: z.string().trim().min(1).max(4000).optional(),
+  options: z
+    .array(z.object({ text: z.string().trim().min(1).max(1000), isCorrect: z.boolean() }))
+    .max(8)
+    .optional(),
+  correctAnswer: z.string().trim().min(1).max(1000).optional(),
+  correctAnswers: z.array(z.string().trim().min(1).max(1000)).max(8).optional(),
+  acceptedAnswers: z.array(z.string().trim().min(1).max(1000)).max(20).optional(),
+  numericTolerance: z.number().min(0).nullable().optional(),
+  explanation: z.string().max(2000).optional(),
+});
+export type QuestionEdit = z.infer<typeof QuestionEdit>;
+
+const QuestionResponse = z.object({ question: DraftView });
+
+/** Accept, reject or lock; or edit (which re-validates). One at a time. */
+export const authoringQuestionPatch = contract({
+  id: "authoring.questions.patch",
+  method: "PATCH",
+  path: "/authoring/questions/:id",
+  params: IdParams,
+  body: z
+    .object({
+      status: DraftStatus.optional(),
+      edit: QuestionEdit.optional(),
+      note: z.string().max(1000).optional(),
+    })
+    .refine((b) => (b.status === undefined) !== (b.edit === undefined), "one of status or edit"),
+  response: QuestionResponse,
+});
+
+export const authoringQuestionValidate = contract({
+  id: "authoring.questions.validate",
+  method: "POST",
+  path: "/authoring/questions/:id/validate",
+  params: IdParams,
+  response: QuestionResponse,
+});
+
+export const authoringQuestionVerify = contract({
+  id: "authoring.questions.verify",
+  method: "POST",
+  path: "/authoring/questions/:id/verify",
+  params: IdParams,
+  query: z.object({ regenerate: z.enum(["true"]).optional() }),
+  response: QuestionResponse,
+});
+
+export const authoringQuestionAcceptFix = contract({
+  id: "authoring.questions.acceptFix",
+  method: "POST",
+  path: "/authoring/questions/:id/verify/accept-fix",
+  params: IdParams,
+  /** The suggestion is applied only when `confirm` is true (SPEC §3A.3.1). */
+  body: z.object({ confirm: z.boolean(), note: z.string().max(1000).optional() }),
+  response: QuestionResponse,
+});
+
+export const authoringQuestionChooseProgram = contract({
+  id: "authoring.questions.chooseProgram",
+  method: "POST",
+  path: "/authoring/questions/:id/verify/choose-program",
+  params: IdParams,
+  body: z.object({ which: z.enum(["author", "blind"]), note: z.string().max(1000).optional() }),
+  response: QuestionResponse,
+});
+
+export const authoringQuestionReclassify = contract({
+  id: "authoring.questions.reclassify",
+  method: "POST",
+  path: "/authoring/questions/:id/reclassify",
+  params: IdParams,
+  /** The only way past flow B on an edited computable question: it's not computable, and a note says why. */
+  body: z.object({ note: z.string().trim().min(1).max(1000) }),
+  response: QuestionResponse,
+});
+
+export const QuestionHistoryEvent = z.object({
+  id: Uuid,
+  draftQuestionId: Uuid,
+  kind: QuestionEventKind,
+  actorId: Uuid.nullable(),
+  actorName: z.string().nullable(),
+  at: Iso,
+  note: z.string().nullable(),
+  before: z.unknown(),
+  after: z.unknown(),
+});
+export type QuestionHistoryEvent = z.infer<typeof QuestionHistoryEvent>;
+
+export const authoringQuestionHistory = contract({
+  id: "authoring.questions.history",
+  method: "GET",
+  path: "/authoring/questions/:id/history",
+  params: IdParams,
+  response: z.object({
+    /** Oldest first: generated → regenerated → … */
+    versions: z.array(
+      z.object({ id: Uuid, revision: z.number().int(), tempId: z.string(), supersedesId: Uuid.nullable() }),
+    ),
+    events: z.array(QuestionHistoryEvent),
+  }),
+});
+
+export const authoringRevise = contract({
+  id: "authoring.revise",
+  method: "POST",
+  path: "/authoring/sessions/:id/revise",
+  params: IdParams,
+  body: z.object({
+    questions: z
+      .array(z.object({ id: Uuid, note: z.string().max(1000).optional() }))
+      .min(1)
+      .max(100),
+  }),
+  response: SessionDetail,
+});
+
+export const authoringRevalidate = contract({
+  id: "authoring.revalidate",
+  method: "POST",
+  path: "/authoring/sessions/:id/revalidate",
+  params: IdParams,
+  response: SessionDetail,
+});
+
+export const authoringPublish = contract({
+  id: "authoring.publish",
+  method: "POST",
+  path: "/authoring/sessions/:id/publish",
+  params: IdParams,
+  body: z.object({ title: z.string().trim().min(1).max(200).optional(), description: z.string().max(2000).optional() }),
+  response: z.object({ testId: Uuid, versionId: Uuid, proctorReady: z.boolean() }),
+});
+
 export const CONTRACTS = [
+  authoringQuestionPatch,
+  authoringQuestionValidate,
+  authoringQuestionVerify,
+  authoringQuestionAcceptFix,
+  authoringQuestionChooseProgram,
+  authoringQuestionReclassify,
+  authoringQuestionHistory,
+  authoringRevise,
+  authoringRevalidate,
+  authoringPublish,
+  authoringGenerate,
+  authoringGenerateCancel,
+  authoringBatchRetry,
+  authoringEvents,
   authoringSessionsList,
   authoringSessionsCreate,
   authoringSessionsGet,
