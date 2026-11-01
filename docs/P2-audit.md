@@ -4,6 +4,23 @@ Audit of P2.md §8, feature by feature, each section written when its feature wa
 
 **Environment.** WSL2 with Docker and Compose, default runtime runc, no gVisor. Postgres 17 + pgvector 0.8 from the local binaries, Python 3.12 with the pinned libraries, Playwright's Chromium. Each `bun run ci` ran on a snapshot of the tree in `~/.cache` (tracked and new files, no `.env`, a fresh `bun install --frozen-lockfile`), so editing can't change what a run tests.
 
+## Summary
+
+56 criteria: **54 pass, 2 partial**, none failed, blocked or dropped. Each criterion's evidence is in its feature's section below; a row marked "→ pass in F6" changed when the feature that could show it was built.
+
+| Feature | Criteria | Result |
+|---|---|---|
+| F1 Sources & ingest | E1–E10 | all pass |
+| F2 Retrieval & scope | E11–E15 | all pass |
+| F3 Sources UI | E16–E18 | all pass (E18 once F6 had a flagged passage to show) |
+| F4 Sessions, objectives, blueprint | E19–E23 | all pass (E23 once F5 sent the style line) |
+| F5 Generation & validation | E24–E36 | pass, but **E24 partial** (calls waiting in the per-endpoint queue aren't asserted here) and **E33 partial** (values from the cited chunk first aren't exercised through generation; the engine's own tests cover it) |
+| F6 Review & revise | E37–E45 | all pass |
+| F7 Publish & provenance | E46–E50 | all pass |
+| F8 Evals, live & close | E51–E56 | all pass |
+
+What the live runs found (E52, SPEC §13 Q4 and Q5): a 9B local model gives a usable chapter quiz, 9 to 10 questions in 11 to 15 minutes, of which 5 and 8 passed review after one revise round; and on the small retrieval set, vector search alone ranked better than vector with full text.
+
 ## F1 Sources & ingest
 
 Built: every §4 table in `packages/db/src/schema.ts`, migrations `0009_p2_authoring_tables.sql` (generated) and `0010_p2_grants.sql` (hand-written). `packages/knowledge`: `parse.ts` (remark, sections, block units), `chunk.ts`, `ingest.ts` (saving a revision, the embedding job's work, reuse). `packages/shared/src/sources.ts`, contracts for the source routes, seven error codes, four audit actions. `apps/api/src/sources.ts` (the `source.embed` pg-boss job), `routes/sources.ts`, `events.ts` (the event hub and SSE). `InstanceSettings.authoring`. Casbin object `source`, and the private-resource rule in `http/route.ts`. Tests: `packages/knowledge/test/chunk.test.ts`, `apps/api/test/sources.test.ts`, the matrix in `authz.test.ts`.
@@ -241,6 +258,21 @@ Built: the `grounding-smoke` eval set (`packages/llm/evals/grounding-smoke`, run
 | E52 | **pass** | Two runs of `bun run live:authoring` on the reference box (`qwen3.5-9b-32k`, `embeddinggemma2-4k`, Ollama), 2026-11-01, below. The second generated 10 questions, accepted 8, published (`proctorReady: true`) and took the test in practice, 8 of 8 against its key. The first generated 9 (a call timed out) and accepted 5. |
 | E53 | **pass** | SPEC §13 Q4 and Q5 hold what was measured, including that vector with full text did worse than vector alone on `retrieval-mini`. |
 | E54 | **pass** | A Compose stack under its own project name (`COMPOSE_PROJECT_NAME=gem-p2 API_PORT=3400 docker compose up --build`): `bun scripts/check-compose.ts` all `ok` (health, and the verify container's isolation: no network, read-only root, `cap_drop ALL`, children as `runner` with no capabilities). `authoring.e2e.ts` against it with the mock (`E2E_MOCK_HOST=host.docker.internal`): 6 passed, including the prompt-injected source, where the denial now comes from the real container. The journey is with the mock, not live; the live journey (E52) ran on a local stack. |
+| E55 | **pass** | `bun run ci` from a clean export of the commit (`git archive HEAD`, no `.env`, a fresh `bun install --frozen-lockfile`, no `LLM_DEV_*` in the environment, so no model server is known to it): every step passes, exit 0, below. `no-literal-ui-string` and the catalogs pass (969 keys). It ran against the already-running local Postgres through `TEST_PG_ADMIN_URL`, with the two role passwords from the environment: that cluster's roles were made with the repo's `.env` passwords, which a copy with no `.env` doesn't have (the first attempt failed 32 tests on `password authentication failed for gem_owner`, nothing else). |
+| E56 | **pass** | SPEC v0.28: §3A.2, §3A.4, §3C.3, §4, §10 and §12 say what was built; §13 Q4 and Q5 hold the measurements; §15.2 has the 14 decisions of P2 below. `docs/DEVELOPMENT.md` has "Sources and authoring (P2)": ingest, retrieval, the three queues and their workers, the prompt and schema, the eval sets, the live scripts, and the web pages and e2e. |
+
+**`bun run ci` from the clean export:** all steps pass, exit 0.
+
+```
+✔ biome check                       ✔ LLM imports stay in packages/llm
+✔ lint rule build is up to date     ✔ typecheck (9 projects)
+✔ lint-rule snapshot                ✔ bun test — 985 pass, 0 fail, 36 files
+✔ suppression baseline              ✔ ruff + ruff format, verify unit tests
+✔ i18n catalog check (969 keys)     ✔ verify escape suite — 40/40
+✔ JSON Schema export is up to date  ✔ Playwright + axe — 47 passed
+```
+
+Earlier phases' criteria (P0, P1, P1.5 and P2.1's) are all in that run and pass.
 
 **E52 in numbers.** Same fixture, same roles from `LLM_DEV_*` (thinking off), a `chapter_quiz` of 10 questions, one question per call.
 
