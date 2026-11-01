@@ -54,6 +54,11 @@ export function Layout() {
                   </Link>
                 </li>
                 <li>
+                  <Link to="/authoring" activeProps={{ "aria-current": "page" }}>
+                    {t("common:nav.authoring")}
+                  </Link>
+                </li>
+                <li>
                   <Link to="/import" activeProps={{ "aria-current": "page" }}>
                     {t("common:nav.import")}
                   </Link>

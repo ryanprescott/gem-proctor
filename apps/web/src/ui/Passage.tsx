@@ -10,17 +10,24 @@ export function Passage({ text, quote }: { text: string; quote?: string | undefi
   if (!quote || at < 0) {
     return (
       <div className={styles.passage}>
-        <Markdown>{text}</Markdown>
+        <Markdown quoted>{text}</Markdown>
       </div>
     );
   }
   return (
     <div className={styles.passage}>
-      <Markdown inline>{text.slice(0, at)}</Markdown> {/* Separate spans: each must stay valid math. */}
+      <Markdown inline quoted>
+        {text.slice(0, at)}
+      </Markdown>{" "}
+      {/* Separate spans: each must stay valid math. */}
       <mark className={styles.quote}>
-        <Markdown inline>{quote}</Markdown>
+        <Markdown inline quoted>
+          {quote}
+        </Markdown>
       </mark>{" "}
-      <Markdown inline>{text.slice(at + quote.length)}</Markdown>
+      <Markdown inline quoted>
+        {text.slice(at + quote.length)}
+      </Markdown>
     </div>
   );
 }

@@ -496,7 +496,10 @@ export async function batchViewById(ctx: Pick<AppContext, "db">, batchId: string
 
 export async function sessionProgress(ctx: Pick<AppContext, "db">, session: SessionRow): Promise<SessionProgress> {
   const batches = await batchViews(ctx, session.id);
-  const drafts = await ctx.db.select().from(DraftQuestion).where(eq(DraftQuestion.sessionId, session.id));
+  // The questions as they stand: a regenerated one's new version counts, and the old one is only history.
+  const all = await ctx.db.select().from(DraftQuestion).where(eq(DraftQuestion.sessionId, session.id));
+  const replaced = new Set(all.flatMap((d) => (d.supersedesId ? [d.supersedesId] : [])));
+  const drafts = all.filter((d) => !replaced.has(d.id));
   const results = await latestResults(
     ctx.db,
     drafts.map((d) => d.id),

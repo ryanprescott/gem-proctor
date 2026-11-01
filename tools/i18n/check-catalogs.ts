@@ -7,6 +7,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import {
+  AUTHORING_STATUSES,
+  DRAFT_STATUSES,
   ENDPOINT_LOCATIONS,
   ERROR_CODES,
   EVAL_METRICS,
@@ -17,14 +19,19 @@ import {
   L7_REASONS,
   MODEL_ROLES,
   PROCTOR_BLOCKERS,
+  QUESTION_EVENT_KINDS,
   QUESTION_TYPES,
   QUIZ_ISSUE_CODES,
   SOURCE_EMBED_STATUSES,
   SOURCE_WARNING_CODES,
   STRUCTURED_MODES,
+  TEST_TYPES,
+  VALIDATION_ISSUES,
+  VALIDATION_LAYERS,
+  VALIDATION_OUTCOMES,
   VERIFICATION_STATUSES,
 } from "@gem/shared";
-import { AUDIT_ACTIONS, AUDIT_TARGETS, PRACTICE_KINDS, ROLES } from "@gem/shared/contracts";
+import { AUDIT_ACTIONS, AUDIT_TARGETS, BATCH_STATUSES, PRACTICE_KINDS, ROLES } from "@gem/shared/contracts";
 import { Glob } from "bun";
 import ts from "typescript";
 
@@ -54,6 +61,29 @@ export const DYNAMIC_FAMILIES: Record<string, readonly string[]> = {
   "tests:proctor.reasons.": PROCTOR_BLOCKERS,
   "sources:warnings.": SOURCE_WARNING_CODES,
   "sources:status.": SOURCE_EMBED_STATUSES,
+  "authoring:testTypes.": TEST_TYPES,
+  "authoring:session.status.": AUTHORING_STATUSES,
+  "authoring:question.status.": DRAFT_STATUSES,
+  "authoring:batch.status.": BATCH_STATUSES,
+  "authoring:layers.": VALIDATION_LAYERS,
+  "authoring:outcomes.": VALIDATION_OUTCOMES,
+  "authoring:issues.": VALIDATION_ISSUES,
+  "authoring:events.": QUESTION_EVENT_KINDS,
+  "authoring:l7.flows.": ["a", "b", "notation"],
+  "authoring:review.provenance.": ["llm", "llm_edited", "human"],
+  "authoring:review.filters.": ["all", "fail", "warn", "pass"],
+  "authoring:review.done.": [
+    "accepted",
+    "rejected",
+    "locked",
+    "reopened",
+    "edited",
+    "rerun",
+    "fix",
+    "chose",
+    "reclassified",
+    "regenerating",
+  ],
 };
 
 const PLURAL_SUFFIXES = ["_zero", "_one", "_two", "_few", "_many", "_other"];

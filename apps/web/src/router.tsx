@@ -3,6 +3,8 @@ import { Layout } from "./Layout.tsx";
 import { AdminAuditLogPage, AdminSettingsPage, AdminUsersPage } from "./routes/Admin.tsx";
 import { AdminLlmPage } from "./routes/AdminLlm.tsx";
 import { AttemptPage } from "./routes/Attempt.tsx";
+import { AuthoringPage } from "./routes/Authoring.tsx";
+import { AuthoringSessionPage } from "./routes/AuthoringSession.tsx";
 import { HomePage, NotFoundPage } from "./routes/Home.tsx";
 import { ImportPage } from "./routes/Import.tsx";
 import { ResultsPage } from "./routes/Results.tsx";
@@ -63,11 +65,21 @@ const routes = [
       return <SourceDetailPage sourceId={sourceId} search={search} />;
     },
   }),
+  createRoute({ getParentRoute: () => root, path: "/authoring", component: AuthoringPage }),
+  createRoute({
+    getParentRoute: () => root,
+    path: "/authoring/$sessionId",
+    component: function AuthoringSessionRoute() {
+      const { sessionId } = sessionRoute.useParams();
+      return <AuthoringSessionPage sessionId={sessionId} />;
+    },
+  }),
 ] as const;
 const testRoute = routes[5];
 const attemptRoute = routes[6];
 const resultsRoute = routes[7];
 const sourceRoute = routes[13];
+const sessionRoute = routes[15];
 
 export const router = createRouter({ routeTree: root.addChildren([...routes]), defaultPreload: false });
 

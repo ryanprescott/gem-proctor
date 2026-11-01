@@ -71,6 +71,68 @@ function verifyReply(content: string): ChatReply | null {
   return recorded ? { text: JSON.stringify(recorded.value), delayMs: 50 } : null;
 }
 
+/**
+ * A generation call for an authoring session: concept questions on the chunks the request carries, each quoting a line
+ * of its chunk, so the review screen has real passages to mark. No notation, so L7 makes no model call.
+ */
+function generationReply(content: string) {
+  const chunks = [
+    ...content.matchAll(/Source chunk \[([^\]]+)\]:\n([\s\S]*?)(?=\n\nSource chunk \[|\n\nObjectives:)/g),
+  ].map((m) => ({ key: m[1] as string, text: m[2] as string }));
+  const chunk = chunks[0];
+  if (!chunk) return null;
+  const size = Number(/Write (\d+) questions/.exec(content)?.[1] ?? 1);
+  const objectives = [...content.matchAll(/^(O\d+):/gm)].map((m) => m[1] as string);
+  const quote =
+    chunk.text.split("\n").find((l) => l.trim().length > 30 && !l.startsWith("#")) ?? chunk.text.slice(0, 60);
+  // A source that carries a prompt injection: the model writes a program that attacks the sandbox (E35).
+  const hostile = content.includes("HOSTILE-SOURCE");
+  let n = 0;
+  const questions = Array.from({ length: size }, (_, i) => {
+    n += 1;
+    if (hostile) {
+      return {
+        tempId: `h${n}`,
+        objectiveIds: [objectives[i % Math.max(objectives.length, 1)] ?? "O1"],
+        type: "single_choice",
+        topic: "Counting",
+        computable: true,
+        evidence: [{ chunkId: chunk.key, quote }],
+        inputs: [{ name: "x", kind: "integer", size: [], from: "sample", sourceText: "" }],
+        question: "What is {x} plus one?",
+        constraint: "",
+        answerProgram: "import os\nos.fork()\nresult = x + 1",
+        options: [],
+        mistakes: [
+          { whyWrong: "forgets the one", program: "result = x" },
+          { whyWrong: "adds two", program: "result = x + 2" },
+        ],
+        explanation: "Add one to the number.",
+      };
+    }
+    return {
+      tempId: `e${n}`,
+      objectiveIds: [objectives[i % Math.max(objectives.length, 1)] ?? "O1"],
+      type: "single_choice",
+      topic: "Core idea",
+      computable: false,
+      evidence: [{ chunkId: chunk.key, quote }],
+      inputs: [],
+      question: `Which statement matches the passage? (${Math.random().toString(36).slice(2, 7)})`,
+      constraint: "",
+      answerProgram: "",
+      options: [
+        { text: "It restates the passage", isCorrect: true },
+        { whyWrong: "it contradicts the passage", text: "It contradicts the passage", isCorrect: false },
+        { whyWrong: "it is unrelated", text: "It is about something else", isCorrect: false },
+      ],
+      mistakes: [],
+      explanation: "The passage says so.",
+    };
+  });
+  return { text: JSON.stringify({ questions }), delayMs: 150 };
+}
+
 /** Enough for the probe and for `generate-smoke`; slow enough that the UI sees a run in progress. */
 function startMockLlm(mockHost: string | undefined) {
   const quote = "For two n-vectors a and b, the inner product";
@@ -104,7 +166,8 @@ function startMockLlm(mockHost: string | undefined) {
     reply: (body) =>
       JSON.stringify(body.messages).includes("2 + 2")
         ? '{"answer": 4}'
-        : (verifyReply((body.messages as { content: string }[]).map((m) => m.content).join("\n")) ?? {
+        : (generationReply((body.messages as { content: string }[]).map((m) => m.content).join("\n")) ??
+          verifyReply((body.messages as { content: string }[]).map((m) => m.content).join("\n")) ?? {
             text: JSON.stringify({ questions: [question, question, question, question] }),
             delayMs: 700,
           }),

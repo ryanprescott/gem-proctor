@@ -83,7 +83,7 @@ Built: `apps/web/src/routes/Sources.tsx` (library, add by paste or upload, previ
 |---|---|---|
 | E16 | **pass** | `sources.e2e.ts` "E16 E18 add…": fill, Preview ("Nothing has been saved yet", announced), Save, `Embedding: n of m chunks` then "is ready to use" in the live region, from real SSE. "E16 edit…": Edit as a new revision, Save, revision 2 and 1 both listed; opening a chunk with a quote shows `<mark>` with exactly that sentence, "Cited passage:" and "VB § Chapter 1: Vectors › Inner product". |
 | E17 | **pass** | "E17": real `input[type=checkbox]`s: Tab to one, Space unticks it and "Selected:" changes; a child unticked leaves its heading `indeterminate`; Space on the heading ticks the child again. Fit per role in text. `.katex-mathml math` is attached with `x^T y` in its annotation. |
-| E18 | **partial → pass in F5** | `expectNoAxeViolations`: empty library, preview, preview with a warning, ready, highlighted passage, scope tree, failed embedding, delete dialog; 320 px on the library and on a source, no horizontal overflow. The flagged-passages state needs a flagged chunk, which F5 builds, so it's checked there (see F5's E35). |
+| E18 | **partial → pass in F6** | `expectNoAxeViolations`: empty library, preview, preview with a warning, ready, highlighted passage, scope tree, failed embedding, delete dialog; 320 px on the library and on a source, no horizontal overflow. The flagged-passages state needs a flagged chunk, which F5 builds, so it's checked there (see F5's E35). |
 
 **`bun run ci`:** all steps pass, exit 0.
 
@@ -176,3 +176,57 @@ Built: `packages/shared/src/generation.ts` (`strict8`, `gen-v9`), `draft.ts` (dr
 - **A concept question carries `verification: { status: "unverified", answerSource: "stated" }`** once L7's notation scan has seen it, so the proctored gate (which treats a question with no `verification` as not verified) doesn't block every concept quiz.
 - **Found by the tests:** the recorder dropped `draftQuestionId`; the session's detail read questions before progress, so "nothing pending" could arrive with questions that still said pending (the review test failed about one run in six; ten of ten pass after the reorder); the cancel test cancelled before the call had left. A generation request needs the `llm.generate` queue to exist, so the test environment starts the workers.
 - **A session generates once** (`draft` only). More questions come from retry or revise: generating again would double them.
+
+## F6 Review & revise
+
+Built: `apps/api/src/authoring/review.ts` (accept, reject, lock and reopen; inline edit with re-validation; re-run L7; accept a suggested fix on confirmation; choose between disagreeing programs; reclassify with a note; question history; revise; re-validate against a changed source), the routes for them, and the web pages: `routes/Authoring.tsx` (sessions, new session), `AuthoringSession.tsx` (scope, objectives, blueprint, generate with failed batches and retry, publish), `AuthoringReview.tsx` (the split view), the `authoring` catalog, and the `authoring.e2e.ts` journey. Tests: `authoring-review.test.ts`, `authoring.e2e.ts`.
+
+| # | Result | Evidence |
+|---|---|---|
+| E37 | **pass** | `authoring.e2e.ts` "E37 E39": each question shows beside its source passages with the quote in `<mark>` (underlined too) and a link to the viewer at that chunk; the checks are listed in words. |
+| E38 | **pass** | `authoring-review.test.ts` "E38": accept, reject, lock and reopen each write a `QuestionEvent` with the actor and any note; a locked question refuses edit and re-run (409 `authoring_question_locked`); a blocked one is 409 `authoring_question_blocked` for accept and lock; another proctor 404, a student 403. The e2e does accept, edit, reject and regenerate through the page. |
+| E39 | **pass** | e2e: the filter by failing, warnings and passing, and by objective; each badge reads "Structure: passed", "Quotes: failed" and so on, with a symbol, so colour isn't the only signal. |
+| E40 | **pass** | "E40": an edit that fixes or breaks the options re-validates at once, and an accepted question reopens as proposed; a computable edit of the answer sets `l7Pending`, blocks the question, and goes through flow B: a wrong answer is a fail (`wrong_answer`) with the suggested answer, never applied unconfirmed. |
+| E41 | **pass** | "E41": a blank or missing note is 400; the note is stored on a `reclassified` event; the question becomes not computable, `provenance: "human"`, `verification.status: "unverified"`; a second reclassify is refused. |
+| E42 | **pass** | "E42": both programs and their values are in the draft and neither is an answer; `choose-program` builds the answer from the chosen one, records `fix_accepted` with the note, sets `unverified` (a person's choice doesn't open a proctored test) and can't be repeated; accept-fix needs `confirm: true` (400 otherwise), then flow B checks the new answer. The buttons for these are in the page but are not driven by the Playwright journey. |
+| E43 | **pass** | "E43": two named questions of four, one locked and one accepted: two generation calls only, each with "Already accepted" naming both, the creator's notes and the failed checks; the locked and accepted rows are byte-identical after; revision 2 is `revise`; the replacements carry `supersedesId`, the round and the note. |
+| E44 | **pass** | "E44": the chain from either end is the same, oldest first, with actor, note, kind and time (`generated`, `edited`, `regenerated`); the e2e opens it in the page. |
+| E45 | **pass** | e2e: Tab and Enter through accept, edit (save and check), reject and regenerate, each announced in the live region (the "being regenerated" line can be replaced before it's read, so the test waits for "Generation finished: 3 questions"); axe clean while reviewing and while editing; at 320 px no sideways scroll and axe clean. The fix and reclassify dialogs are not in the journey. |
+
+**`bun run ci`:** every step passes. The first full run stopped at Playwright (the new spec's model names and its eight logins broke three other specs; fixed in the spec, below), so the last two steps were run again alone on the same tree.
+
+```
+✔ biome check                       ✔ LLM imports stay in packages/llm
+✔ lint rule build is up to date     ✔ typecheck (9 projects)
+✔ lint-rule snapshot                ✔ bun test — 983 pass, 0 fail, 35 files
+✔ suppression baseline              ✔ ruff + ruff format, verify unit tests
+✔ i18n catalog check (962 keys)     ✔ verify escape suite — 40/40
+✔ JSON Schema export is up to date  ✔ Playwright + axe — 47 passed (41 + 6 new)
+```
+
+**E18** (F3, partial): **pass.** `authoring.e2e.ts` "E18 E35": a source whose text carries an injected instruction gets a hostile author program from the mock; the question fails with "Answer: failed", Accept is disabled with its reason, the source page lists "Flagged passages", and axe is clean there and at 320 px with no sideways scroll.
+
+**Deviations and notes.**
+- **Regenerate is revise with one question**, so one route and one rule: `POST /authoring/sessions/:id/revise`, the same call "Regenerate with this note" makes. A whole-test "fill coverage gaps" waits for P2.5's coverage panel.
+- **`PATCH /authoring/questions/:id`** takes either a `status` or an `edit`, never both (400).
+- **A source passage's own headings are flattened** in the page (`Markdown quoted`): quoted text must not change the page's outline, and axe's `heading-order` caught it.
+- **The two tables stack into labelled rows on narrow screens**, so nothing scrolls sideways (a scrolling region would need a focusable, named wrapper, which biome's a11y rules refuse on a `div`).
+- **The authoring spec shares one sign-in and uses its own model names** (`authoring-chat`, `authoring-embed`): the login route is rate limited across specs, and the LLM page's stats table lists every model called, which the LLM spec's locator for `mock-chat` didn't expect twice. It also unassigns the roles it set, as the import spec starts from `verify.solve` unassigned.
+- **The session's progress counts questions as they stand** (a replaced question is history, not a question), so "Generation finished: 3 questions" is true after a regenerate.
+
+## F7 Publish & provenance
+
+Built: `publishSession` in `review.ts`: accepted and locked questions → mapper → `Quiz` validated → `Test` (with `authoringSessionId`) and an immutable `TestVersion` with `publishedAt` and the frozen trail; audit action `authoring_session.publish`. The Publish card in the session page. Tests: `authoring-review.test.ts` "E46–E50".
+
+| # | Result | Evidence |
+|---|---|---|
+| E46 | **pass** | "E46": nothing accepted is 409 `authoring_nothing_accepted`; with two accepted, one rejected and one open, the version has exactly two questions, ids 1 and 2, the title given, `testType`, `topics_covered`, `publishedAt`; the session is `published`, audited, and can't be published, generated or revised again. A question that fails after it was accepted (source changed, re-validated) blocks the publish, 409 with its id. |
+| E47 | **pass** | "E47": the owner starts a practice attempt on the published test, answers nothing, submits, and exports the Result: three questions, each with its evidence array. No P1 code changed. |
+| E48 | **pass** | "E48": after the session is deleted, the version's `provenance` still holds the session, rounds, revision seeds, models, the blueprint, sources with revision numbers, objectives, and per question: the call log id, prompt version and model; each citation with its source, revision number and quote; the verification; the newest result per layer; and every event (`generated`, `answer_computed`, `edited`, `accepted`). |
+| E49 | **pass** | "E46" (re-validate) and "E49": a new revision of the source shows `changed`; "re-validate" re-runs L2 against it and fails a quote that is gone; a version published before the change still has chunk rows for every citation, and each quote is still in its chunk's text. The banner and button are in the page; the Playwright journey doesn't edit a source mid-session. |
+| E50 | **pass** | "E50": a session whose calculations were all computed publishes `proctorReady: true` with no blockers; one with a calculation settled by hand publishes `proctorReady: false` with one blocker, `unverified`, and `GET /tests/:id/versions` agrees. |
+
+**Deviations and notes.**
+- **`TestVersion.provenance` is built at publish, not read from the session later**, from rows that can't change under it (events and results are append-only; a question's content is copied).
+- **A published session isn't editable**: no route accepts it for generate, revise or publish. A new version of a published test comes from a new session (P2.5's compare view may change that).
+- **Proctored publishing** (SPEC §3A.3.1's setting) is P3's gate on assignments: here it's `proctorReady` and `blockers`, as P2.1 left it.

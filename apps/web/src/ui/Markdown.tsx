@@ -17,13 +17,36 @@ const katexOptions = {
   strict: "ignore" as const,
 };
 
-export function Markdown({ children, inline = false }: { children: string; inline?: boolean }) {
+/** A heading inside quoted text is the source's, not the page's: it must not change the page's outline. */
+const flatHeadings = Object.fromEntries(
+  ["h1", "h2", "h3", "h4", "h5", "h6"].map((h) => [
+    h,
+    ({ children: c }: { children?: React.ReactNode }) => (
+      <p>
+        <strong>{c}</strong>
+      </p>
+    ),
+  ]),
+);
+
+export function Markdown({
+  children,
+  inline = false,
+  quoted = false,
+}: {
+  children: string;
+  inline?: boolean;
+  quoted?: boolean;
+}) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkMath]}
       rehypePlugins={[[rehypeKatex, katexOptions]]}
       skipHtml
-      components={inline ? { p: ({ children: c }) => <>{c}</> } : undefined}
+      components={{
+        ...(quoted ? flatHeadings : {}),
+        ...(inline ? { p: ({ children: c }: { children?: React.ReactNode }) => <>{c}</> } : {}),
+      }}
     >
       {children}
     </ReactMarkdown>

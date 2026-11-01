@@ -1,0 +1,274 @@
+{
+  "list": {
+    "title": "Authoring",
+    "caption": "Your authoring sessions",
+    "empty": "No sessions yet. Start one below, from a source that is ready.",
+    "colTitle": "Session",
+    "colType": "Test type",
+    "colStatus": "Status",
+    "colQuestions": "Questions",
+    "colCreated": "Created"
+  },
+  "new": {
+    "title": "New session",
+    "name": "Name",
+    "testType": "Test type",
+    "source": "Source",
+    "create": "Create session",
+    "noSources": "You need a source that is ready to use first.",
+    "toSources": "Go to Sources"
+  },
+  "testTypes": {
+    "chapter_quiz": "Chapter quiz",
+    "homework": "Homework",
+    "unit_test": "Unit test",
+    "midterm": "Midterm",
+    "final": "Final",
+    "custom": "Custom"
+  },
+  "session": {
+    "summary": "{{type}} · {{status}}.",
+    "back": "All sessions",
+    "status": {
+      "draft": "Draft",
+      "generating": "Generating",
+      "review": "In review",
+      "published": "Published"
+    }
+  },
+  "scope": {
+    "title": "Sources and scope",
+    "source": "{{title}} (revision {{revision}})",
+    "label": "Sections of {{title}} to use",
+    "fixed": "{{count}} sections in scope. The scope is fixed once there are questions.",
+    "save": "Save scope",
+    "saved": "Scope saved. The objectives start again from its headings.",
+    "changedTitle": "A source changed.",
+    "changed": "{{titles}} has a newer revision. This session still uses the one it started from.",
+    "revalidate": "Check the quotes against the new revision",
+    "revalidated": "Quotes checked against the new revision."
+  },
+  "objectives": {
+    "title": "Objectives",
+    "help": "What the test should cover. Each one comes from a section, and cites the passages behind it.",
+    "label": "Objective {{n}}",
+    "description": "Description of objective {{n}}",
+    "evidence": "{{count}} passages cited",
+    "pick": "Select objective {{n}} to merge",
+    "remove": "Remove objective {{n}}",
+    "add": "Add an objective",
+    "merge": "Merge selected",
+    "propose": "Propose with the model",
+    "proposing": "Proposing…",
+    "save": "Save objectives",
+    "saved": "Objectives saved. Set the blueprint again.",
+    "proposed": "{{count}} objectives proposed, {{rejected}} citations dropped.",
+    "headingsOnly": "No model is assigned to objectives, so the section headings stand."
+  },
+  "blueprint": {
+    "title": "Blueprint",
+    "help": "A test type fills in defaults, and every number can be changed.",
+    "testType": "Test type",
+    "count": "Number of questions",
+    "mix": "Questions of each type",
+    "mixSum": "The types add up to {{sum}} of {{total}}.",
+    "perObjective": "Questions on each objective",
+    "objectiveSum": "The objectives add up to {{sum}} of {{total}}.",
+    "style": "Style guidance",
+    "styleHelp": "A line added to the instructions, version {{version}}.",
+    "constraints": "Constraints",
+    "constraintsHelp": "For example: no questions on section 1.4.",
+    "save": "Save blueprint",
+    "saved": "Blueprint saved.",
+    "none": "Choose a test type to start the blueprint."
+  },
+  "generate": {
+    "title": "Generate",
+    "start": "Generate questions",
+    "cancel": "Stop generating",
+    "needsBlueprint": "Set the blueprint first.",
+    "cloud": "Passages from your sources will be sent to {{endpoints}}, a cloud endpoint, and leave this instance.",
+    "progress": "{{written}} questions written, {{checked}} checked, {{pending}} still being checked.",
+    "finished": "Generation finished: {{count}} questions ready for review."
+  },
+  "batch": {
+    "caption": "Generation calls",
+    "objective": "Objective",
+    "revision": "Round",
+    "state": "State",
+    "questions": "Questions",
+    "problem": "Problem",
+    "written": "{{written}} of {{size}}",
+    "dropped": "{{count}} items dropped.",
+    "retry": "Try again",
+    "status": {
+      "queued": "Waiting",
+      "running": "Running",
+      "done": "Done",
+      "failed": "Failed",
+      "cancelled": "Stopped"
+    }
+  },
+  "review": {
+    "title": "Review",
+    "summary": "{{total}} questions: {{accepted}} accepted, {{rejected}} rejected, {{open}} still open.",
+    "filter": "Show",
+    "byObjective": "Objective",
+    "filters": {
+      "all": "All",
+      "fail": "Failing",
+      "warn": "Warnings",
+      "pass": "Passing"
+    },
+    "showing": "Showing {{shown}} of {{total}}.",
+    "heading": "Question {{n}}: {{topic}}",
+    "checks": "Checks",
+    "checking": "Checking the answer…",
+    "template": "This question has no values yet.",
+    "correct": "correct",
+    "answer": "Answer: {{answer}}",
+    "noAnswer": "No answer yet.",
+    "explanation": "Explanation: {{text}}",
+    "objectives": "Objectives: {{list}}",
+    "provenance": {
+      "llm": "Written by the model",
+      "llm_edited": "Edited by you",
+      "human": "Set by you"
+    },
+    "creatorNote": "Your note: {{note}}",
+    "passages": "Source passages",
+    "noPassages": "No passage could be shown for this question.",
+    "citation": "{{label}} · {{path}}",
+    "accept": "Accept",
+    "reject": "Reject",
+    "lock": "Lock",
+    "reopen": "Reopen",
+    "edit": "Edit",
+    "rerun": "Check the answer again",
+    "acceptFix": "Use the suggested answer ({{value}})",
+    "useAuthor": "Use the writer's program ({{value}})",
+    "useBlind": "Use the blind program ({{value}})",
+    "reclassify": "Not a calculation",
+    "blocked": "This can't be accepted until the failed checks are fixed and it has an answer.",
+    "noteLabel": "Note for regenerating question {{n}}",
+    "regenerate": "Regenerate with this note",
+    "done": {
+      "accepted": "Question {{n}} accepted.",
+      "rejected": "Question {{n}} rejected.",
+      "locked": "Question {{n}} locked.",
+      "reopened": "Question {{n}} reopened.",
+      "edited": "Question {{n}} saved and checked again.",
+      "rerun": "Question {{n}} is being checked again.",
+      "fix": "Suggested answer applied to question {{n}}, and checked again.",
+      "chose": "Answer for question {{n}} taken from the chosen program.",
+      "reclassified": "Question {{n}} marked as not a calculation.",
+      "regenerating": "Question {{n}} is being regenerated."
+    }
+  },
+  "layers": {
+    "L1": "Structure",
+    "L2": "Quotes",
+    "L3": "Wording",
+    "L7": "Answer"
+  },
+  "outcomes": {
+    "pass": "passed",
+    "warn": "warning",
+    "fail": "failed"
+  },
+  "question": {
+    "status": {
+      "proposed": "Open",
+      "accepted": "Accepted",
+      "rejected": "Rejected",
+      "locked": "Locked"
+    }
+  },
+  "issues": {
+    "multiple_correct": "More than one option is marked correct ({{count}}).",
+    "no_correct": "No option is marked correct.",
+    "too_few_correct": "A multiple-choice question needs at least one correct option.",
+    "options_not_unique": "Two options say the same thing.",
+    "objective_unknown": "It names an objective that isn't in this session.",
+    "chunk_unknown": "It cites a passage that was not sent to the model.",
+    "program_missing": "A calculation has no program.",
+    "not_computable_type": "A {{type}} question can't be a calculation.",
+    "options_from_model": "A calculation came with options of its own.",
+    "mistakes_count": "A single-choice calculation needs 2 or 3 common mistakes, and has {{count}}.",
+    "placeholder_undeclared": "The question uses {{name}}, which has no input.",
+    "input_unused": "The input {{name}} isn't used in the question.",
+    "no_placeholders": "The question names no inputs, though it declares some.",
+    "number_outside_placeholder": "The number {{number}} is in the question text, not in an input or the quote.",
+    "source_not_in_quote": "The value for {{name}} isn't in any quote.",
+    "true_false_options": "A true/false question needs exactly True and False.",
+    "not_one_true": "Exactly one option must be correct.",
+    "answer_missing": "There is no answer.",
+    "quote_empty": "A quote is empty.",
+    "quote_not_found": "A quote isn't in the passage it cites (match {{score}}).",
+    "answer_in_question": "The question may give away the answer.",
+    "longest_always_correct": "The longest option is the correct one on every question.",
+    "all_or_none_of_above": "An option says \"all\" or \"none\" of the above.",
+    "text_too_long": "The {{field}} is long ({{length}} characters).",
+    "number_in_explanation": "The explanation has the number {{number}}, which isn't in the question or the passage."
+  },
+  "l7": {
+    "summary": "How the answer was checked: {{flow}}",
+    "flows": {
+      "a": "computed from two programs",
+      "b": "checked against a program",
+      "notation": "scanned for hidden calculations"
+    },
+    "author": "Writer's program",
+    "blind": "Blind program",
+    "status": "Ran: {{status}}",
+    "result": "Result: {{value}}",
+    "suggested": "Suggested answer: {{value}}. It is never applied without your confirmation."
+  },
+  "edit": {
+    "question": "Question",
+    "answer": "Answer",
+    "options": "Options",
+    "option": "Option {{n}}",
+    "correct": "Option {{n}} is correct",
+    "explanation": "Explanation",
+    "save": "Save and check",
+    "cancel": "Cancel"
+  },
+  "events": {
+    "generated": "Generated",
+    "regenerated": "Regenerated",
+    "edited": "Edited",
+    "accepted": "Accepted",
+    "rejected": "Rejected",
+    "locked": "Locked",
+    "fix_accepted": "Answer chosen",
+    "answer_computed": "Answer computed",
+    "reclassified": "Marked as not a calculation"
+  },
+  "history": {
+    "title": "History",
+    "system": "the system",
+    "note": "\"{{note}}\""
+  },
+  "dialog": {
+    "cancel": "Cancel"
+  },
+  "fixDialog": {
+    "title": "Use the suggested answer?",
+    "body": "The answer changes from {{from}} to {{to}}. It is checked again afterwards.",
+    "confirm": "Use it"
+  },
+  "reclassifyDialog": {
+    "title": "Not a calculation?",
+    "body": "This skips the answer check. Say why, and it is kept in the question's history.",
+    "note": "Why",
+    "confirm": "Mark as not a calculation"
+  },
+  "publish": {
+    "title": "Publish",
+    "help": "{{count}} of {{total}} questions are accepted. Only accepted questions go into the test, and a published version never changes.",
+    "name": "Name of the test",
+    "publish": "Publish the test",
+    "done": "Test published."
+  }
+}
