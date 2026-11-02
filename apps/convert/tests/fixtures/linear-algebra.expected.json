@@ -1,0 +1,82 @@
+{
+  "source": "packages/authoring/test/fixtures/linear-algebra.md",
+  "pages": 2,
+  "headings": [
+    {
+      "level": 1,
+      "title": "Vectors and matrices"
+    },
+    {
+      "level": 2,
+      "title": "Vectors"
+    },
+    {
+      "level": 2,
+      "title": "Inner product"
+    },
+    {
+      "level": 2,
+      "title": "Norms and distance"
+    },
+    {
+      "level": 2,
+      "title": "Matrices"
+    }
+  ],
+  "formulas": [
+    "x = (2, -1, 2)",
+    "x_i",
+    "i",
+    "x_1 = 2",
+    "x_3 = 2",
+    "a = (1, 2, 3)",
+    "b = (4, 0, -1)",
+    "a + b = (5, 2, 2)",
+    "2a = (2, 4, 6)",
+    "a^T b = a_1 b_1 + a_2 b_2 + \\cdots + a_n b_n",
+    "a = (2, -1, 2)",
+    "b = (1, 4, 1)",
+    "a^T b = 2 \\cdot 1 + (-1) \\cdot 4 + 2 \\cdot 1 = 0",
+    "a^T b = b^T a",
+    "a",
+    "b",
+    "\\|a\\| = \\sqrt{a^T a}",
+    "a = (2, -1, 2)",
+    "a^T a = 4 + 1 + 4 = 9",
+    "\\|a\\| = 3",
+    "a",
+    "b",
+    "\\|a - b\\|",
+    "\\|c a\\| = |c| \\, \\|a\\|",
+    "-1",
+    "m",
+    "n",
+    "m",
+    "n",
+    "m",
+    "n",
+    "A",
+    "n",
+    "p",
+    "B",
+    "m",
+    "p",
+    "C = AB",
+    "i",
+    "j",
+    "i",
+    "A",
+    "j",
+    "B",
+    "A",
+    "B",
+    "AB",
+    "BA",
+    "(AB)C = A(BC)",
+    "m",
+    "n",
+    "n",
+    "m",
+    "(AB)^T = B^T A^T"
+  ]
+}
