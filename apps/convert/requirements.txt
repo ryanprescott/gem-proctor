@@ -1,0 +1,4 @@
+# What the converter's image installs on top of the standard library, pinned (docs/P2.2.md §5). Marker pulls in Surya
+# and PyTorch; PyTorch is installed first from the CPU wheel index (see docker/convert.Dockerfile), since the vision model
+# runs on the Ollama box and Marker's own models are small.
+marker-pdf==2.1.0

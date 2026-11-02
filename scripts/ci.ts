@@ -26,6 +26,13 @@ const steps: { name: string; cmd: string[]; cwd?: string; when?: () => boolean; 
   { name: "bun test", cmd: ["bun", "test"] },
   { name: "ruff (apps/verify)", cmd: ["ruff", "check", "apps/verify"] },
   { name: "ruff format (apps/verify)", cmd: ["ruff", "format", "--check", "apps/verify"] },
+  { name: "ruff (apps/convert)", cmd: ["ruff", "check", "apps/convert"] },
+  { name: "ruff format (apps/convert)", cmd: ["ruff", "format", "--check", "apps/convert"] },
+  {
+    name: "convert unit tests",
+    cmd: ["python3.12", "-B", "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+    cwd: "apps/convert",
+  },
   {
     name: "verify unit tests",
     cmd: ["python3.12", "-B", "-m", "unittest", "discover", "-s", "tests", "-t", "."],

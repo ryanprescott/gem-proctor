@@ -87,6 +87,14 @@
         "drizzle-orm": "0.45.4",
       },
     },
+    "packages/convert": {
+      "name": "@gem/convert",
+      "version": "0.0.0",
+      "dependencies": {
+        "@gem/shared": "workspace:*",
+        "zod": "4.6.7",
+      },
+    },
     "packages/db": {
       "name": "@gem/db",
       "version": "0.0.0",
@@ -289,6 +297,8 @@
     "@gem/authoring": ["@gem/authoring@workspace:packages/authoring"],
 
     "@gem/authz": ["@gem/authz@workspace:packages/authz"],
+
+    "@gem/convert": ["@gem/convert@workspace:packages/convert"],
 
     "@gem/db": ["@gem/db@workspace:packages/db"],
 

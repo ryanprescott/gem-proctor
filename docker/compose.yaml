@@ -89,6 +89,41 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # PDF converter (docs/P2.2.md §5): `docker compose --profile convert up`. Marker with no GPU and no secrets, its weights
+  # in the image, a read-only root, and a limit on CPU and memory so a conversion takes only what the API and Postgres
+  # leave. The vision model it calls is on the Ollama box (CONVERT_VLM_UPSTREAM, until the API's proxy exists).
+  convert:
+    profiles: ["convert"]
+    build: { context: .., dockerfile: docker/convert.Dockerfile }
+    read_only: true
+    tmpfs:
+      - /work:size=1g,mode=0700,uid=10003,gid=10003
+      - /cache:size=128m,mode=0700,uid=10003,gid=10003
+      - /tmp:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: ${CONVERT_MEM_LIMIT:-6g}
+    cpus: ${CONVERT_CPUS:-2.0}
+    environment:
+      CONVERT_VLM_UPSTREAM: ${CONVERT_VLM_UPSTREAM:-}
+      SURYA_INFERENCE_URL: ${CONVERT_VLM_URL:-}
+    ports:
+      - "127.0.0.1:${CONVERT_PORT:-8200}:8200"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json, urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8200/health', timeout=4))['ok']",
+        ]
+      interval: 15s
+      timeout: 6s
+      retries: 5
+    restart: unless-stopped
+
 volumes:
   pgdata:
   verify-socket:

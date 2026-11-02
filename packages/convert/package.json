@@ -1,0 +1,14 @@
+{
+  "name": "@gem/convert",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./mock": "./mock/server.ts"
+  },
+  "dependencies": {
+    "@gem/shared": "workspace:*",
+    "zod": "4.6.7"
+  }
+}

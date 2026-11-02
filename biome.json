@@ -16,6 +16,8 @@
       "!packages/db/migrations/meta",
       "!packages/shared/schema",
       "!apps/verify/gem_verify/contract.json",
+      "!apps/convert/gem_convert/contract.json",
+      "!apps/convert/tests/fixtures",
       "!tests/*.json"
     ]
   },

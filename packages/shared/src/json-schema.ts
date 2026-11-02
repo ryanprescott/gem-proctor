@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ConvertError, ConvertHealth, ConvertOptions, ConvertReply } from "./convert.ts";
 import { QuizShape, ResultShape } from "./quiz.ts";
 import { VerifyChildReplies, VerifyRequest } from "./verify.ts";
 
@@ -27,5 +28,15 @@ export function verifyContractSchema(): Record<string, unknown> {
   return {
     request: jsonSchemaOf(VerifyRequest),
     replies: Object.fromEntries(Object.entries(VerifyChildReplies).map(([kind, s]) => [kind, jsonSchemaOf(s)])),
+  };
+}
+
+/** What `apps/convert` validates against (P2.2.md §5): its options, its replies, its health and its errors. */
+export function convertContractSchema(): Record<string, unknown> {
+  return {
+    options: jsonSchemaOf(ConvertOptions),
+    reply: jsonSchemaOf(ConvertReply),
+    health: jsonSchemaOf(ConvertHealth),
+    error: jsonSchemaOf(ConvertError),
   };
 }

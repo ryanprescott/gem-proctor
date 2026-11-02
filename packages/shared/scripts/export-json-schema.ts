@@ -3,15 +3,17 @@
 //   --check   fail if the committed files are stale
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { quizJsonSchema, resultJsonSchema, verifyContractSchema } from "../src/json-schema.ts";
+import { convertContractSchema, quizJsonSchema, resultJsonSchema, verifyContractSchema } from "../src/json-schema.ts";
 
 const dir = join(import.meta.dir, "..", "schema");
 const verifyDir = join(import.meta.dir, "..", "..", "..", "apps", "verify", "gem_verify");
+const convertDir = join(import.meta.dir, "..", "..", "..", "apps", "convert", "gem_convert");
 const pretty = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 const files = [
   { path: join(dir, "quiz.json"), text: pretty(quizJsonSchema()) },
   { path: join(dir, "result.json"), text: pretty(resultJsonSchema()) },
   { path: join(verifyDir, "contract.json"), text: pretty(verifyContractSchema()) },
+  { path: join(convertDir, "contract.json"), text: pretty(convertContractSchema()) },
 ];
 
 if (process.argv.includes("--check")) {
@@ -31,6 +33,7 @@ if (process.argv.includes("--check")) {
   console.log("JSON Schema export is up to date");
 } else {
   mkdirSync(dir, { recursive: true });
+  mkdirSync(convertDir, { recursive: true });
   for (const { path, text } of files) writeFileSync(path, text);
   console.log(`wrote ${files.map((f) => basename(f.path)).join(", ")}`);
 }
