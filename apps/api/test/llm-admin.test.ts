@@ -276,7 +276,7 @@ describe.skipIf(!hasDb)("LLM admin API", () => {
   });
 
   describe("C23: roles", () => {
-    test("GET lists all six", async () => {
+    test("GET lists all seven", async () => {
       const roles = (await admin.get(`${API}/admin/llm/roles`)).json().roles as { role: string }[];
       expect(roles.map((r) => r.role)).toEqual([
         "authoring.objectives",
@@ -285,6 +285,7 @@ describe.skipIf(!hasDb)("LLM admin API", () => {
         "verify.solve",
         "analysis",
         "embeddings",
+        "document.ocr",
       ]);
     });
 
@@ -393,7 +394,7 @@ describe.skipIf(!hasDb)("LLM admin API", () => {
     const res = await student.get(`${API}/llm/roles`);
     expect(res.statusCode).toBe(200);
     const roles = res.json().roles as { role: string }[];
-    expect(roles).toHaveLength(6);
+    expect(roles).toHaveLength(7);
     expect(roles.find((r) => r.role === "analysis")).toEqual({
       role: "analysis",
       assigned: true,

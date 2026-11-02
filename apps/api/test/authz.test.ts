@@ -9,6 +9,7 @@ import {
   PracticeAttempt,
   Revision,
   Source,
+  SourceFile,
   SourceRevision,
   VerificationJob,
 } from "@gem/db";
@@ -222,6 +223,26 @@ function sourceRows(id: () => string, proctor: Record<Who, Expect>, own: Record<
   ];
 }
 
+/** The PDF routes (P2.2 M16). A converter isn't configured here: allowed means getting past authz, not converting. */
+function fileRows(id: () => string, proctor: Record<Who, Expect>, own: Record<Who, Expect>) {
+  const pdf = () => Buffer.from("%PDF-1.7\n%%EOF\n");
+  return [
+    {
+      id: "sources.files.create",
+      method: "POST",
+      url: () => "/sources/files?filename=a.pdf",
+      body: pdf,
+      headers: { "content-type": "application/pdf" },
+      expect: proctor,
+    },
+    { id: "sources.files.get", method: "GET", url: () => `/sources/files/${id()}`, expect: own },
+    { id: "sources.files.events", method: "GET", url: () => `/sources/files/${id()}/events?once=true`, expect: own },
+    { id: "sources.files.original", method: "GET", url: () => `/sources/files/${id()}/original`, expect: own },
+    { id: "sources.files.retry", method: "POST", url: () => `/sources/files/${id()}/retry`, expect: own },
+    { id: "sources.files.delete", method: "DELETE", url: () => `/sources/files/${id()}`, expect: own },
+  ];
+}
+
 describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () => {
   let t: TestApp;
   const clients = {} as Record<Who, Client>;
@@ -230,6 +251,7 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
   let attemptId = "";
   let jobId = "";
   let sourceId = "";
+  let fileId = "";
   let sessionId = "";
   let draftId = "";
   let batchId = "";
@@ -255,6 +277,19 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
     await t.db
       .insert(VerificationJob)
       .values({ id: jobId, ownerId: owner.user.id, status: "done", input: { questions: [] }, inputHash: "h" });
+    fileId = newId();
+    await t.db.insert(SourceFile).values({
+      id: fileId,
+      ownerId: owner.user.id,
+      filename: "a.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 1,
+      sha256: "h",
+      content: Buffer.from("%PDF-"),
+      strategy: "rasterize",
+      status: "failed",
+      warnings: [],
+    });
     sourceId = newId();
     await t.db.insert(Source).values({ id: sourceId, ownerId: owner.user.id, title: "S", citationLabel: "S" });
     await t.db.insert(SourceRevision).values({
@@ -379,145 +414,152 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
   };
 
   // Every contract appears here exactly once (checked below).
-  const matrix: { id: string; method: string; url: () => string; body?: () => unknown; expect: Record<Who, Expect> }[] =
-    [
-      { id: "health", method: "GET", url: () => "/health", expect: all("allow") },
-      {
-        id: "auth.register",
-        method: "POST",
-        url: () => "/auth/register",
-        body: () => ({ email: "x", password: "x", displayName: "x" }),
-        expect: all("allow"),
-      },
-      {
-        id: "auth.login",
-        method: "POST",
-        url: () => "/auth/login",
-        body: () => ({ email: "nobody@example.com", password: "nope nope" }),
-        expect: all("allow"),
-      },
-      { id: "schema.quiz", method: "GET", url: () => "/schema/quiz.json", expect: all("allow") },
-      { id: "schema.result", method: "GET", url: () => "/schema/result.json", expect: all("allow") },
-      { id: "auth.me", method: "GET", url: () => "/auth/me", expect: signedIn },
-      {
-        id: "imports.preview",
-        method: "POST",
-        url: () => "/imports/preview",
-        body: () => ({ text: FIXTURE }),
-        expect: proctor,
-      },
-      {
-        id: "imports.create",
-        method: "POST",
-        url: () => "/imports",
-        body: () => ({ originalText: FIXED, text: FIXED }),
-        expect: proctor,
-      },
-      { id: "tests.list", method: "GET", url: () => "/tests", expect: proctor },
-      { id: "tests.get", method: "GET", url: () => `/tests/${testId}`, expect: ownerOnly },
-      {
-        id: "tests.update",
-        method: "PATCH",
-        url: () => `/tests/${testId}`,
-        body: () => ({ tags: ["ch1"] }),
-        expect: ownerOnly,
-      },
-      { id: "tests.versions", method: "GET", url: () => `/tests/${testId}/versions`, expect: ownerOnly },
-      { id: "tests.export", method: "GET", url: () => `/tests/${testId}/export`, expect: ownerOnly },
-      { id: "admin.users", method: "GET", url: () => "/admin/users", expect: adminOnly },
-      {
-        id: "admin.users.roles",
-        method: "PUT",
-        url: () => `/admin/users/${targetId}/roles`,
-        body: () => ({ role: "student" }),
-        expect: adminOnly,
-      },
-      {
-        id: "admin.users.resetPassword",
-        method: "POST",
-        url: () => `/admin/users/${targetId}/reset-password`,
-        body: () => ({ password: "another password" }),
-        expect: adminOnly,
-      },
-      {
-        id: "admin.users.disable",
-        method: "POST",
-        url: () => `/admin/users/${targetId}/disable`,
-        body: () => ({ disabled: false }),
-        expect: adminOnly,
-      },
-      {
-        id: "imports.verify.start",
-        method: "POST",
-        url: () => "/imports/verify",
-        body: () => ({ value: { questions: [{ id: 1 }] } }),
-        expect: proctor,
-      },
-      { id: "imports.verify.get", method: "GET", url: () => `/imports/verify/${jobId}`, expect: ownerOnly },
-      { id: "admin.settings.get", method: "GET", url: () => "/admin/settings", expect: adminOnly },
-      {
-        id: "admin.settings.put",
-        method: "PUT",
-        url: () => "/admin/settings",
-        body: () => ({ selfRegistration: true }),
-        expect: adminOnly,
-      },
-      { id: "admin.auditLog", method: "GET", url: () => "/admin/audit-log", expect: adminOnly },
-      { id: "admin.auditLog.csv", method: "GET", url: () => "/admin/audit-log.csv", expect: adminOnly },
-      {
-        id: "practice.start",
-        method: "POST",
-        url: () => "/practice/attempts",
-        body: () => ({ testId, kind: "full" }),
-        // The handler also checks `test` / `practice`: the test's owner, or an admin (P1.md §6).
-        expect: ownerOnly,
-      },
-      { id: "practice.list", method: "GET", url: () => `/practice/attempts?testId=${testId}`, expect: proctor },
-      { id: "practice.get", method: "GET", url: () => `/practice/attempts/${attemptId}`, expect: ownAttempt },
-      {
-        id: "practice.saveResponse",
-        method: "PUT",
-        url: () => `/practice/attempts/${attemptId}/responses/1`,
-        body: () => ({ flagged: true }),
-        expect: ownAttempt,
-      },
-      {
-        id: "practice.selfGrade",
-        method: "POST",
-        url: () => `/practice/attempts/${attemptId}/responses/1/self-grade`,
-        body: () => ({ right: true }),
-        expect: ownAttempt,
-      },
-      {
-        id: "practice.submit",
-        method: "POST",
-        url: () => `/practice/attempts/${attemptId}/submit`,
-        expect: ownAttempt,
-      },
-      {
-        id: "practice.export",
-        method: "GET",
-        url: () => `/practice/attempts/${attemptId}/export`,
-        expect: ownAttempt,
-      },
-      {
-        id: "practice.discard",
-        method: "DELETE",
-        url: () => `/practice/attempts/${attemptId}`,
-        expect: ownAttempt,
-      },
-      ...llmRows(adminOnly, signedIn),
-      ...sessionRows(
-        () => sessionId,
-        () => sourceId,
-        proctor,
-        ownSource,
-        { draft: () => draftId, batch: () => batchId },
-      ),
-      ...sourceRows(() => sourceId, proctor, ownSource),
-      // Last: it ends each session.
-      { id: "auth.logout", method: "POST", url: () => "/auth/logout", expect: signedIn },
-    ];
+  const matrix: {
+    id: string;
+    method: string;
+    url: () => string;
+    body?: () => unknown;
+    headers?: Record<string, string>;
+    expect: Record<Who, Expect>;
+  }[] = [
+    { id: "health", method: "GET", url: () => "/health", expect: all("allow") },
+    {
+      id: "auth.register",
+      method: "POST",
+      url: () => "/auth/register",
+      body: () => ({ email: "x", password: "x", displayName: "x" }),
+      expect: all("allow"),
+    },
+    {
+      id: "auth.login",
+      method: "POST",
+      url: () => "/auth/login",
+      body: () => ({ email: "nobody@example.com", password: "nope nope" }),
+      expect: all("allow"),
+    },
+    { id: "schema.quiz", method: "GET", url: () => "/schema/quiz.json", expect: all("allow") },
+    { id: "schema.result", method: "GET", url: () => "/schema/result.json", expect: all("allow") },
+    { id: "auth.me", method: "GET", url: () => "/auth/me", expect: signedIn },
+    {
+      id: "imports.preview",
+      method: "POST",
+      url: () => "/imports/preview",
+      body: () => ({ text: FIXTURE }),
+      expect: proctor,
+    },
+    {
+      id: "imports.create",
+      method: "POST",
+      url: () => "/imports",
+      body: () => ({ originalText: FIXED, text: FIXED }),
+      expect: proctor,
+    },
+    { id: "tests.list", method: "GET", url: () => "/tests", expect: proctor },
+    { id: "tests.get", method: "GET", url: () => `/tests/${testId}`, expect: ownerOnly },
+    {
+      id: "tests.update",
+      method: "PATCH",
+      url: () => `/tests/${testId}`,
+      body: () => ({ tags: ["ch1"] }),
+      expect: ownerOnly,
+    },
+    { id: "tests.versions", method: "GET", url: () => `/tests/${testId}/versions`, expect: ownerOnly },
+    { id: "tests.export", method: "GET", url: () => `/tests/${testId}/export`, expect: ownerOnly },
+    { id: "admin.users", method: "GET", url: () => "/admin/users", expect: adminOnly },
+    {
+      id: "admin.users.roles",
+      method: "PUT",
+      url: () => `/admin/users/${targetId}/roles`,
+      body: () => ({ role: "student" }),
+      expect: adminOnly,
+    },
+    {
+      id: "admin.users.resetPassword",
+      method: "POST",
+      url: () => `/admin/users/${targetId}/reset-password`,
+      body: () => ({ password: "another password" }),
+      expect: adminOnly,
+    },
+    {
+      id: "admin.users.disable",
+      method: "POST",
+      url: () => `/admin/users/${targetId}/disable`,
+      body: () => ({ disabled: false }),
+      expect: adminOnly,
+    },
+    {
+      id: "imports.verify.start",
+      method: "POST",
+      url: () => "/imports/verify",
+      body: () => ({ value: { questions: [{ id: 1 }] } }),
+      expect: proctor,
+    },
+    { id: "imports.verify.get", method: "GET", url: () => `/imports/verify/${jobId}`, expect: ownerOnly },
+    { id: "admin.settings.get", method: "GET", url: () => "/admin/settings", expect: adminOnly },
+    {
+      id: "admin.settings.put",
+      method: "PUT",
+      url: () => "/admin/settings",
+      body: () => ({ selfRegistration: true }),
+      expect: adminOnly,
+    },
+    { id: "admin.auditLog", method: "GET", url: () => "/admin/audit-log", expect: adminOnly },
+    { id: "admin.auditLog.csv", method: "GET", url: () => "/admin/audit-log.csv", expect: adminOnly },
+    {
+      id: "practice.start",
+      method: "POST",
+      url: () => "/practice/attempts",
+      body: () => ({ testId, kind: "full" }),
+      // The handler also checks `test` / `practice`: the test's owner, or an admin (P1.md §6).
+      expect: ownerOnly,
+    },
+    { id: "practice.list", method: "GET", url: () => `/practice/attempts?testId=${testId}`, expect: proctor },
+    { id: "practice.get", method: "GET", url: () => `/practice/attempts/${attemptId}`, expect: ownAttempt },
+    {
+      id: "practice.saveResponse",
+      method: "PUT",
+      url: () => `/practice/attempts/${attemptId}/responses/1`,
+      body: () => ({ flagged: true }),
+      expect: ownAttempt,
+    },
+    {
+      id: "practice.selfGrade",
+      method: "POST",
+      url: () => `/practice/attempts/${attemptId}/responses/1/self-grade`,
+      body: () => ({ right: true }),
+      expect: ownAttempt,
+    },
+    {
+      id: "practice.submit",
+      method: "POST",
+      url: () => `/practice/attempts/${attemptId}/submit`,
+      expect: ownAttempt,
+    },
+    {
+      id: "practice.export",
+      method: "GET",
+      url: () => `/practice/attempts/${attemptId}/export`,
+      expect: ownAttempt,
+    },
+    {
+      id: "practice.discard",
+      method: "DELETE",
+      url: () => `/practice/attempts/${attemptId}`,
+      expect: ownAttempt,
+    },
+    ...llmRows(adminOnly, signedIn),
+    ...sessionRows(
+      () => sessionId,
+      () => sourceId,
+      proctor,
+      ownSource,
+      { draft: () => draftId, batch: () => batchId },
+    ),
+    ...sourceRows(() => sourceId, proctor, ownSource),
+    ...fileRows(() => fileId, proctor, ownSource),
+    // Last: it ends each session.
+    { id: "auth.logout", method: "POST", url: () => "/auth/logout", expect: signedIn },
+  ];
 
   test("the matrix covers every contract", () => {
     expect(matrix.map((m) => m.id).sort()).toEqual(CONTRACTS.map((c) => c.id).sort());
@@ -531,6 +573,7 @@ describe.skipIf(!hasDb)("A17 + B21: authz matrix — every route × role", () =>
           method: row.method as "GET",
           url: `${API}${row.url()}`,
           payload: row.body?.() as never,
+          ...(row.headers ? { headers: row.headers } : {}),
         });
         const code = res.statusCode >= 400 ? (res.json() as { code: string }).code : undefined;
         if (want === "allow") {

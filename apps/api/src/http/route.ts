@@ -5,6 +5,7 @@ import {
   DraftQuestion,
   PracticeAttempt,
   Source,
+  SourceFile,
   Test,
   VerificationJob,
 } from "@gem/db";
@@ -121,6 +122,14 @@ async function relationship(ctx: AppContext, permission: RoutePermission, reques
       .limit(1);
     return privateTo(rows[0]?.ownerId, user);
   }
+  if (permission.resource === "source_file") {
+    const rows = await ctx.db
+      .select({ ownerId: SourceFile.ownerId })
+      .from(SourceFile)
+      .where(and(eq(SourceFile.id, id), isNull(SourceFile.deletedAt)))
+      .limit(1);
+    return privateTo(rows[0]?.ownerId, user);
+  }
   if (permission.resource === "authoring_session") {
     const rows = await ctx.db
       .select({ ownerId: AuthoringSession.ownerId })
@@ -158,6 +167,7 @@ const NOT_FOUND: Record<NonNullable<Extract<RoutePermission, { objType: string }
   practice_attempt: "not_found",
   verification_job: "verify_job_not_found",
   source: "source_not_found",
+  source_file: "convert_file_not_found",
   authoring_session: "authoring_session_not_found",
   authoring_batch: "authoring_batch_not_found",
   draft_question: "authoring_question_not_found",

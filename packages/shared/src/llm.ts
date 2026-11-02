@@ -10,6 +10,8 @@ export const MODEL_ROLES = [
   "verify.solve",
   "analysis",
   "embeddings",
+  /** The vision model that reads PDF pages for the converter (docs/P2.2.md §5 "One queue"). */
+  "document.ocr",
 ] as const;
 export const ModelRole = z.enum(MODEL_ROLES);
 export type ModelRole = z.infer<typeof ModelRole>;

@@ -96,6 +96,10 @@
       "create": "Authoring session created",
       "delete": "Authoring session deleted",
       "publish": "Authoring session published"
+    },
+    "source_file": {
+      "upload": "PDF uploaded",
+      "delete": "PDF deleted"
     }
   },
   "targets": {
@@ -106,7 +110,8 @@
     "verification_job": "Verification job",
     "question": "Question",
     "source": "Source",
-    "authoring_session": "Authoring session"
+    "authoring_session": "Authoring session",
+    "source_file": "PDF file"
   },
   "llm": {
     "title": "LLM",
@@ -122,7 +127,10 @@
         "solve": "Verify: solve"
       },
       "analysis": "Analysis",
-      "embeddings": "Embeddings"
+      "embeddings": "Embeddings",
+      "document": {
+        "ocr": "Documents: read pages"
+      }
     },
     "modes": {
       "native_schema": "Native schema",

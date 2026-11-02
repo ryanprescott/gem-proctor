@@ -38,9 +38,9 @@ function propertyNames(node: unknown, out = new Set<string>()): Set<string> {
 }
 
 describe("C4: LLM shapes (SPEC §3B.2)", () => {
-  test("ModelRole is the six roles", () => {
+  test("ModelRole is the seven roles", () => {
     expect(ModelRole.options).toEqual([...MODEL_ROLES]);
-    expect(MODEL_ROLES).toHaveLength(6);
+    expect(MODEL_ROLES).toHaveLength(7);
   });
 
   test("capabilities and embedding parse with SPEC's defaults", () => {

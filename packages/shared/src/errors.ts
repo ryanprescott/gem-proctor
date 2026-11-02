@@ -77,6 +77,18 @@ export const ERROR_CODES = [
   "authoring_nothing_accepted",
   "authoring_not_in_review",
   "authoring_fix_unavailable",
+  "convert_unavailable",
+  "convert_remote_blocked",
+  "convert_too_large",
+  "convert_too_many_pages",
+  "convert_bad_pdf",
+  "convert_bad_range",
+  "convert_empty",
+  "convert_timeout",
+  "convert_failed",
+  "convert_busy",
+  "convert_file_not_found",
+  "convert_file_not_ready",
 ] as const;
 
 export const ErrorCode = z.enum(ERROR_CODES);
@@ -165,6 +177,18 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   authoring_nothing_accepted: 409,
   authoring_not_in_review: 409,
   authoring_fix_unavailable: 409,
+  convert_unavailable: 409,
+  convert_remote_blocked: 409,
+  convert_too_large: 413,
+  convert_too_many_pages: 422,
+  convert_bad_pdf: 422,
+  convert_bad_range: 422,
+  convert_empty: 422,
+  convert_timeout: 504,
+  convert_failed: 502,
+  convert_busy: 503,
+  convert_file_not_found: 404,
+  convert_file_not_ready: 409,
 };
 
 /** The only error type route handlers throw (SPEC §11.6, companion check). */

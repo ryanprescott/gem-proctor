@@ -19,6 +19,21 @@ export type ConvertStrategy = z.infer<typeof ConvertStrategy>;
 /** "5-23", "1,4,9-12": 1-based pages, as a reader counts them. */
 export const PAGE_RANGE_PATTERN = "^\\d+(-\\d+)?(,\\d+(-\\d+)?)*$";
 
+/** What an admin can change; the converter's own limits (pages, time) are its environment's (docs/P2.2.md §4). */
+export const ConvertSettings = z.object({
+  /** Largest PDF, in bytes. */
+  maxFileBytes: z
+    .number()
+    .int()
+    .min(1024 * 1024)
+    .max(500 * 1024 * 1024),
+  /** `rasterize` reads whole pages with the vision model; `text` keeps the PDF's own text layer. */
+  strategy: z.enum(["rasterize", "text"]),
+});
+export type ConvertSettings = z.infer<typeof ConvertSettings>;
+
+export const DEFAULT_CONVERT_SETTINGS: ConvertSettings = { maxFileBytes: 50 * 1024 * 1024, strategy: "rasterize" };
+
 export const ConvertOptions = z.strictObject({
   pageRange: z.string().max(100).regex(new RegExp(PAGE_RANGE_PATTERN)).optional(),
   /** Absent: the converter's own default (`rasterize`). */

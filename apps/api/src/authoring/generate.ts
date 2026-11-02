@@ -24,6 +24,7 @@ import {
 } from "@gem/shared";
 import type { BatchFailedItem, BatchView, SessionProgress } from "@gem/shared/contracts";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { trackInteractive } from "../activity.ts";
 import type { AppContext } from "../context.ts";
 import { addEvent, contentOf, type DraftRow, formResult, latestResults, recordResults } from "./drafts.ts";
 import { loadSession, objectiveViews, sessionScope, sessionTopic } from "./sessions.ts";
@@ -521,6 +522,6 @@ export async function startGenerateWorker(ctx: AppContext) {
     .set({ status: "failed", errorCode: "service_unavailable", finishedAt: new Date() })
     .where(eq(AuthoringBatch.status, "running"));
   await ctx.queue?.workOne<{ batchId: string }>(GENERATE_QUEUE, async ({ batchId }) => {
-    await processBatch(ctx, batchId);
+    await trackInteractive(() => processBatch(ctx, batchId));
   });
 }

@@ -99,6 +99,7 @@ export async function saveRevision(
     number: number;
     text: string;
     format: SourceFormat;
+    sourceFileId?: string | null;
     createdBy: string;
     prepared: Prepared;
   },
@@ -113,6 +114,7 @@ export async function saveRevision(
     format: input.format,
     contentHash: hashText(input.text),
     embedStatus: "pending",
+    sourceFileId: input.sourceFileId ?? null,
     createdBy: input.createdBy,
   });
   const sectionIds = parsed.sections.map(() => newId());

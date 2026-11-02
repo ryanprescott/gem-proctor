@@ -26,6 +26,7 @@
         "@fastify/swagger": "9.9.2",
         "@gem/authoring": "workspace:*",
         "@gem/authz": "workspace:*",
+        "@gem/convert": "workspace:*",
         "@gem/db": "workspace:*",
         "@gem/knowledge": "workspace:*",
         "@gem/llm": "workspace:*",

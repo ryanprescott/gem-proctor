@@ -65,6 +65,7 @@ function toRevisionView(
   return {
     id: r.id,
     number: r.number,
+    fileId: r.sourceFileId,
     format: r.format,
     embedStatus: r.embedStatus,
     embedError: error.success ? error.data : null,
@@ -142,6 +143,8 @@ export interface SourceInput {
   url?: string | undefined;
   text: string;
   format: SourceFormat;
+  /** The converted PDF this text came from. */
+  sourceFileId?: string | undefined;
 }
 
 async function queueEmbed(ctx: AppContext, revisionId: string) {
@@ -169,6 +172,7 @@ export async function createSource(ctx: AppContext, input: SourceInput, userId: 
       number: 1,
       text: input.text,
       format: input.format,
+      sourceFileId: input.sourceFileId ?? null,
       createdBy: userId,
       prepared,
     });
@@ -211,6 +215,7 @@ export async function addRevision(ctx: AppContext, source: SourceRow, input: Sou
       number: (last?.number ?? 0) + 1,
       text: input.text,
       format: input.format,
+      sourceFileId: input.sourceFileId ?? null,
       createdBy: userId,
       prepared,
     });

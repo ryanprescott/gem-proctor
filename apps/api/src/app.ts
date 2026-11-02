@@ -18,6 +18,7 @@ import { authoringRoutes } from "./routes/authoring.ts";
 import { llmRoutes } from "./routes/llm.ts";
 import { practiceRoutes } from "./routes/practice.ts";
 import { publicRoutes } from "./routes/public.ts";
+import { sourceFilesRoutes, vlmProxyRoutes } from "./routes/source-files.ts";
 import { sourcesRoutes } from "./routes/sources.ts";
 import { testRoutes } from "./routes/tests.ts";
 
@@ -71,6 +72,8 @@ export async function buildApp(ctx: AppContext, opts: BuildOptions = {}): Promis
   practiceRoutes(app, ctx);
   llmRoutes(app, ctx);
   sourcesRoutes(app, ctx);
+  sourceFilesRoutes(app, ctx);
+  vlmProxyRoutes(app, ctx);
   authoringRoutes(app, ctx);
   opts.extraRoutes?.(app);
 

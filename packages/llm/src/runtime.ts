@@ -581,6 +581,55 @@ export class Runtime implements LlmRuntime {
     };
   }
 
+  // ── Pass-through (docs/P2.2.md §5 "One queue") ─────────────────────
+
+  /**
+   * One chat request for a client that speaks the OpenAI protocol itself (the converter's vision model), sent through
+   * the endpoint's queue and logged like any call. The assigned model replaces the one the client named.
+   */
+  async forwardChat(role: ModelRole, body: Record<string, unknown>, opts: CallOptions = {}) {
+    const target = await this.resolve(role);
+    try {
+      await this.checkLocation(target);
+      const { ctx } = this.context(target.endpoint);
+      if (!ctx.baseUrl) throw new LlmError("llm_endpoint_error", { reason: "no_base_url" });
+      const url = `${ctx.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+      const { result, queuedMs, latencyMs } = await this.dispatch(target.endpoint, opts, async (signal) => {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(ctx.apiKey ? { authorization: `Bearer ${ctx.apiKey}` } : {}),
+          },
+          body: JSON.stringify({ ...body, model: target.model, stream: false }),
+          signal,
+        });
+        return { status: res.status, text: await res.text() };
+      });
+      let usage = NO_USAGE;
+      try {
+        const u = (JSON.parse(result.text) as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
+        usage = { inputTokens: u?.prompt_tokens ?? 0, outputTokens: u?.completion_tokens ?? 0 };
+      } catch {}
+      const ok = result.status >= 200 && result.status < 300;
+      await this.writeLog({
+        target,
+        opts,
+        mode: "passthrough",
+        outcome: ok ? "ok" : "failed",
+        error: ok ? undefined : new LlmError("llm_endpoint_error", { status: result.status }),
+        usage,
+        queuedMs,
+        latencyMs,
+      });
+      return { status: result.status, text: result.text };
+    } catch (err) {
+      if (!(err instanceof LlmError) || err.code !== "llm_endpoint_error")
+        await this.writeLog({ target, opts, mode: "passthrough", outcome: "failed", error: err });
+      throw err;
+    }
+  }
+
   // ── Discovery and probe (P1.5.md §5) ───────────────────────────────
 
   /** Endpoints with a stored key that can't be decrypted (startup check, P1.5.md §5). */

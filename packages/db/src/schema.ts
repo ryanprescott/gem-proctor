@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -285,7 +286,15 @@ export const RoleAssignment = pgTable(
   "role_assignment",
   {
     role: text("role", {
-      enum: ["authoring.objectives", "authoring.generate", "authoring.judge", "verify.solve", "analysis", "embeddings"],
+      enum: [
+        "authoring.objectives",
+        "authoring.generate",
+        "authoring.judge",
+        "verify.solve",
+        "analysis",
+        "embeddings",
+        "document.ocr",
+      ],
     }).primaryKey(),
     endpointId: uuid("endpoint_id")
       .notNull()
@@ -301,7 +310,7 @@ export const RoleAssignment = pgTable(
   (t) => [
     check(
       "role_assignment_role_check",
-      sql`${t.role} IN ('authoring.objectives', 'authoring.generate', 'authoring.judge', 'verify.solve', 'analysis', 'embeddings')`,
+      sql`${t.role} IN ('authoring.objectives', 'authoring.generate', 'authoring.judge', 'verify.solve', 'analysis', 'embeddings', 'document.ocr')`,
     ),
     check("role_assignment_embedding_check", sql`(${t.role} = 'embeddings') = (${t.embedding} IS NOT NULL)`),
   ],
@@ -451,6 +460,9 @@ export const EMBEDDING_DIMENSIONS = 768;
 
 const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
 
+/** A PDF's bytes. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+
 /** Private to its owner (SPEC §13 Q6). Soft-deleted: published tests keep citing its chunks. */
 export const Source = pgTable(
   "source",
@@ -476,6 +488,45 @@ export const Source = pgTable(
   ],
 );
 
+/**
+ * An uploaded PDF and what the converter made of it (docs/P2.2.md §4). The bytes stay in Postgres, so one backup holds
+ * a source and where it came from. Soft-deleted: a revision made from it keeps pointing at it.
+ */
+export const SourceFile = pgTable(
+  "source_file",
+  {
+    id: uuid("id").primaryKey(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => User.id),
+    filename: text("filename").notNull(),
+    mimeType: text("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    sha256: text("sha256").notNull(),
+    content: bytea("content").notNull(),
+    strategy: text("strategy", { enum: ["rasterize", "text"] }).notNull(),
+    pageRange: text("page_range"),
+    status: text("status", { enum: ["pending", "converting", "ready", "failed"] }).notNull(),
+    errorCode: text("error_code"),
+    errorParams: jsonValue("error_params"),
+    markdown: text("markdown"),
+    pageCount: integer("page_count"),
+    pagesConverted: integer("pages_converted"),
+    figures: integer("figures"),
+    warnings: jsonValue("warnings").notNull(),
+    converter: jsonValue("converter"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+    startedAt: ts("started_at"),
+    finishedAt: ts("finished_at"),
+    deletedAt: ts("deleted_at"),
+  },
+  (t) => [
+    index("source_file_owner_idx").on(t.ownerId, t.createdAt),
+    check("source_file_status_check", sql`${t.status} IN ('pending', 'converting', 'ready', 'failed')`),
+    check("source_file_strategy_check", sql`${t.strategy} IN ('rasterize', 'text')`),
+  ],
+);
+
 export const SourceRevision = pgTable(
   "source_revision",
   {
@@ -490,6 +541,8 @@ export const SourceRevision = pgTable(
     embedStatus: text("embed_status", { enum: ["pending", "embedding", "ready", "failed"] }).notNull(),
     /** `{ code, params }`, as the API sends it. */
     embedError: jsonValue("embed_error"),
+    /** The PDF the Markdown was converted from (P2.2.md §4). */
+    sourceFileId: uuid("source_file_id").references((): AnyPgColumn => SourceFile.id),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => User.id),

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { Authz } from "@gem/authz";
+import { ConvertClient } from "@gem/convert";
 import { createDb, createPool, runMigrations } from "@gem/db";
 import { createLlmRuntime, dbStore } from "@gem/llm";
 import { buildApp } from "./app.ts";
@@ -8,6 +9,7 @@ import { startGenerateWorker } from "./authoring/generate.ts";
 import { startL7Worker } from "./authoring/l7.ts";
 import { ConfigError, loadConfig } from "./config.ts";
 import type { AppContext } from "./context.ts";
+import { startConvertWorker } from "./convert.ts";
 import { EventHub } from "./events.ts";
 import { startEvalWorker } from "./llm-evals.ts";
 import { seedDevLlm } from "./llm-seed.ts";
@@ -45,6 +47,7 @@ const ctx: AppContext = {
     recycleEvery: async () => (await getSettings(db)).verify.recycleEvery,
   }),
   llm: createLlmRuntime({ store: dbStore(db), secretKey: config.ENDPOINT_SECRET_KEY }),
+  convert: config.CONVERT_URL ? new ConvertClient(config.CONVERT_URL) : null,
   events: new EventHub(),
   now: () => new Date(),
 };
@@ -56,6 +59,7 @@ await startVerifyWorker(ctx);
 await startSourceWorker(ctx);
 await startGenerateWorker(ctx);
 await startL7Worker(ctx);
+await startConvertWorker(ctx);
 await bootstrapEnvAdmin(ctx);
 // A key that can't be read makes that endpoint `llm_endpoint_auth`, not the API fail to start (P1.5.md §5).
 const unreadable = await ctx.llm.unreadableEndpoints();

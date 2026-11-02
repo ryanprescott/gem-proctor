@@ -20,6 +20,7 @@ export type ObjType =
   | "llm_status"
   | "verification_job"
   | "source"
+  | "source_file"
   | "authoring_session";
 export type Act = "read" | "delete" | "preview" | "create" | "list" | "update" | "export" | "submit" | "run";
 
@@ -38,6 +39,7 @@ export type RoutePermission =
         | "practice_attempt"
         | "verification_job"
         | "source"
+        | "source_file"
         | "authoring_session"
         | "authoring_batch"
         | "draft_question";
@@ -69,6 +71,12 @@ export const ROUTE_PERMISSIONS = {
   "sources.estimate": { objType: "source", act: "read", resource: "source" },
   "sources.embedRetry": { objType: "source", act: "update", resource: "source" },
   "sources.events": { objType: "source", act: "read", resource: "source" },
+  "sources.files.create": { objType: "source_file", act: "create" },
+  "sources.files.get": { objType: "source_file", act: "read", resource: "source_file" },
+  "sources.files.events": { objType: "source_file", act: "read", resource: "source_file" },
+  "sources.files.retry": { objType: "source_file", act: "update", resource: "source_file" },
+  "sources.files.delete": { objType: "source_file", act: "delete", resource: "source_file" },
+  "sources.files.original": { objType: "source_file", act: "read", resource: "source_file" },
   "authoring.sessions.list": { objType: "authoring_session", act: "list" },
   "authoring.sessions.create": { objType: "authoring_session", act: "create" },
   "authoring.sessions.get": { objType: "authoring_session", act: "read", resource: "authoring_session" },

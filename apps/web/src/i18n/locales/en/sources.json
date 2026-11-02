@@ -39,7 +39,12 @@
     "no_headings": "This text has no headings, so it will be one section.",
     "long_section": "“{{heading}}” is very long, about {{tokens}} tokens.",
     "duplicate_heading": "More than one heading is called “{{heading}}”.",
-    "unit_too_large": "A block in “{{heading}}” is about {{tokens}} tokens and can't be split. Saving will fail until it's shorter."
+    "unit_too_large": "A block in “{{heading}}” is about {{tokens}} tokens and can't be split. Saving will fail until it's shorter.",
+    "figures_dropped": "{{count}} figures or images were left out. Only the text and equations are kept.",
+    "low_text": "Very little text was found. The pages may be scans that couldn't be read.",
+    "unbalanced_math": "An equation is missing its closing dollar sign. Check the equations before saving.",
+    "pages_skipped": "{{count}} pages of the PDF weren't read.",
+    "math_unparsed": "Some equations couldn't be displayed. Check them before saving."
   },
   "status": {
     "pending": "Waiting to embed",

@@ -1,5 +1,5 @@
 import { type Db, InstanceSettings as SettingsTable } from "@gem/db";
-import { DEFAULT_AUTHORING_SETTINGS, DEFAULT_VERIFY_SETTINGS } from "@gem/shared";
+import { DEFAULT_AUTHORING_SETTINGS, DEFAULT_CONVERT_SETTINGS, DEFAULT_VERIFY_SETTINGS } from "@gem/shared";
 import { InstanceSettings } from "@gem/shared/contracts";
 import { sql } from "drizzle-orm";
 
@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: InstanceSettings = {
   localEndpointsOnly: false,
   verify: DEFAULT_VERIFY_SETTINGS,
   authoring: DEFAULT_AUTHORING_SETTINGS,
+  convert: DEFAULT_CONVERT_SETTINGS,
 };
 
 export async function getSettings(db: Pick<Db, "select">): Promise<InstanceSettings> {

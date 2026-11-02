@@ -18,12 +18,25 @@ export const EmbedError = z.object({
 });
 export type EmbedError = z.infer<typeof EmbedError>;
 
-export const SOURCE_WARNING_CODES = ["no_headings", "long_section", "duplicate_heading", "unit_too_large"] as const;
+export const SOURCE_WARNING_CODES = [
+  "no_headings",
+  "long_section",
+  "duplicate_heading",
+  "unit_too_large",
+  // Found by the PDF converter and our clean-up of its Markdown (docs/P2.2.md §5).
+  "figures_dropped",
+  "low_text",
+  "unbalanced_math",
+  "pages_skipped",
+  "math_unparsed",
+] as const;
 export const SourceWarning = z.object({
   code: z.enum(SOURCE_WARNING_CODES),
   /** The heading it's about, when there is one. */
   heading: z.string().optional(),
   tokens: z.number().int().optional(),
+  /** A number the message is about: figures dropped, pages left out. */
+  count: z.number().int().optional(),
 });
 export type SourceWarning = z.infer<typeof SourceWarning>;
 

@@ -2,6 +2,7 @@ import { checkConceptNotation, checkQuestion, computeQuestion, importedQuestion,
 import { AuthoringSession, DraftQuestion, Revision, SourceChunk } from "@gem/db";
 import type { DraftContent, DraftL7, L7Reason, LayerResult, VerificationItem } from "@gem/shared";
 import { eq, inArray } from "drizzle-orm";
+import { trackInteractive } from "../activity.ts";
 import type { AppContext } from "../context.ts";
 import { getSettings } from "../settings.ts";
 import { dbRecorder } from "../verification.ts";
@@ -226,6 +227,6 @@ export async function processL7(ctx: AppContext, draftId: string, flow: L7Flow):
 export async function startL7Worker(ctx: AppContext) {
   // A draft left pending by a stopped API has no job any more: it's queued again.
   await ctx.queue?.workOne<{ draftId: string; flow: L7Flow }>(L7_QUEUE, async ({ draftId, flow }) => {
-    await processL7(ctx, draftId, flow);
+    await trackInteractive(() => processL7(ctx, draftId, flow));
   });
 }

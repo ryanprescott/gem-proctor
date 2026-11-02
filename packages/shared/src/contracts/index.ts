@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AuthoringStatus, Blueprint, ObjectiveOrigin } from "../authoring.ts";
+import { ConvertSettings, ConvertStrategy, PAGE_RANGE_PATTERN } from "../convert.ts";
 import { DraftContent, DraftStatus, LayerResult, QuestionEventKind } from "../draft.ts";
 import { ErrorCode } from "../errors.ts";
 import { ImportReport } from "../import.ts";
@@ -21,7 +22,14 @@ import {
 } from "../llm.ts";
 import { QuestionShape, QuizShape, TestType } from "../quiz.ts";
 import { GRADE_OUTCOMES } from "../result.ts";
-import { AuthoringSettings, EmbedError, SourceEmbedStatus, SourceFormat, SourcePreview } from "../sources.ts";
+import {
+  AuthoringSettings,
+  EmbedError,
+  SourceEmbedStatus,
+  SourceFormat,
+  SourcePreview,
+  SourceWarning,
+} from "../sources.ts";
 import { ProctorBlocker, VerificationItem, VerificationSummary, VerifySettings } from "../verification.ts";
 
 /**
@@ -111,6 +119,8 @@ export const Health = z.object({
   db: z.object({ ok: z.boolean() }),
   queue: z.object({ ok: z.boolean(), lastHeartbeatAt: Iso.nullable() }),
   verify: z.object({ ok: z.boolean(), sympy: z.string().optional(), numpy: z.string().optional() }),
+  /** Present when a converter is configured. It doesn't make the server unhealthy: PDFs are optional. */
+  convert: z.object({ ok: z.boolean() }).optional(),
 });
 export type Health = z.infer<typeof Health>;
 
@@ -371,6 +381,7 @@ export const InstanceSettings = z.object({
   localEndpointsOnly: z.boolean(),
   verify: VerifySettings,
   authoring: AuthoringSettings,
+  convert: ConvertSettings,
 });
 export type InstanceSettings = z.infer<typeof InstanceSettings>;
 
@@ -386,9 +397,10 @@ export const adminPutSettings = contract({
   method: "PUT",
   path: "/admin/settings",
   /** A setting left out keeps its value. */
-  body: InstanceSettings.partial({ localEndpointsOnly: true, verify: true, authoring: true }).extend({
+  body: InstanceSettings.partial({ localEndpointsOnly: true, verify: true, authoring: true, convert: true }).extend({
     verify: VerifySettings.partial().optional(),
     authoring: AuthoringSettings.partial().optional(),
+    convert: ConvertSettings.partial().optional(),
   }),
   response: z.object({ settings: InstanceSettings }),
 });
@@ -413,6 +425,8 @@ export const AUDIT_ACTIONS = [
   "authoring_session.create",
   "authoring_session.delete",
   "authoring_session.publish",
+  "source_file.upload",
+  "source_file.delete",
 ] as const;
 export const AuditAction = z.enum(AUDIT_ACTIONS);
 export type AuditAction = z.infer<typeof AuditAction>;
@@ -426,6 +440,7 @@ export const AUDIT_TARGETS = [
   "question",
   "source",
   "authoring_session",
+  "source_file",
 ] as const;
 
 export const AuditEntry = z.object({
@@ -795,6 +810,8 @@ const SourceText = z.object({
 export const SourceRevisionView = z.object({
   id: Uuid,
   number: z.number().int(),
+  /** The PDF this revision's text was converted from, if any. */
+  fileId: Uuid.nullable(),
   format: SourceFormat,
   embedStatus: SourceEmbedStatus,
   embedError: EmbedError.nullable(),
@@ -862,7 +879,7 @@ export const sourcesCreate = contract({
   id: "sources.create",
   method: "POST",
   path: "/sources",
-  body: SourceMeta.extend(SourceText.shape),
+  body: SourceMeta.extend(SourceText.shape).extend({ fileId: Uuid.optional() }),
   response: z.object({ source: SourceSummary }),
 });
 
@@ -886,7 +903,7 @@ export const sourcesUpdate = contract({
   method: "PUT",
   path: "/sources/:id",
   params: IdParams,
-  body: SourceMeta.partial().extend(SourceText.shape),
+  body: SourceMeta.partial().extend(SourceText.shape).extend({ fileId: Uuid.optional() }),
   response: z.object({ source: SourceSummary }),
 });
 
@@ -972,6 +989,97 @@ export const sourcesEvents = contract({
   path: "/sources/:id/events",
   params: IdParams,
   query: EventsQuery,
+  response: z.string(),
+  responseKind: "text",
+});
+
+// ── PDF files (proctor+, owner or admin; P2.2 §6) ────────────────────
+
+export const SOURCE_FILE_STATUSES = ["pending", "converting", "ready", "failed"] as const;
+export const SourceFileStatus = z.enum(SOURCE_FILE_STATUSES);
+export type SourceFileStatus = z.infer<typeof SourceFileStatus>;
+
+export const SourceFileView = z.object({
+  id: Uuid,
+  filename: z.string(),
+  sizeBytes: z.number().int(),
+  status: SourceFileStatus,
+  strategy: ConvertStrategy,
+  /** The pages asked for, as the creator wrote them; null for the whole document. */
+  pageRange: z.string().nullable(),
+  errorCode: ErrorCode.nullable(),
+  errorParams: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).nullable(),
+  pageCount: z.number().int().nullable(),
+  pagesConverted: z.number().int().nullable(),
+  figures: z.number().int().nullable(),
+  /** What the conversion and our clean-up of its Markdown found (P2.2.md §5). */
+  warnings: z.array(SourceWarning),
+  converter: z.object({ name: z.string(), version: z.string() }).nullable(),
+  createdAt: Iso,
+  startedAt: Iso.nullable(),
+  finishedAt: Iso.nullable(),
+});
+export type SourceFileView = z.infer<typeof SourceFileView>;
+
+/** The Markdown is only in the detail: a list of files would carry a book each. */
+export const SourceFileDetail = SourceFileView.extend({ markdown: z.string().nullable() });
+export type SourceFileDetail = z.infer<typeof SourceFileDetail>;
+
+/** The PDF is the raw body (`content-type: application/pdf`); what to read of it is in the query. */
+export const sourcesFilesCreate = contract({
+  id: "sources.files.create",
+  method: "POST",
+  path: "/sources/files",
+  query: z.object({
+    filename: z.string().trim().min(1).max(255),
+    pageRange: z.string().max(100).regex(new RegExp(PAGE_RANGE_PATTERN)).optional(),
+    strategy: ConvertStrategy.optional(),
+  }),
+  body: z.custom<Buffer>((value) => Buffer.isBuffer(value)),
+  response: z.object({ file: SourceFileView }),
+});
+
+export const sourcesFilesGet = contract({
+  id: "sources.files.get",
+  method: "GET",
+  path: "/sources/files/:id",
+  params: IdParams,
+  response: z.object({ file: SourceFileDetail }),
+});
+
+/** Server-sent events: the file's state at once, and again on every change. */
+export const sourcesFilesEvents = contract({
+  id: "sources.files.events",
+  method: "GET",
+  path: "/sources/files/:id/events",
+  params: IdParams,
+  query: EventsQuery,
+  response: z.string(),
+  responseKind: "text",
+});
+
+export const sourcesFilesRetry = contract({
+  id: "sources.files.retry",
+  method: "POST",
+  path: "/sources/files/:id/retry",
+  params: IdParams,
+  response: z.object({ file: SourceFileView }),
+});
+
+export const sourcesFilesDelete = contract({
+  id: "sources.files.delete",
+  method: "DELETE",
+  path: "/sources/files/:id",
+  params: IdParams,
+  response: Ok,
+});
+
+/** The PDF as uploaded, as an attachment. */
+export const sourcesFilesOriginal = contract({
+  id: "sources.files.original",
+  method: "GET",
+  path: "/sources/files/:id/original",
+  params: IdParams,
   response: z.string(),
   responseKind: "text",
 });
@@ -1351,6 +1459,12 @@ export const authoringPublish = contract({
 });
 
 export const CONTRACTS = [
+  sourcesFilesCreate,
+  sourcesFilesGet,
+  sourcesFilesEvents,
+  sourcesFilesRetry,
+  sourcesFilesDelete,
+  sourcesFilesOriginal,
   authoringQuestionPatch,
   authoringQuestionValidate,
   authoringQuestionVerify,

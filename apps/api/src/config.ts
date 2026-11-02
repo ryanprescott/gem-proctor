@@ -73,6 +73,13 @@ export const ConfigSchema = z
     // Built web app served by the API in production (P0.md S2).
     WEB_DIST: optionalText,
 
+    // PDF conversion (docs/P2.2.md §4): the converter's address, and the secret its vision-model calls carry to the
+    // API's proxy. Without both, PDF upload is off.
+    CONVERT_URL: optionalUrl,
+    // PDF uploads per user per minute.
+    UPLOAD_RATE_LIMIT_MAX: optionalInt,
+    CONVERT_SHARED_SECRET: optionalText.pipe(z.string().min(24).optional()),
+
     // Model-calling routes (probe, discovery, eval runs), per admin per minute (SPEC §11.2).
     LLM_RATE_LIMIT_MAX: optionalInt,
 

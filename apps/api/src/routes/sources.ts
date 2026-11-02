@@ -23,6 +23,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { writeAudit } from "../audit.ts";
 import type { AppContext } from "../context.ts";
+import { readyFile } from "../convert.ts";
 import { streamState } from "../events.ts";
 import { route } from "../http/route.ts";
 import { getSettings } from "../settings.ts";
@@ -108,7 +109,7 @@ export async function sectionViews(ctx: Pick<AppContext, "db">, revisionId: stri
 
 /** Per role, whether a selection fits one call: no model name, and no endpoint (like `GET /llm/roles`). */
 export async function scopeFit(ctx: Pick<AppContext, "llm">, tokens: number): Promise<ScopeFit[]> {
-  const roles = MODEL_ROLES.filter((r) => r !== "embeddings");
+  const roles = MODEL_ROLES.filter((r) => r !== "embeddings" && r !== "document.ocr");
   return Promise.all(
     roles.map(async (role) => {
       const target = await ctx.llm.resolve(role).catch((err: unknown) => {
@@ -147,9 +148,10 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
     sourcesCreate,
     async ({ body: b, user, request }) => {
       await checkSourceSize(ctx, b.text);
+      if (b.fileId) await readyFile(ctx, b.fileId, user);
       const id = await createSource(
         ctx,
-        { ...b, format: formatOf(b.filename, b.format) },
+        { ...b, format: formatOf(b.filename, b.format), sourceFileId: b.fileId },
         user.userId,
         requestMeta(request),
       );
@@ -178,6 +180,7 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
     sourcesUpdate,
     async ({ params, body: b, user }) => {
       await checkSourceSize(ctx, b.text);
+      if (b.fileId) await readyFile(ctx, b.fileId, user);
       const [source] = await ctx.db.select().from(Source).where(eq(Source.id, params.id));
       if (!source) throw new AppError("source_not_found");
       await addRevision(
@@ -191,6 +194,7 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
           url: b.url ?? source.url ?? undefined,
           text: b.text,
           format: formatOf(b.filename, b.format),
+          sourceFileId: b.fileId,
         },
         user.userId,
       );

@@ -1,4 +1,5 @@
 import type { Authz } from "@gem/authz";
+import type { ConvertClient } from "@gem/convert";
 import type { Db } from "@gem/db";
 import type { Runtime } from "@gem/llm";
 import type { SessionStore } from "./auth/sessions.ts";
@@ -16,6 +17,8 @@ export interface AppContext {
   queue: Queue | null;
   verify: VerifyClient;
   llm: Runtime;
+  /** Absent where no converter is configured (PDF upload is then off). */
+  convert?: ConvertClient | null;
   events: EventHub;
   now: () => Date;
 }

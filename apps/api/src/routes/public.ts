@@ -14,11 +14,14 @@ export function publicRoutes(app: FastifyInstance, ctx: AppContext) {
     } catch {}
     const queue = ctx.queue?.status(ctx.now()) ?? { ok: false, lastHeartbeatAt: null };
     const v = await ctx.verify.health();
+    const c = ctx.convert ? await ctx.convert.health().catch(() => null) : undefined;
     const body = {
       ok: dbOk && queue.ok && v !== null,
       db: { ok: dbOk },
       queue,
       verify: v ? { ok: true, sympy: v.sympy, numpy: v.numpy } : { ok: false },
+      // Optional: a converter that is down doesn't make the server unhealthy.
+      ...(c === undefined ? {} : { convert: { ok: c !== null && c.models === "ready" } }),
     };
     if (!body.ok) reply.status(503);
     return body;
