@@ -1035,7 +1035,7 @@ export const sourcesFilesCreate = contract({
     pageRange: z.string().max(100).regex(new RegExp(PAGE_RANGE_PATTERN)).optional(),
     strategy: ConvertStrategy.optional(),
   }),
-  body: z.custom<Buffer>((value) => Buffer.isBuffer(value)),
+  body: z.custom<Uint8Array>((value) => value instanceof Uint8Array),
   response: z.object({ file: SourceFileView }),
 });
 

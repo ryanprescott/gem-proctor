@@ -51,4 +51,23 @@ async function call<C extends Contract>(
   return contract.response.parse(await res.json()) as ContractOutput<C>;
 }
 
-export const api = { call };
+/** A file as the whole request body (a PDF), with the rest of the request in the query. */
+async function upload<C extends Contract>(
+  contract: C,
+  input: { query?: unknown; params?: unknown; file: Blob },
+): Promise<ContractOutput<C>> {
+  const res = await fetch(contractUrl(contract, input), {
+    method: contract.method,
+    credentials: "same-origin",
+    headers: { "content-type": input.file.type || "application/octet-stream" },
+    body: input.file,
+  });
+  if (!res.ok) {
+    const parsed = ApiError.safeParse(await res.json().catch(() => null));
+    if (parsed.success) throw new ApiClientError(parsed.data.code, parsed.data.params, res.status);
+    throw new ApiClientError("internal", {}, res.status);
+  }
+  return contract.response.parse(await res.json()) as ContractOutput<C>;
+}
+
+export const api = { call, upload };

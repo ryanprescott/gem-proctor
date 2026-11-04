@@ -121,6 +121,14 @@ function RevisionList({
             {t("sources:revisions.item", { number: formatNumber(r.number), date: formatDateTime(r.createdAt) })}
           </Link>{" "}
           <span className={styles.muted}>{t(`sources:status.${r.embedStatus}`)}</span>
+          {r.fileId ? (
+            <>
+              {" "}
+              <a href={`/api/v1/sources/files/${r.fileId}/original`} download>
+                {t("sources:revisions.original", { number: formatNumber(r.number) })}
+              </a>
+            </>
+          ) : null}
         </li>
       ))}
     </ul>

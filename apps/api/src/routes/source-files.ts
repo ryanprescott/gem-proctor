@@ -41,7 +41,11 @@ export function sourceFilesRoutes(app: FastifyInstance, ctx: AppContext) {
     async ({ query, body, user, request }) => {
       const file = await createFile(
         ctx,
-        { pdf: body, filename: query.filename, options: { pageRange: query.pageRange, strategy: query.strategy } },
+        {
+          pdf: body as Buffer,
+          filename: query.filename,
+          options: { pageRange: query.pageRange, strategy: query.strategy },
+        },
         user.userId,
         requestMeta(request),
       );

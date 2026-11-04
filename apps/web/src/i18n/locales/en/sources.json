@@ -71,7 +71,8 @@
     "start": "Edit as a new revision",
     "help": "Saving makes a new revision. Earlier ones stay, so published citations keep working.",
     "save": "Save new revision",
-    "saved": "Revision {{number}} saved."
+    "saved": "Revision {{number}} saved.",
+    "original": "Download the PDF for revision {{number}}"
   },
   "scope": {
     "title": "Scope",
@@ -99,5 +100,18 @@
     "title": "Delete this source?",
     "body": "It leaves your library. Tests already published from it keep their citations.",
     "confirm": "Delete"
+  },
+  "pdf": {
+    "title": "Or read a PDF",
+    "pages": "Pages (optional)",
+    "pagesHelp": "For a chapter, not the whole book: for example 5-23, or 1,4,9-12. Leave empty to read every page.",
+    "pagesInvalid": "Write pages like 5-23 or 1,4,9-12.",
+    "choose": "Choose a PDF",
+    "pending": "{{name}} is waiting to be read.",
+    "converting": "Reading {{name}}. This can take a few minutes.",
+    "ready": "Finished reading {{name}}: {{pages}} pages. Check the text below before saving.",
+    "retry": "Try again",
+    "resultTitle": "What was read from the PDF",
+    "rendered": "How the text and equations will look"
   }
 }

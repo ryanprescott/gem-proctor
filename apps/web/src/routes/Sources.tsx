@@ -1,8 +1,14 @@
 import type { SourcePreview, SourceWarning } from "@gem/shared";
-import { type SourceSummary, sourcesCreate, sourcesList, sourcesPreview } from "@gem/shared/contracts";
+import {
+  type SourceFileDetail,
+  type SourceSummary,
+  sourcesCreate,
+  sourcesList,
+  sourcesPreview,
+} from "@gem/shared/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useDeferredValue, useMemo, useState } from "react";
 import { FileTrigger, Form } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client.ts";
@@ -11,6 +17,8 @@ import { formatDate, formatNumber } from "../format.ts";
 import { Button, Card, ErrorMessage, errorText, TextField } from "../ui/controls.tsx";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
 import { Markdown } from "../ui/Markdown.tsx";
+import { findUnparsedMath } from "../ui/math.ts";
+import { PdfReader } from "./SourcePdf.tsx";
 import styles from "./Sources.module.css";
 
 export function EmbedStatus({ source }: { source: Pick<SourceSummary, "latest"> }) {
@@ -34,10 +42,49 @@ function Warnings({ warnings }: { warnings: SourceWarning[] }) {
     <ul className={styles.warnings}>
       {warnings.map((w) => (
         <li key={`${w.code}:${w.heading ?? ""}`}>
-          {t(`sources:warnings.${w.code}`, { heading: w.heading ?? "", tokens: formatNumber(w.tokens ?? 0) })}
+          {t(`sources:warnings.${w.code}`, {
+            heading: w.heading ?? "",
+            tokens: formatNumber(w.tokens ?? 0),
+            count: w.count ?? 0,
+          })}
         </li>
       ))}
     </ul>
+  );
+}
+
+/** What the converter and our clean-up found, and the equations the browser can't read. */
+function ConversionPanel({
+  warnings,
+  unparsed,
+  text,
+}: {
+  warnings: SourceWarning[];
+  unparsed: string[];
+  text: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section aria-labelledby="pdf-result" className={styles.pdf}>
+      <h3 id="pdf-result">{t("sources:pdf.resultTitle")}</h3>
+      <Warnings warnings={warnings} />
+      {unparsed.length > 0 ? (
+        <>
+          <p>{t("sources:warnings.math_unparsed")}</p>
+          <ul>
+            {unparsed.map((tex) => (
+              <li key={tex}>
+                <code>{tex}</code>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      <h4>{t("sources:pdf.rendered")}</h4>
+      <div className={styles.rendered}>
+        <Markdown quoted>{text}</Markdown>
+      </div>
+    </section>
   );
 }
 
@@ -79,6 +126,18 @@ function AddSource() {
   const [text, setText] = useState("");
   const [filename, setFilename] = useState<string | undefined>();
   const [preview, setPreview] = useState<SourcePreview | null>(null);
+  const [fileId, setFileId] = useState<string | undefined>();
+  const [fileWarnings, setFileWarnings] = useState<SourceWarning[]>([]);
+  const deferred = useDeferredValue(text);
+  const unparsed = useMemo(() => (fileId ? findUnparsedMath(deferred) : []), [fileId, deferred]);
+  const converted = useCallback((file: SourceFileDetail) => {
+    setText(file.markdown ?? "");
+    setFilename(undefined);
+    setFileId(file.id);
+    setFileWarnings(file.warnings);
+    setPreview(null);
+    setTitle((current) => current || file.filename.replace(/\.[^.]+$/, ""));
+  }, []);
 
   const body = () => ({
     text,
@@ -102,6 +161,7 @@ function AddSource() {
           ...(author ? { author } : {}),
           ...(edition ? { edition } : {}),
           ...(url ? { url } : {}),
+          ...(fileId ? { fileId } : {}),
         },
       }),
     onSuccess: async ({ source }) => {
@@ -146,6 +206,8 @@ function AddSource() {
           </FileTrigger>
           {filename ? <span>{t("sources:add.chosen", { name: filename })}</span> : null}
         </div>
+        <PdfReader onReady={converted} />
+        {fileId ? <ConversionPanel warnings={fileWarnings} unparsed={unparsed} text={deferred} /> : null}
         <TextField
           label={t("sources:add.text")}
           description={t("sources:add.textHelp")}

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bootstrapDatabase, withDatabase } from "@gem/db";
 import pg from "pg";
+import { MockConvertServer } from "../packages/convert/mock/server.ts";
 import { type ChatReply, MockLlmServer } from "../packages/llm/mock/server.ts";
 import { adminUrl, ROOT, startLocalPg } from "./pg-local.ts";
 import { findVerifyPython, type LocalVerify, superviseVerify } from "./verify-local.ts";
@@ -177,7 +178,32 @@ function startMockLlm(mockHost: string | undefined) {
 
 const llm = startMockLlm(process.env.E2E_MOCK_HOST);
 
+// A converter for the PDF tests: named documents the tests ask for by a flag in the "PDF" (P2.2 F3).
+const CHAPTER = [
+  "# Vectors and inner products",
+  "",
+  "A vector is an ordered list of numbers, and the inner product of two vectors is a single number that measures how much they point the same way. ".repeat(
+    3,
+  ),
+  "",
+  "Two vectors are orthogonal when $x^T y = 0$, and the length of a vector is",
+  "",
+  "$$\\|x\\| = \\sqrt{x^T x}$$",
+  "",
+  "A symbol the converter misread: $\\notacommand{x}$.",
+  "",
+  "![a figure](figure-1.png)",
+  "",
+  "## Norms",
+  "",
+  "The norm is never negative, and it is zero only for the zero vector. ".repeat(4),
+  "",
+].join("\n");
+const convert = new MockConvertServer({ delayMs: 600, documents: { chapter: CHAPTER } });
+const convertEnv = { CONVERT_URL: convert.url, CONVERT_SHARED_SECRET: "e2e-shared-secret-0123456789abcdef" };
+
 if (process.env.E2E_BASE_URL) {
+  // A stack that was started elsewhere has the converter it was given; the PDF tests skip without E2E_CONVERT.
   process.exit(await runPlaywright(process.env.E2E_BASE_URL, { E2E_LLM_URL: llm.url }));
 }
 
@@ -228,6 +254,7 @@ const api = Bun.spawn(["bun", "--no-env-file", join(ROOT, "apps", "api", "src", 
     WEB_DIST: join(WEB, "dist"),
     MIGRATE_ON_START: "true",
     ENV_FILE: "/dev/null",
+    ...convertEnv,
   },
   stdout: process.env.E2E_API_LOG ? "inherit" : "ignore",
   stderr: "inherit",
@@ -237,9 +264,10 @@ children.push(api);
 let code = 1;
 try {
   await waitFor(`http://127.0.0.1:${port}/api/v1/health`, 60_000);
-  code = await runPlaywright(`http://127.0.0.1:${port}`, { E2E_LLM_URL: llm.url });
+  code = await runPlaywright(`http://127.0.0.1:${port}`, { E2E_LLM_URL: llm.url, E2E_CONVERT: "1" });
 } finally {
   llm.mock.stop();
+  convert.stop();
   await verify?.stop();
   for (const c of children) c.kill();
   await Promise.all(children.map((c) => c.exited));

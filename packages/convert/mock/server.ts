@@ -15,6 +15,8 @@ import {
 export interface MockConvertOptions {
   /** Markdown to answer with; the default has a heading and an equation. */
   markdown?: string;
+  /** Named documents: a PDF that says `%MOCK:doc=name` is answered with `documents[name]`. */
+  documents?: Record<string, string>;
   /** Every conversion waits this long. */
   delayMs?: number;
   /** Every conversion fails with this code. */
@@ -97,7 +99,8 @@ export class MockConvertServer {
       if (fail) return this.error(fail);
       const pageCount = Number(flag(text, "pages") ?? 1);
       if (pageCount > (this.options.maxPages ?? 400)) return this.error("too_many_pages");
-      const markdown = has(text, "empty") ? "" : (this.options.markdown ?? DEFAULT_MARKDOWN);
+      const named = this.options.documents?.[flag(text, "doc") ?? ""];
+      const markdown = has(text, "empty") ? "" : (named ?? this.options.markdown ?? DEFAULT_MARKDOWN);
       if (markdown.trim() === "") return this.error("empty");
       const reply: ConvertReply = {
         markdown,
