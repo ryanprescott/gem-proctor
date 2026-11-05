@@ -5,12 +5,12 @@ import {
   STRUCTURED_MODES,
   type StructuredMode,
 } from "@gem/shared";
-import { adminLlmRolesDelete, adminLlmRolesPut } from "@gem/shared/contracts";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { adminLlmEndpointsModels, adminLlmRolesDelete, adminLlmRolesPut } from "@gem/shared/contracts";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Dialog, Form, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { useTranslation } from "react-i18next";
-import { api } from "../../api/client.ts";
+import { ApiClientError, api } from "../../api/client.ts";
 import { formatNumber } from "../../format.ts";
 import { ConfirmDialog } from "../../ui/ConfirmDialog.tsx";
 import { Button, Card, ErrorMessage, Select, TextField } from "../../ui/controls.tsx";
@@ -74,6 +74,69 @@ export function RoleDialog({
   const params = parseParams(paramsText);
   const outputTooLarge = contextWindow !== "" && Number(maxOutputTokens) >= Number(contextWindow);
 
+  // The endpoint's own models, for a list to pick from; where it can't list them, the name is typed.
+  const models = useQuery({
+    queryKey: [...LLM_KEY, "models", endpointId],
+    queryFn: () => api.call(adminLlmEndpointsModels, { params: { id: endpointId } }),
+    enabled: endpointId !== "",
+    retry: false,
+    staleTime: 60_000,
+  });
+  const listed = models.data?.models ?? [];
+  const pickModel = (id: string) => {
+    setModel(id);
+    // An empty context is filled from what the endpoint reports, as "Pick" on the endpoint's model list does.
+    const reported = listed.find((m) => m.id === id)?.contextLength;
+    if (contextWindow === "" && reported) {
+      setContextWindow(String(reported));
+      setMaxOutputTokens(String(Math.floor(reported / OUTPUT_SHARE)));
+    }
+  };
+  const modelField = (() => {
+    if (models.isPending && endpointId !== "") {
+      return (
+        <Select
+          label={t("admin:llm.roles.colModel")}
+          selectedKey=""
+          onSelectionChange={() => {}}
+          options={[{ id: "", label: t("admin:llm.roles.modelsLoading") }]}
+          isDisabled
+        />
+      );
+    }
+    if (listed.length > 0) {
+      // A model the endpoint no longer lists stays a choice, so opening the dialog never changes an assignment.
+      const options = listed.map((m) => ({ id: m.id, label: m.id }));
+      if (model !== "" && !listed.some((m) => m.id === model)) {
+        options.unshift({ id: model, label: t("admin:llm.roles.modelNotListed", { model }) });
+      }
+      return (
+        <Select
+          label={t("admin:llm.roles.colModel")}
+          selectedKey={model}
+          onSelectionChange={pickModel}
+          options={options}
+        />
+      );
+    }
+    const why =
+      models.error instanceof ApiClientError && models.error.code === "llm_models_unsupported"
+        ? t("admin:llm.roles.modelsUnsupported")
+        : models.error
+          ? t("admin:llm.roles.modelsFailed")
+          : t("admin:llm.roles.modelsNone");
+    return (
+      <TextField
+        label={t("admin:llm.roles.colModel")}
+        description={why}
+        value={model}
+        onChange={setModel}
+        isRequired
+        autoFocus
+      />
+    );
+  })();
+
   const save = useMutation({
     mutationFn: () =>
       api.call(adminLlmRolesPut, {
@@ -106,7 +169,7 @@ export function RoleDialog({
           <Form
             onSubmit={(e) => {
               e.preventDefault();
-              if (params !== null && !outputTooLarge) save.mutate();
+              if (params !== null && !outputTooLarge && model !== "") save.mutate();
             }}
           >
             <Heading slot="title">{t("admin:llm.roles.dialogTitle", { role: roleName(role) })}</Heading>
@@ -114,10 +177,14 @@ export function RoleDialog({
             <Select
               label={t("admin:llm.roles.colEndpoint")}
               selectedKey={endpointId}
-              onSelectionChange={setEndpointId}
+              onSelectionChange={(id) => {
+                // Another endpoint has its own models: the one chosen here may not be among them.
+                if (id !== endpointId) setModel("");
+                setEndpointId(id);
+              }}
               options={endpoints.map((e) => ({ id: e.id, label: e.label }))}
             />
-            <TextField label={t("admin:llm.roles.colModel")} value={model} onChange={setModel} isRequired autoFocus />
+            {modelField}
             <Select
               label={t("admin:llm.roles.colMode")}
               selectedKey={mode}
@@ -183,7 +250,7 @@ export function RoleDialog({
               <Button variant="secondary" onPress={onClose}>
                 {t("common:cancel")}
               </Button>
-              <Button type="submit" isDisabled={save.isPending}>
+              <Button type="submit" isDisabled={save.isPending || model === ""}>
                 {t("admin:llm.roles.save")}
               </Button>
             </div>

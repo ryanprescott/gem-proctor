@@ -102,7 +102,8 @@ test("C34 models and probes; 'Use these values' prefills the role dialog", async
   await page.getByRole("button", { name: "Use these values" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "Assign Authoring: generate" })).toBeVisible();
-  await expect(dialog.getByLabel("Model", { exact: false }).first()).toHaveValue("mock-chat");
+  // The model is a list of the endpoint's own models, with the probed one chosen.
+  await expect(dialog.getByRole("button", { name: / Model$/ })).toContainText("mock-chat");
   await expect(dialog.getByRole("button", { name: / Mode$/ })).toContainText("Native schema");
   await expect(dialog.getByLabel("Context window")).toHaveValue("32768");
   await expect(dialog.getByLabel("Parameters (JSON)")).toHaveValue(/"reasoning_effort": "none"/);
@@ -143,7 +144,7 @@ test("C35 cloud notice, local-only 409 with roles listed, unassign", async () =>
   await page.getByRole("button", { name: "Assign Analysis" }).click();
   const dialog = page.getByRole("dialog");
   await choose(page, "Endpoint", CLOUD);
-  await dialog.getByLabel("Model", { exact: false }).first().fill("cloud-model");
+  await choose(page, "Model", "mock-chat");
   await dialog.getByLabel("Context window").fill("8192");
   await dialog.getByLabel("Max output tokens").fill("8192");
   await dialog.getByRole("button", { name: "Save assignment" }).click();
@@ -179,7 +180,7 @@ test("C35 cloud notice, local-only 409 with roles listed, unassign", async () =>
   for (const role of ["Authoring: objectives", "Authoring: judge", "Verify: solve"]) {
     const row = page.getByRole("row", { name: new RegExp(`^${role}`) });
     await page.getByRole("button", { name: `Assign ${role}` }).click();
-    await dialog.getByLabel("Model", { exact: false }).first().fill("mock-chat");
+    await choose(page, "Model", "mock-chat");
     await dialog.getByLabel("Context window").fill("8192");
     await dialog.getByLabel("Max output tokens").fill("1024");
     await dialog.getByRole("button", { name: "Save assignment" }).click();
