@@ -79,11 +79,13 @@ check(
 );
 check((hc.PidsLimit ?? 0) > 0 && hc.Memory > 0 && hc.NanoCpus > 0, "convert: pids, memory and CPU limits");
 check(info.Config.User === "10003:10003", "convert: runs as uid 10003, not root");
+// One credential is the converter's by design: VLLM_API_KEY, the shared secret its page reads send to the API's proxy,
+// which that proxy alone accepts (apps/api/src/routes/source-files.ts). Nothing else secret-like may be there.
 const secretish = (info.Config.Env ?? []).filter((e) => {
   const name = e.split("=")[0] ?? "";
-  return name !== "GPG_KEY" && /SECRET|PASSWORD|DATABASE|KEY|TOKEN/i.test(name);
+  return name !== "GPG_KEY" && name !== "VLLM_API_KEY" && /SECRET|PASSWORD|DATABASE|KEY|TOKEN/i.test(name);
 });
-check(secretish.length === 0, "convert: no secrets in the container config");
+check(secretish.length === 0, "convert: no secrets in the container config but the proxy's key");
 const binds = Object.values(hc.PortBindings ?? {}).flat();
 check(
   binds.length > 0 && binds.every((b) => b.HostIp === "127.0.0.1"),

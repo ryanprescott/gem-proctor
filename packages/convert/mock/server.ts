@@ -17,6 +17,8 @@ export interface MockConvertOptions {
   markdown?: string;
   /** Named documents: a PDF that says `%MOCK:doc=name` is answered with `documents[name]`. */
   documents?: Record<string, string>;
+  /** Answers a real PDF, which can't carry flags (the fixtures, for `convert-smoke`): Markdown, or undefined to fall through. */
+  answer?: (pdf: Buffer, options: ConvertOptions) => string | undefined;
   /** Every conversion waits this long. */
   delayMs?: number;
   /** Every conversion fails with this code. */
@@ -100,7 +102,8 @@ export class MockConvertServer {
       const pageCount = Number(flag(text, "pages") ?? 1);
       if (pageCount > (this.options.maxPages ?? 400)) return this.error("too_many_pages");
       const named = this.options.documents?.[flag(text, "doc") ?? ""];
-      const markdown = has(text, "empty") ? "" : (named ?? this.options.markdown ?? DEFAULT_MARKDOWN);
+      const answered = this.options.answer?.(pdf, options);
+      const markdown = has(text, "empty") ? "" : (answered ?? named ?? this.options.markdown ?? DEFAULT_MARKDOWN);
       if (markdown.trim() === "") return this.error("empty");
       const reply: ConvertReply = {
         markdown,

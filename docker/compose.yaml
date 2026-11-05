@@ -46,6 +46,9 @@ services:
       VERIFY_SOCKET: /run/verify/verify.sock
       WEB_DIST: /web-dist
       MIGRATE_ON_START: "true"
+      # PDF upload (docs/P2.2.md): with the `convert` profile, CONVERT_URL=http://convert:8200. Unset, upload is off.
+      CONVERT_URL: ${CONVERT_URL:-}
+      CONVERT_SHARED_SECRET: ${CONVERT_SHARED_SECRET:-}
     volumes:
       - verify-socket:/run/verify
       - web-dist:/web-dist:ro
@@ -91,7 +94,9 @@ services:
 
   # PDF converter (docs/P2.2.md §5): `docker compose --profile convert up`. Marker with no GPU and no secrets, its weights
   # in the image, a read-only root, and a limit on CPU and memory so a conversion takes only what the API and Postgres
-  # leave. The vision model it calls is on the Ollama box (CONVERT_VLM_UPSTREAM, until the API's proxy exists).
+  # leave. Its page reads go to the API's proxy (role `document.ocr`, the same queue as every model call), with the
+  # shared secret as the key: its one credential, which opens that proxy and nothing else (scripts/check-convert.ts).
+  # CONVERT_VLM_UPSTREAM instead sends them straight to an Ollama, through a development shim: for the converter alone.
   convert:
     profiles: ["convert"]
     build: { context: .., dockerfile: docker/convert.Dockerfile }
@@ -108,7 +113,11 @@ services:
     cpus: ${CONVERT_CPUS:-2.0}
     environment:
       CONVERT_VLM_UPSTREAM: ${CONVERT_VLM_UPSTREAM:-}
-      SURYA_INFERENCE_URL: ${CONVERT_VLM_URL:-}
+      SURYA_INFERENCE_URL: ${CONVERT_VLM_URL:-http://api:${API_PORT:-3000}/internal/vlm/v1}
+      # Surya's vLLM client is the one that sends a key (VLLM_API_KEY); its llama.cpp client always sends "EMPTY".
+      # No server is started either way: the URL is given.
+      SURYA_INFERENCE_BACKEND: vllm
+      VLLM_API_KEY: ${CONVERT_SHARED_SECRET:-}
     ports:
       - "127.0.0.1:${CONVERT_PORT:-8200}:8200"
     healthcheck:

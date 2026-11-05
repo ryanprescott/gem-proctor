@@ -2,9 +2,10 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import { AuditLog, decryptSecret, Endpoint, LlmCallLog, RoleAssignment } from "@gem/db";
 import { MockLlmServer } from "@gem/llm/mock";
+import { RoleAssignment as RoleAssignmentSchema } from "@gem/shared";
 import { desc, eq, inArray } from "drizzle-orm";
 import { type Config, loadConfig } from "../src/config.ts";
-import { seedDevLlm } from "../src/llm-seed.ts";
+import { devAssignments, seedDevLlm } from "../src/llm-seed.ts";
 import { API, type Client, createTestApp, hasDb, registerUser, signIn, type TestApp, testConfig } from "./helpers.ts";
 
 const SECRET = randomBytes(32).toString("base64");
@@ -518,6 +519,17 @@ describe.skipIf(!hasDb)("C27: llm:seed", () => {
     LLM_DEV_EMBED_QUERY_PREFIX: "q: ",
     LLM_DEV_EMBED_DOCUMENT_PREFIX: "d: ",
   };
+
+  test("every assignment it makes is one the admin API would accept (the seed writes past its validation)", () => {
+    const config = dev({ appUrl: "postgres://x", ownerUrl: "postgres://x", name: "x" } as TestApp["database"], EMBED);
+    const made = devAssignments(config);
+    expect(made.map((a) => a.role).sort()).toEqual(["analysis", "authoring.generate", "embeddings"]);
+    for (const a of made) {
+      const parsed = RoleAssignmentSchema.safeParse({ ...a, endpointId: "00000000-0000-4000-8000-000000000000" });
+      expect(parsed.success, `${a.role}: ${JSON.stringify(parsed.error?.issues)}`).toBe(true);
+    }
+    expect(made.find((a) => a.role === "embeddings")?.capabilities).toMatchObject({ contextWindow: 4096 });
+  });
 
   test("creates endpoints and assignments once; a second run changes nothing; nothing is overwritten", async () => {
     const t = await createTestApp();

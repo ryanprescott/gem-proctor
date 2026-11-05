@@ -27,7 +27,9 @@ const body = renderToStaticMarkup(
 const page = (inner: string) => `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <link rel="stylesheet" href="file://${KATEX_CSS}">
 <style>
-  body { font: 12pt/1.5 "Times New Roman", serif; margin: 0; }
+  /* KaTeX's own Main face (declared by its stylesheet, shipped in node_modules), not a system serif: a fallback chosen
+     by the host changes the line breaks, and the fixtures must come out the same on every machine. */
+  body { font: 12pt/1.5 KaTeX_Main, serif; margin: 0; }
   h1 { font-size: 20pt; } h2 { font-size: 15pt; margin-top: 1.4em; }
   @page { size: A4; margin: 0; }
   img { display: block; width: 210mm; height: 296mm; break-after: page; }
@@ -49,6 +51,7 @@ try {
   const html = join(work, "text.html");
   writeFileSync(html, page(body));
   await ctx.goto(`file://${html}`);
+  await ctx.evaluate(() => document.fonts.ready);
   await ctx.pdf({
     path: join(OUT, "linear-algebra.pdf"),
     format: "A4",

@@ -98,8 +98,11 @@ export function sourceFilesRoutes(app: FastifyInstance, ctx: AppContext) {
 /**
  * The converter's vision-model calls (docs/P2.2.md §5 "One queue"): Surya speaks the OpenAI protocol and wants a
  * server that answers `/health` and names its model. This answers both, and sends each page read through the same
- * per-endpoint queue and call log as everything else, as role `document.ocr`. Not a browser route: it has no session,
- * only the secret the converter was given.
+ * per-endpoint queue and call log as everything else, as role `document.ocr`. Not a browser route: it has no session.
+ *
+ * Surya is pointed at `…/internal/vlm/v1` and looks for health one level up, at `…/internal/vlm/health`. It sends no
+ * key on either check (a bare HTTP client), so health and the model list are open: one says "ok", the other names a
+ * fixed model. A page read, which spends the endpoint's time, takes the secret the converter was given as its key.
  */
 export const VLM_MODEL_ID = "datalab-to/surya-ocr-2.5";
 
@@ -109,14 +112,11 @@ export function vlmProxyRoutes(app: FastifyInstance, ctx: AppContext) {
     const given = header?.replace(/^Bearer\s+/i, "");
     if (!secretMatches(given, ctx.config.CONVERT_SHARED_SECRET)) throw new AppError("unauthenticated");
   };
-  app.get("/internal/vlm/v1/health", options, async (request) => {
-    guard(request.headers.authorization);
-    return { ok: true };
-  });
-  app.get("/internal/vlm/v1/models", options, async (request) => {
-    guard(request.headers.authorization);
-    return { object: "list", data: [{ id: VLM_MODEL_ID, object: "model", owned_by: "gem" }] };
-  });
+  app.get("/internal/vlm/health", options, async () => ({ ok: true }));
+  app.get("/internal/vlm/v1/models", options, async () => ({
+    object: "list",
+    data: [{ id: VLM_MODEL_ID, object: "model", owned_by: "gem" }],
+  }));
   app.post("/internal/vlm/v1/chat/completions", options, async (request, reply) => {
     guard(request.headers.authorization);
     const body = (request.body ?? {}) as Record<string, unknown>;

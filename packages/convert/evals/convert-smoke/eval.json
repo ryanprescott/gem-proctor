@@ -1,0 +1,32 @@
+{
+  "name": "convert-smoke",
+  "description": "The repo's fixtures through POST /convert, scored against what they should contain (docs/P2.2.md M26). On the mock in bun test; live with `bun run live:convert`.",
+  "fixtures": "apps/convert/tests/fixtures",
+  "expected": "linear-algebra.expected.json",
+  "runs": [
+    {
+      "name": "scan, rasterize",
+      "file": "linear-algebra-scan.pdf",
+      "options": { "strategy": "rasterize" },
+      "bar": { "formulas": 54, "headings": 4, "similarity": 0.9 }
+    },
+    {
+      "name": "text PDF, rasterize",
+      "file": "linear-algebra.pdf",
+      "options": { "strategy": "rasterize" },
+      "bar": { "formulas": 54, "headings": 4, "similarity": 0.9 }
+    },
+    {
+      "name": "text PDF, text layer",
+      "file": "linear-algebra.pdf",
+      "options": { "strategy": "text" },
+      "note": "Recorded, not held to a bar: the text layer is for documents without equations (P2.2.md §5, Page strategy)."
+    },
+    {
+      "name": "text PDF, page 2 only",
+      "file": "linear-algebra.pdf",
+      "options": { "strategy": "rasterize", "pageRange": "2" },
+      "note": "Recorded: the answer is written for the whole document, so only the time and the page count are of interest."
+    }
+  ]
+}

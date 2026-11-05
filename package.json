@@ -32,6 +32,7 @@
     "convert:lint": "ruff check apps/convert && ruff format --check apps/convert",
     "convert:check": "bun scripts/check-convert.ts",
     "live:convert": "bun scripts/live-convert.ts",
+    "live:pdf": "bun scripts/live-pdf.ts",
     "verify:escape": "bun scripts/verify-escape.ts",
     "live:authoring": "bun scripts/live-authoring.ts",
     "live:retrieval": "bun scripts/live-retrieval.ts"

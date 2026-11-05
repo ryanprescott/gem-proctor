@@ -66,6 +66,22 @@ def render_page(document: Any, index: int, dpi: int) -> Any:
         raise ConvertError("bad_pdf", f"page {index + 1} can't be loaded: {err}"[:300]) from None
 
 
+def marker_settings(mode: str, page_range: str | None = None) -> dict[str, Any]:
+    """What Marker is asked for. Page headers are kept: Marker labels a page's first line a page header and drops it,
+    even when it is the rest of a sentence from the page before, or the document's title (P2.2 F4: on the fixtures
+    that lost two formulas and the title). Running headers that really repeat are dropped by our own clean-up
+    (packages/knowledge, clean.ts). Footers stay dropped: mostly page numbers, which our clean-up wouldn't catch."""
+    settings: dict[str, Any] = {
+        "output_format": "markdown",
+        "mode": mode,
+        "disable_image_extraction": True,
+        "keep_pageheader_in_output": True,
+    }
+    if page_range:
+        settings["page_range"] = page_range
+    return settings
+
+
 class MarkerEngine:
     def __init__(self) -> None:
         self._models: Any = None
@@ -110,10 +126,7 @@ class MarkerEngine:
         from marker.config.parser import ConfigParser
         from marker.converters.pdf import PdfConverter
 
-        settings: dict[str, Any] = {"output_format": "markdown", "mode": mode, "disable_image_extraction": True}
-        if page_range:
-            settings["page_range"] = page_range
-        parser = ConfigParser(settings)
+        parser = ConfigParser(marker_settings(mode, page_range))
         return PdfConverter(
             config=parser.generate_config_dict(),
             artifact_dict=self._models,

@@ -10,6 +10,7 @@ COPY packages/db/package.json packages/db/
 COPY packages/llm/package.json packages/llm/
 COPY packages/knowledge/package.json packages/knowledge/
 COPY packages/authoring/package.json packages/authoring/
+COPY packages/convert/package.json packages/convert/
 COPY tools/biome/package.json tools/biome/
 COPY tools/i18n/package.json tools/i18n/
 RUN bun install --frozen-lockfile --ignore-scripts

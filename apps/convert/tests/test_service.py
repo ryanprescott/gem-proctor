@@ -258,3 +258,17 @@ class WorkerLife(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MarkerSettings(unittest.TestCase):
+    """What Marker is asked for, checked without Marker (it is imported only inside the worker)."""
+
+    def test_page_headers_are_kept_and_images_not_extracted(self) -> None:
+        from gem_convert.marker_engine import marker_settings
+
+        settings = marker_settings("fast", "0-1")
+        # A page's first line is often labelled a header: the rest of a sentence, or the title (P2.2 F4).
+        self.assertIs(settings["keep_pageheader_in_output"], True)
+        self.assertIs(settings["disable_image_extraction"], True)
+        self.assertEqual(settings["page_range"], "0-1")
+        self.assertNotIn("page_range", marker_settings("balanced"))

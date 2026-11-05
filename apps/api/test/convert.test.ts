@@ -262,10 +262,11 @@ describe.skipIf(!hasDb)("P2.2 F2: the vision-model proxy (M10a)", () => {
     await env.queue.stop();
     await env.close();
   });
+  // Paths as Surya builds them from SURYA_INFERENCE_URL=…/internal/vlm/v1: health one level up, the rest under /v1.
   const call = (path: string, init: { secret?: string | null; body?: unknown } = {}) =>
     env.t.app.inject({
       method: init.body === undefined ? "GET" : "POST",
-      url: `/internal/vlm/v1${path}`,
+      url: `/internal/vlm${path}`,
       headers: {
         ...(init.secret === null ? {} : { authorization: `Bearer ${init.secret ?? SECRET}` }),
         "content-type": "application/json",
@@ -273,22 +274,21 @@ describe.skipIf(!hasDb)("P2.2 F2: the vision-model proxy (M10a)", () => {
       ...(init.body === undefined ? {} : { payload: init.body as object }),
     });
 
-  test("it answers health and the model list the converter's reader asks for", async () => {
-    expect((await call("/health")).json()).toEqual({ ok: true });
-    expect((await call("/models")).json().data[0].id).toBe("datalab-to/surya-ocr-2.5");
+  test("it answers health and the model list where Surya asks, with no key, as Surya sends none there", async () => {
+    expect((await call("/health", { secret: null })).json()).toEqual({ ok: true });
+    expect((await call("/v1/models", { secret: null })).json().data[0].id).toBe("datalab-to/surya-ocr-2.5");
   });
 
-  test("it refuses a call without the secret", async () => {
-    expect((await call("/health", { secret: null })).statusCode).toBe(401);
-    expect((await call("/models", { secret: "wrong" })).statusCode).toBe(401);
-    const res = await call("/chat/completions", { secret: "wrong", body: { messages: [] } });
+  test("a page read without the secret, or with a wrong one, is refused and reaches no endpoint", async () => {
+    expect((await call("/v1/chat/completions", { secret: null, body: { messages: [] } })).statusCode).toBe(401);
+    const res = await call("/v1/chat/completions", { secret: "wrong", body: { messages: [] } });
     expect(res.statusCode).toBe(401);
     expect(env.mock.chatRequests().length).toBe(0);
   });
 
   test("a chat call goes to the assigned endpoint and model, and is logged as document.ocr", async () => {
     env.setReply(() => "page text");
-    const res = await call("/chat/completions", {
+    const res = await call("/v1/chat/completions", {
       body: { model: "datalab-to/surya-ocr-2.5", messages: [{ role: "user", content: "read" }] },
     });
     expect(res.statusCode).toBe(200);
@@ -304,17 +304,17 @@ describe.skipIf(!hasDb)("P2.2 F2: the vision-model proxy (M10a)", () => {
   test("page reads share the endpoint's queue: with concurrency 1, two at once run one after the other", async () => {
     env.mock.maxInFlight = 0;
     env.setReply(() => ({ text: "slow", delayMs: 80 }));
-    const both = await Promise.all([1, 2].map(() => call("/chat/completions", { body: { messages: [] } })));
+    const both = await Promise.all([1, 2].map(() => call("/v1/chat/completions", { body: { messages: [] } })));
     expect(both.map((r) => r.statusCode)).toEqual([200, 200]);
     expect(env.mock.maxInFlight).toBe(1);
   });
 
   test("an unassigned role is a refusal with a reason, and while local-only a cloud endpoint is blocked", async () => {
     await env.t.db.execute(`delete from role_assignment where role = 'document.ocr'` as never);
-    expect((await call("/chat/completions", { body: { messages: [] } })).json().code).toBe("llm_role_unassigned");
+    expect((await call("/v1/chat/completions", { body: { messages: [] } })).json().code).toBe("llm_role_unassigned");
     await assign(env.t.db, "document.ocr", { url: env.mock.url, location: "cloud" });
     await setLocalOnly(env.t.db, true);
-    expect((await call("/chat/completions", { body: { messages: [] } })).json().code).toBe("llm_cloud_blocked");
+    expect((await call("/v1/chat/completions", { body: { messages: [] } })).json().code).toBe("llm_cloud_blocked");
     await setLocalOnly(env.t.db, false);
   });
 });

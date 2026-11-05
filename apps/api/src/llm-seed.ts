@@ -123,7 +123,13 @@ export function devAssignments(config: Config): DevAssignment[] {
       role: "embeddings",
       endpoint: { label: embedUrl === baseUrl ? label : `${label} embeddings`, baseUrl: embedUrl, ...connection },
       model: embedModel,
-      capabilities: { ...capabilities, contextWindow: maxInputTokens, maxInputTokens },
+      // Its own budget, from its own window: the chat model's share would be over it, which the API refuses.
+      capabilities: {
+        ...capabilities,
+        contextWindow: maxInputTokens,
+        maxInputTokens,
+        maxOutputTokens: Math.floor(maxInputTokens / MAX_OUTPUT_SHARE),
+      },
       embedding: {
         dimensions,
         queryPrefix: config.LLM_DEV_EMBED_QUERY_PREFIX ?? "",

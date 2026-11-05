@@ -68,3 +68,33 @@ export function scoreConversion(markdown: string, expected: Expected): Score {
     missed,
   };
 }
+
+/** The words of a Markdown text, formulas, markup and punctuation left out, lowercased. */
+export function wordsOf(markdown: string): string[] {
+  return markdown
+    .replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, " ")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+}
+
+/**
+ * How much of the source's prose a conversion kept, as the F1 of their words counted as multisets (0 to 1): order and
+ * line breaks don't count, a word lost or a word invented does. Formulas are left out: `scoreConversion` scores them.
+ */
+export function textSimilarity(markdown: string, source: string): number {
+  const counts = (words: string[]) => {
+    const map = new Map<string, number>();
+    for (const w of words) map.set(w, (map.get(w) ?? 0) + 1);
+    return map;
+  };
+  const out = wordsOf(markdown);
+  const src = wordsOf(source);
+  if (out.length === 0 || src.length === 0) return 0;
+  const a = counts(out);
+  let overlap = 0;
+  for (const [word, n] of counts(src)) overlap += Math.min(n, a.get(word) ?? 0);
+  const precision = overlap / out.length;
+  const recall = overlap / src.length;
+  return precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+}

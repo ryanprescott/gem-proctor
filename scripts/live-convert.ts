@@ -1,43 +1,26 @@
-// bun run live:convert [baseUrl]: the fixture PDFs through a running converter (Marker and the vision model on the Ollama
-// box), scored against what they should contain (docs/P2.2.md M26, M27). Stores nothing; prints one line per run and the
-// full report as JSON.
-import { readFileSync } from "node:fs";
+// bun run live:convert [baseUrl] [--out file]: `convert-smoke` through a running converter (Marker, and the vision model on
+// the Ollama box), the same set and scoring `bun test` runs on the mock (docs/P2.2.md M26). Stores nothing; prints one
+// line per run, writes the full report as JSON, and exits 1 if a run with a bar fell short of it.
+import { writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
-import { ConvertClient, scoreConversion } from "../packages/convert/src/index.ts";
-import type { ConvertOptions } from "../packages/shared/src/index.ts";
+import { parseArgs } from "node:util";
+import { ConvertClient, formatSmokeResult, runConvertSmoke } from "../packages/convert/src/index.ts";
 
-const base = process.argv.slice(2).find((a) => a.startsWith("http")) ?? "http://localhost:8200";
-const dir = join(import.meta.dir, "..", "apps", "convert", "tests", "fixtures");
-const expected = JSON.parse(readFileSync(join(dir, "linear-algebra.expected.json"), "utf8"));
+const { values, positionals } = parseArgs({
+  args: Bun.argv.slice(2),
+  allowPositionals: true,
+  options: { out: { type: "string" } },
+});
+const base = positionals.find((a) => a.startsWith("http")) ?? "http://localhost:8200";
+const out = values.out ?? join(homedir(), ".cache", "live-convert-report.json");
 const client = new ConvertClient(base);
-
-const runs: { name: string; file: string; options: ConvertOptions }[] = [
-  { name: "scan, rasterize", file: "linear-algebra-scan.pdf", options: { strategy: "rasterize" } },
-  { name: "text PDF, rasterize", file: "linear-algebra.pdf", options: { strategy: "rasterize" } },
-  { name: "text PDF, text layer", file: "linear-algebra.pdf", options: { strategy: "text" } },
-  { name: "text PDF, page 2 only", file: "linear-algebra.pdf", options: { strategy: "rasterize", pageRange: "2" } },
-];
 
 const health = await client.health();
 console.log(
   `${health.engine} ${health.engineVersion}, models ${health.models}, worker starts ${health.workerStarts}\n`,
 );
-const report: unknown[] = [];
-for (const run of runs) {
-  const started = Date.now();
-  try {
-    const reply = await client.convert(readFileSync(join(dir, run.file)), run.options);
-    const score = scoreConversion(reply.markdown, expected);
-    const seconds = (Date.now() - started) / 1000;
-    console.log(
-      `${run.name.padEnd(24)} ${seconds.toFixed(1).padStart(6)} s  ${reply.pagesConverted}/${reply.pageCount} pages  ` +
-        `formulas ${score.formulasMatched}/${score.formulasExpected} (${score.formulasInOutput} in output)  ` +
-        `headings ${score.headingsFound}/${score.headingsExpected}`,
-    );
-    report.push({ ...run, seconds, converterSeconds: reply.seconds, pages: reply.pagesConverted, score });
-  } catch (err) {
-    console.log(`${run.name.padEnd(24)} FAILED: ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`);
-    report.push({ ...run, error: String(err) });
-  }
-}
-console.log(`\n${JSON.stringify(report, null, 2)}`);
+const report = await runConvertSmoke(client, undefined, (r) => console.log(formatSmokeResult(r)));
+writeFileSync(out, `${JSON.stringify({ at: new Date().toISOString(), base, health, ...report }, null, 2)}\n`);
+console.log(`\nconvert-smoke: ${report.pass ? "pass" : "FAIL"} (report: ${out})`);
+process.exit(report.pass ? 0 : 1);
