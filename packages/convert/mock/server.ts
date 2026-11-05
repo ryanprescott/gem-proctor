@@ -23,6 +23,8 @@ export interface MockConvertOptions {
   delayMs?: number;
   /** Every conversion fails with this code. */
   fail?: ConvertErrorCode;
+  /** A failure for one request: given its options and its number (from 1), a code, or undefined to answer. */
+  failWhen?: (options: ConvertOptions, n: number) => ConvertErrorCode | undefined;
   maxBytes?: number;
   maxPages?: number;
 }
@@ -97,13 +99,20 @@ export class MockConvertServer {
     try {
       this.conversions.push({ bytes: pdf.length, options });
       if (this.options.delayMs) await Bun.sleep(this.options.delayMs);
-      const fail = this.options.fail ?? (flag(text, "fail") as ConvertErrorCode | undefined);
+      const fail =
+        this.options.fail ??
+        this.options.failWhen?.(options, this.conversions.length) ??
+        (flag(text, "fail") as ConvertErrorCode | undefined);
       if (fail) return this.error(fail);
       const pageCount = Number(flag(text, "pages") ?? 1);
       if (pageCount > (this.options.maxPages ?? 400)) return this.error("too_many_pages");
       const named = this.options.documents?.[flag(text, "doc") ?? ""];
       const answered = this.options.answer?.(pdf, options);
-      const markdown = has(text, "empty") ? "" : (answered ?? named ?? this.options.markdown ?? DEFAULT_MARKDOWN);
+      // The canned Markdown is the whole document: it is what a request from the first page reads, and later pages
+      // alone read as blank, as the API's batches ask for them (the real converter answers `empty` for blank pages).
+      const fromStart = !options.pageRange || options.pageRange.split(",").some((part) => part.split("-")[0] === "1");
+      const canned = fromStart ? (named ?? this.options.markdown ?? DEFAULT_MARKDOWN) : "";
+      const markdown = has(text, "empty") ? "" : (answered ?? canned);
       if (markdown.trim() === "") return this.error("empty");
       const reply: ConvertReply = {
         markdown,

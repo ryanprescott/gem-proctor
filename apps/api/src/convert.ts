@@ -94,7 +94,11 @@ export async function fileDetail(ctx: Pick<AppContext, "db">, id: string): Promi
     .from(SourceFile)
     .where(and(eq(SourceFile.id, id), isNull(SourceFile.deletedAt)));
   if (!row) throw new AppError("convert_file_not_found");
-  return { ...toFileView({ ...row, content: Buffer.alloc(0) }), markdown: row.markdown };
+  // Until it's ready, `markdown` is the raw text of the batches done so far: not something to show.
+  return {
+    ...toFileView({ ...row, content: Buffer.alloc(0) }),
+    markdown: row.status === "ready" ? row.markdown : null,
+  };
 }
 
 /** The PDF header: `%PDF-` within the first kilobyte, as readers accept it. */
@@ -209,6 +213,50 @@ async function interactiveWork(ctx: AppContext): Promise<boolean> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Pages per request to the converter. A long PDF, a whole book, goes through in batches: each is a few minutes, the
+ * converter's own page cap applies to a batch rather than the book, generation gets the card between batches, and a
+ * failure or a restart loses one batch, not the book (retry continues where it stopped).
+ */
+export const CONVERT_BATCH_PAGES = 20;
+
+/** The pages a range selects, 1-based and in order; every page without one. Past the end is `convert_bad_range`. */
+export function selectedPages(range: string | null, pageCount: number): number[] {
+  if (!range) return Array.from({ length: pageCount }, (_, i) => i + 1);
+  const pages = new Set<number>();
+  for (const part of range.split(",")) {
+    const [lowText, highText] = part.split("-");
+    const low = Number(lowText);
+    const high = highText === undefined ? low : Number(highText);
+    if (low < 1 || high < low || high > pageCount) throw new AppError("convert_bad_range");
+    for (let p = low; p <= high; p++) pages.add(p);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
+
+/** The first page a range selects, before the page count is known. */
+export function firstPage(range: string | null): number {
+  if (!range) return 1;
+  return Math.min(...range.split(",").map((part) => Number(part.split("-")[0])));
+}
+
+/** A range for the converter from pages in order: [1, 2, 3, 5] is `1-3,5`. */
+export function rangeOf(pages: number[]): string {
+  const parts: string[] = [];
+  let start = pages[0] as number;
+  let prev = start;
+  for (const p of [...pages.slice(1), Number.NaN]) {
+    if (p === prev + 1) {
+      prev = p;
+      continue;
+    }
+    parts.push(start === prev ? `${start}` : `${start}-${prev}`);
+    start = p;
+    prev = p;
+  }
+  return parts.join(",");
+}
+
 function errorOf(err: unknown): { code: ErrorCode; params: Record<string, string | number> } {
   if (err instanceof ConvertClientError) return { code: CODE_OF[err.code], params: {} };
   if (err instanceof AppError) return { code: err.code, params: err.params as Record<string, string | number> };
@@ -246,28 +294,68 @@ export async function processConvertJob(ctx: AppContext, fileId: string, idlePol
 
   try {
     const client = await convertReady(ctx);
-    const options: ConvertOptions = {
-      strategy: started.strategy,
-      ...(started.pageRange ? { pageRange: started.pageRange } : {}),
+    // While converting, `markdown` holds Marker's raw text of the pages done so far and `pagesConverted` their
+    // count, so a retry after a failure continues from there. The clean-up runs once, on the whole text: running
+    // headers are found by repeating across pages.
+    let raw = started.markdown ?? "";
+    let done = started.pagesConverted ?? 0;
+    let pageCount = started.pageCount;
+    let figures = started.figures ?? 0;
+    let converter = started.converter;
+    const read = async (pages: number[]) => {
+      try {
+        const reply = await client.convert(started.content, { strategy: started.strategy, pageRange: rangeOf(pages) });
+        figures += reply.figures;
+        converter = reply.converter;
+        pageCount = reply.pageCount;
+        return reply.markdown;
+      } catch (err) {
+        // A batch of blank pages is nothing to add, not a failure; the whole being empty still is.
+        if (err instanceof ConvertClientError && err.code === "empty") return "";
+        throw err;
+      }
     };
-    const reply = await client.convert(started.content, options);
-    const cleaned = cleanMarkdown({
-      markdown: reply.markdown,
-      pageCount: reply.pageCount,
-      pagesConverted: reply.pagesConverted,
-      figures: reply.figures,
-    });
+    const save = async () => {
+      await ctx.db
+        .update(SourceFile)
+        .set({ markdown: raw, pagesConverted: done, pageCount, figures, converter })
+        .where(eq(SourceFile.id, fileId));
+      ctx.events.publish(topic);
+    };
+    const add = (text: string) => {
+      if (text.trim() !== "") raw = raw === "" ? text : `${raw.trimEnd()}\n\n${text.trimStart()}`;
+    };
+
+    if (pageCount === null || done === 0) {
+      // The first selected page alone: its reply says how many pages the PDF has.
+      raw = "";
+      figures = 0;
+      add(await read([firstPage(started.pageRange)]));
+      done = 1;
+      await save();
+    }
+    const pages = selectedPages(started.pageRange, pageCount as number);
+    while (done < pages.length) {
+      // Interactive work comes first between batches too.
+      while (await interactiveWork(ctx)) await sleep(idlePollMs);
+      const batch = pages.slice(done, done + CONVERT_BATCH_PAGES);
+      add(await read(batch));
+      done += batch.length;
+      await save();
+    }
+
+    const cleaned = cleanMarkdown({ markdown: raw, pageCount: pageCount as number, pagesConverted: done, figures });
     if (cleaned.markdown.trim() === "") throw new AppError("convert_empty");
     await ctx.db
       .update(SourceFile)
       .set({
         status: "ready",
         markdown: cleaned.markdown,
-        pageCount: reply.pageCount,
-        pagesConverted: reply.pagesConverted,
-        figures: reply.figures,
+        pageCount,
+        pagesConverted: done,
+        figures,
         warnings: cleaned.warnings,
-        converter: reply.converter,
+        converter,
         errorCode: null,
         errorParams: null,
         finishedAt: new Date(),

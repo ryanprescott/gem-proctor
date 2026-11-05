@@ -5,7 +5,7 @@ import { AuditLog, LlmCallLog, SourceFile } from "@gem/db";
 import { and, asc, eq } from "drizzle-orm";
 import { assign, hasDb, setLocalOnly } from "../../../packages/llm/test/helpers.ts";
 import { trackInteractive } from "../src/activity.ts";
-import { processConvertJob } from "../src/convert.ts";
+import { CONVERT_BATCH_PAGES, firstPage, processConvertJob, rangeOf, selectedPages } from "../src/convert.ts";
 import { createSourceEnv, type SourceEnv } from "./authoring-helpers.ts";
 import { API, type Client } from "./helpers.ts";
 
@@ -52,6 +52,7 @@ describe.skipIf(!hasDb)("P2.2 F2: PDF files", () => {
   });
 
   test("M10: an upload is pending, converts in the background, and ends ready with cleaned Markdown", async () => {
+    const before = mockConverter.conversions.length;
     const res = await upload(env.proctor, pdf("%MOCK:pages=3"), "filename=la.pdf&pageRange=1-3");
     expect(res.statusCode).toBe(200);
     const created = res.json().file;
@@ -62,8 +63,12 @@ describe.skipIf(!hasDb)("P2.2 F2: PDF files", () => {
     const detail = (await env.proctor.get(`${API}/sources/files/${created.id}`)).json().file;
     expect(detail.markdown).toContain("$x^T y = 0$");
     expect(detail.markdown).not.toContain("![fig]");
+    // Two requests (the first page, then the rest); the mock's document, with its one figure, is the first page's.
     expect(detail.warnings).toContainEqual({ code: "figures_dropped", count: 1 });
-    expect(mockConverter.conversions.at(-1)?.options).toMatchObject({ pageRange: "1-3", strategy: "rasterize" });
+    expect(mockConverter.conversions.slice(before).map((c) => c.options)).toEqual([
+      { pageRange: "1", strategy: "rasterize" },
+      { pageRange: "2-3", strategy: "rasterize" },
+    ]);
   });
 
   test("M11: what isn't a PDF, or is too big, is refused before anything is stored", async () => {
@@ -249,6 +254,95 @@ describe.skipIf(!hasDb)("P2.2 F2: PDF files", () => {
 
   test("processConvertJob ignores a file that is gone or already done", async () => {
     await processConvertJob(env.t.ctx, "00000000-0000-4000-8000-000000000000", 1);
+  });
+});
+
+describe("a long PDF goes through in batches: the page helpers", () => {
+  test("a range is its pages in order; none is every page; past the end is refused", () => {
+    expect(selectedPages("5-7,2,6", 10)).toEqual([2, 5, 6, 7]);
+    expect(selectedPages(null, 3)).toEqual([1, 2, 3]);
+    expect(() => selectedPages("9-11", 10)).toThrow();
+    expect(firstPage("9-11,4")).toBe(4);
+    expect(firstPage(null)).toBe(1);
+    expect(rangeOf([1, 2, 3, 5, 7, 8])).toBe("1-3,5,7-8");
+    expect(rangeOf([4])).toBe("4");
+  });
+});
+
+describe.skipIf(!hasDb)("a long PDF goes through in batches", () => {
+  let env: SourceEnv;
+  let failNext: ((range: string | undefined) => boolean) | null = null;
+  // Each batch answers with the pages it was asked for, so the joined text shows what was read and in what order.
+  const batches = new MockConvertServer({
+    answer: (_pdf, options) =>
+      `## Pages ${options.pageRange}\n\n${"Text from these pages, enough to read as prose. ".repeat(40)}\n`,
+    failWhen: (options) => (failNext?.(options.pageRange) ? "timeout" : undefined),
+  });
+  beforeAll(async () => {
+    env = await createSourceEnv({
+      CONVERT_URL: batches.url,
+      CONVERT_SHARED_SECRET: SECRET,
+      UPLOAD_RATE_LIMIT_MAX: "1000",
+    });
+    env.t.ctx.convert = new ConvertClient(batches.url);
+  });
+  afterAll(async () => {
+    batches.stop();
+    await env.queue.stop();
+    await env.close();
+  });
+  const ranges = (from: number) => batches.conversions.slice(from).map((c) => c.options.pageRange);
+  const settledFile = (id: string) =>
+    until<Record<string, unknown>>(env.proctor, id, (f) => f.status === "ready" || f.status === "failed");
+
+  test("45 pages: the first page alone (it says how many there are), then 20 at a time, joined in order", async () => {
+    expect(CONVERT_BATCH_PAGES).toBe(20);
+    const from = batches.conversions.length;
+    const res = await upload(env.proctor, pdf("%MOCK:pages=45"), "filename=book.pdf");
+    const file = await settledFile(res.json().file.id);
+    expect(file).toMatchObject({ status: "ready", pageCount: 45, pagesConverted: 45 });
+    expect(ranges(from)).toEqual(["1", "2-21", "22-41", "42-45"]);
+    const md = (await env.proctor.get(`${API}/sources/files/${file.id}`)).json().file.markdown as string;
+    const order = [...md.matchAll(/^## Pages (.+)$/gm)].map((m) => m[1]);
+    expect(order).toEqual(["1", "2-21", "22-41", "42-45"]);
+  });
+
+  test("a page range is batched within itself", async () => {
+    const from = batches.conversions.length;
+    const res = await upload(env.proctor, pdf("%MOCK:pages=100"), "filename=chapter.pdf&pageRange=30-55,60");
+    const file = await settledFile(res.json().file.id);
+    expect(file).toMatchObject({ status: "ready", pageCount: 100, pagesConverted: 27 });
+    expect(ranges(from)).toEqual(["30", "31-50", "51-55,60"]);
+  });
+
+  test("a failure loses one batch: the retry goes on from the last one done, and nothing is read twice", async () => {
+    const from = batches.conversions.length;
+    failNext = (range) => range === "22-41";
+    const res = await upload(env.proctor, pdf("%MOCK:pages=45"), "filename=flaky.pdf");
+    const failed = await settledFile(res.json().file.id);
+    expect(failed).toMatchObject({ status: "failed", errorCode: "convert_timeout", pagesConverted: 21, pageCount: 45 });
+    // Half-read text isn't shown: the Markdown appears once it's finished and cleaned.
+    expect((await env.proctor.get(`${API}/sources/files/${failed.id}`)).json().file.markdown).toBeNull();
+    failNext = null;
+    expect((await env.proctor.post(`${API}/sources/files/${failed.id}/retry`)).statusCode).toBe(200);
+    const file = await settledFile(failed.id as string);
+    expect(file).toMatchObject({ status: "ready", pagesConverted: 45 });
+    expect(ranges(from)).toEqual(["1", "2-21", "22-41", "22-41", "42-45"]);
+    const md = (await env.proctor.get(`${API}/sources/files/${file.id}`)).json().file.markdown as string;
+    expect([...md.matchAll(/^## Pages (.+)$/gm)].map((m) => m[1])).toEqual(["1", "2-21", "22-41", "42-45"]);
+  });
+
+  test("a batch of blank pages adds nothing and doesn't fail the book", async () => {
+    failNext = null;
+    const from = batches.conversions.length;
+    const blank = new Set(["2-21"]);
+    batches.options.failWhen = (options) => (blank.has(options.pageRange ?? "") ? "empty" : undefined);
+    const res = await upload(env.proctor, pdf("%MOCK:pages=30"), "filename=blanks.pdf");
+    const file = await settledFile(res.json().file.id);
+    expect(file).toMatchObject({ status: "ready", pagesConverted: 30 });
+    expect(ranges(from)).toEqual(["1", "2-21", "22-30"]);
+    const md = (await env.proctor.get(`${API}/sources/files/${file.id}`)).json().file.markdown as string;
+    expect([...md.matchAll(/^## Pages (.+)$/gm)].map((m) => m[1])).toEqual(["1", "22-30"]);
   });
 });
 

@@ -12,10 +12,20 @@ import { Button, ErrorMessage, errorText, TextField } from "../ui/controls.tsx";
 import { useLive } from "../ui/live.tsx";
 import styles from "./Sources.module.css";
 
-const progressText = (t: TFunction, s: SourceFileDetail) =>
-  s.status === "pending"
-    ? t("sources:pdf.pending", { name: s.filename })
-    : t("sources:pdf.converting", { name: s.filename });
+const progressText = (t: TFunction, s: SourceFileDetail) => {
+  if (s.status === "pending") return t("sources:pdf.pending", { name: s.filename });
+  // A long PDF is read in batches, and how far it has got is saved after each.
+  if (s.pagesConverted && s.pageCount) {
+    return s.pageRange
+      ? t("sources:pdf.convertingSome", { name: s.filename, done: formatNumber(s.pagesConverted) })
+      : t("sources:pdf.convertingOf", {
+          name: s.filename,
+          done: formatNumber(s.pagesConverted),
+          total: formatNumber(s.pageCount),
+        });
+  }
+  return t("sources:pdf.converting", { name: s.filename });
+};
 
 const PAGES = new RegExp(PAGE_RANGE_PATTERN);
 
