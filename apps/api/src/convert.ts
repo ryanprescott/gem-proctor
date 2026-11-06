@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { ConvertClientError } from "@gem/convert";
-import { AuthoringBatch, newId, SourceFile } from "@gem/db";
+import { AuthoringBatch, newId, SourceFile, SourceRevision } from "@gem/db";
 import { cleanMarkdown } from "@gem/knowledge";
 import { AppError, type ConvertErrorCode, type ConvertOptions, type ErrorCode, type SourceWarning } from "@gem/shared";
 import type { SourceFileDetail, SourceFileView } from "@gem/shared/contracts";
-import { and, eq, getTableColumns, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, isNull, notExists } from "drizzle-orm";
 import { interactiveBusy } from "./activity.ts";
 import { writeAudit } from "./audit.ts";
 import type { AppContext } from "./context.ts";
@@ -14,6 +14,14 @@ import { getSettings } from "./settings.ts";
 
 export const CONVERT_QUEUE = "source.convert";
 export const fileTopic = (id: string) => `source_file:${id}`;
+/** Every change to any of one owner's files: their list of uploads (`GET /sources/files/events`). */
+export const ownerFilesTopic = (ownerId: string) => `source_files:${ownerId}`;
+
+/** A file changed: its own stream reads it again, and so does its owner's list. */
+export function publishFile(ctx: Pick<AppContext, "events">, id: string, ownerId: string) {
+  ctx.events.publish(fileTopic(id));
+  ctx.events.publish(ownerFilesTopic(ownerId));
+}
 
 type Row = typeof SourceFile.$inferSelect;
 
@@ -155,6 +163,7 @@ export async function createFile(
     return inserted;
   });
   await queueConvert(ctx, id);
+  publishFile(ctx, id, userId);
   return toFileView(row as Row);
 }
 
@@ -173,12 +182,12 @@ export async function retryFile(ctx: AppContext, id: string): Promise<SourceFile
     .where(eq(SourceFile.id, id))
     .returning();
   await queueConvert(ctx, id);
-  ctx.events.publish(fileTopic(id));
+  publishFile(ctx, id, row.ownerId);
   return toFileView(updated as Row);
 }
 
 export async function deleteFile(ctx: AppContext, id: string, userId: string, meta: object) {
-  await loadFile(ctx, id);
+  const row = await loadFile(ctx, id);
   await ctx.db.transaction(async (tx) => {
     await tx.update(SourceFile).set({ deletedAt: new Date() }).where(eq(SourceFile.id, id));
     await writeAudit(tx, {
@@ -189,7 +198,31 @@ export async function deleteFile(ctx: AppContext, id: string, userId: string, me
       ...meta,
     });
   });
-  ctx.events.publish(fileTopic(id));
+  publishFile(ctx, id, row.ownerId);
+}
+
+/**
+ * An owner's uploads that still need them, newest first: waiting, being read, failed, or read and not yet made into a
+ * source. Once a revision points at a file, it's done and leaves the list (the source shows it from then on).
+ */
+export async function pendingFiles(ctx: Pick<AppContext, "db">, ownerId: string): Promise<SourceFileView[]> {
+  const rows = await ctx.db
+    .select(NO_CONTENT)
+    .from(SourceFile)
+    .where(
+      and(
+        eq(SourceFile.ownerId, ownerId),
+        isNull(SourceFile.deletedAt),
+        notExists(
+          ctx.db
+            .select({ id: SourceRevision.id })
+            .from(SourceRevision)
+            .where(eq(SourceRevision.sourceFileId, SourceFile.id)),
+        ),
+      ),
+    )
+    .orderBy(desc(SourceFile.createdAt));
+  return rows.map((r) => toFileView({ ...r, content: Buffer.alloc(0) }));
 }
 
 /** A file a source can be made from: the caller's own (or any, for an admin), done, and not deleted. */
@@ -265,12 +298,12 @@ function errorOf(err: unknown): { code: ErrorCode; params: Record<string, string
 
 /** Runs one file's conversion. Never throws: the outcome is on the row, and can be retried. */
 export async function processConvertJob(ctx: AppContext, fileId: string, idlePollMs = IDLE_POLL_MS): Promise<void> {
-  const topic = fileTopic(fileId);
   const [meta] = await ctx.db
-    .select({ status: SourceFile.status, deletedAt: SourceFile.deletedAt })
+    .select({ status: SourceFile.status, deletedAt: SourceFile.deletedAt, ownerId: SourceFile.ownerId })
     .from(SourceFile)
     .where(eq(SourceFile.id, fileId));
   if (!meta || meta.deletedAt || meta.status !== "pending") return;
+  const publish = () => publishFile(ctx, fileId, meta.ownerId);
 
   // Interactive work comes first: a conversion starts only when no one is generating (docs/P2.2.md §5).
   while (await interactiveWork(ctx)) await sleep(idlePollMs);
@@ -281,7 +314,7 @@ export async function processConvertJob(ctx: AppContext, fileId: string, idlePol
     .where(and(eq(SourceFile.id, fileId), eq(SourceFile.status, "pending")))
     .returning();
   if (!started) return;
-  ctx.events.publish(topic);
+  publish();
 
   const fail = async (err: unknown) => {
     const { code, params } = errorOf(err);
@@ -289,7 +322,7 @@ export async function processConvertJob(ctx: AppContext, fileId: string, idlePol
       .update(SourceFile)
       .set({ status: "failed", errorCode: code, errorParams: params, finishedAt: new Date() })
       .where(eq(SourceFile.id, fileId));
-    ctx.events.publish(topic);
+    publish();
   };
 
   try {
@@ -320,7 +353,7 @@ export async function processConvertJob(ctx: AppContext, fileId: string, idlePol
         .update(SourceFile)
         .set({ markdown: raw, pagesConverted: done, pageCount, figures, converter })
         .where(eq(SourceFile.id, fileId));
-      ctx.events.publish(topic);
+      publish();
     };
     const add = (text: string) => {
       if (text.trim() !== "") raw = raw === "" ? text : `${raw.trimEnd()}\n\n${text.trimStart()}`;
@@ -361,7 +394,7 @@ export async function processConvertJob(ctx: AppContext, fileId: string, idlePol
         finishedAt: new Date(),
       })
       .where(eq(SourceFile.id, fileId));
-    ctx.events.publish(topic);
+    publish();
   } catch (err) {
     await fail(err);
   }

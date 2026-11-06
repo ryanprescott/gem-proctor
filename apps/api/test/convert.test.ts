@@ -5,7 +5,14 @@ import { AuditLog, LlmCallLog, SourceFile } from "@gem/db";
 import { and, asc, eq } from "drizzle-orm";
 import { assign, hasDb, setLocalOnly } from "../../../packages/llm/test/helpers.ts";
 import { trackInteractive } from "../src/activity.ts";
-import { CONVERT_BATCH_PAGES, firstPage, processConvertJob, rangeOf, selectedPages } from "../src/convert.ts";
+import {
+  CONVERT_BATCH_PAGES,
+  firstPage,
+  ownerFilesTopic,
+  processConvertJob,
+  rangeOf,
+  selectedPages,
+} from "../src/convert.ts";
 import { createSourceEnv, type SourceEnv } from "./authoring-helpers.ts";
 import { API, type Client } from "./helpers.ts";
 
@@ -254,6 +261,103 @@ describe.skipIf(!hasDb)("P2.2 F2: PDF files", () => {
 
   test("processConvertJob ignores a file that is gone or already done", async () => {
     await processConvertJob(env.t.ctx, "00000000-0000-4000-8000-000000000000", 1);
+  });
+});
+
+describe.skipIf(!hasDb)("your uploads, as a list that updates itself", () => {
+  let env: SourceEnv;
+  const lister = new MockConvertServer({
+    markdown: `# Read\n\n${"Prose read from the PDF, long enough. ".repeat(20)}\n`,
+  });
+  beforeAll(async () => {
+    env = await createSourceEnv({
+      CONVERT_URL: lister.url,
+      CONVERT_SHARED_SECRET: SECRET,
+      UPLOAD_RATE_LIMIT_MAX: "1000",
+    });
+    env.t.ctx.convert = new ConvertClient(lister.url);
+  });
+  afterAll(async () => {
+    lister.stop();
+    await env.queue.stop();
+    await env.close();
+  });
+  const list = async (client: Client) =>
+    (await client.get(`${API}/sources/files`)).json().files as { id: string; filename: string; status: string }[];
+  const streamed = async (client: Client) => {
+    const res = await client.get(`${API}/sources/files/events?once=true`);
+    expect(res.headers["content-type"]).toContain("text/event-stream");
+    return JSON.parse(res.body.replace(/^data: /, "")).files as { id: string }[];
+  };
+
+  test("every state until it's a source, newest first; saved or removed, it leaves; nobody else's", async () => {
+    lister.options.fail = "bad_pdf";
+    const bad = (await upload(env.proctor, pdf(), "filename=bad.pdf")).json().file;
+    await until(env.proctor, bad.id, (f) => f.status === "failed");
+    lister.options.fail = undefined;
+    const good = (await upload(env.proctor, pdf("%MOCK:pages=2"), "filename=good.pdf")).json().file;
+    await until(env.proctor, good.id, (f) => f.status === "ready");
+    const theirs = (await upload(env.other, pdf(), "filename=theirs.pdf")).json().file;
+
+    expect((await list(env.proctor)).map((f) => [f.filename, f.status])).toEqual([
+      ["good.pdf", "ready"],
+      ["bad.pdf", "failed"],
+    ]);
+    // The stream starts with the same list.
+    expect((await streamed(env.proctor)).map((f) => f.id)).toEqual([good.id, bad.id]);
+    expect((await list(env.other)).map((f) => f.id)).toEqual([theirs.id]);
+    // The list never carries the PDF or the text.
+    expect(Object.keys((await list(env.proctor))[0] ?? {})).not.toContain("markdown");
+
+    const detail = (await env.proctor.get(`${API}/sources/files/${good.id}`)).json().file;
+    const made = await env.proctor.post(`${API}/sources`, {
+      title: "Good",
+      citationLabel: "G",
+      text: detail.markdown,
+      fileId: good.id,
+    });
+    expect(made.statusCode).toBe(200);
+    expect((await env.proctor.delete(`${API}/sources/files/${bad.id}`)).statusCode).toBe(200);
+    expect(await list(env.proctor)).toEqual([]);
+  });
+
+  test("the owner's stream is told of every change: upload, each batch, the finish, a retry, a removal, a save", async () => {
+    let told = 0;
+    const stop = env.t.ctx.events.subscribe(ownerFilesTopic(env.proctorId), () => {
+      told += 1;
+    });
+    try {
+      const file = (await upload(env.proctor, pdf("%MOCK:pages=25"), "filename=told.pdf")).json().file;
+      await until(env.proctor, file.id, (f) => f.status === "ready");
+      // Uploaded, started, the first page, pages 2-21, pages 22-25, ready.
+      expect(told).toBe(6);
+      const detail = (await env.proctor.get(`${API}/sources/files/${file.id}`)).json().file;
+      await env.proctor.post(`${API}/sources`, {
+        title: "Told",
+        citationLabel: "T",
+        text: detail.markdown,
+        fileId: file.id,
+      });
+      expect(told).toBe(7);
+
+      lister.options.fail = "timeout";
+      const flaky = (await upload(env.proctor, pdf(), "filename=flaky.pdf")).json().file;
+      await until(env.proctor, flaky.id, (f) => f.status === "failed");
+      lister.options.fail = undefined;
+      const before = told;
+      await env.proctor.post(`${API}/sources/files/${flaky.id}/retry`);
+      expect(told).toBe(before + 1);
+      await until(env.proctor, flaky.id, (f) => f.status === "ready");
+      await env.proctor.delete(`${API}/sources/files/${flaky.id}`);
+      expect(told).toBeGreaterThan(before + 2);
+      // Another user's files don't touch this stream.
+      const quiet = told;
+      const theirs = (await upload(env.other, pdf(), "filename=theirs2.pdf")).json().file;
+      await until(env.other, theirs.id, (f) => f.status === "ready");
+      expect(told).toBe(quiet);
+    } finally {
+      stop();
+    }
   });
 });
 

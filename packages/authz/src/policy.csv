@@ -26,6 +26,7 @@ p, proctor, source, read, owner
 p, proctor, source, update, owner
 p, proctor, source, delete, owner
 p, proctor, source_file, create, any
+p, proctor, source_file, list, any
 p, proctor, source_file, read, owner
 p, proctor, source_file, update, owner
 p, proctor, source_file, delete, owner

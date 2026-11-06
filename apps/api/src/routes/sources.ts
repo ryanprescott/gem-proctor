@@ -23,7 +23,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { writeAudit } from "../audit.ts";
 import type { AppContext } from "../context.ts";
-import { readyFile } from "../convert.ts";
+import { publishFile, readyFile } from "../convert.ts";
 import { streamState } from "../events.ts";
 import { route } from "../http/route.ts";
 import { getSettings } from "../settings.ts";
@@ -148,13 +148,15 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
     sourcesCreate,
     async ({ body: b, user, request }) => {
       await checkSourceSize(ctx, b.text);
-      if (b.fileId) await readyFile(ctx, b.fileId, user);
+      const file = b.fileId ? await readyFile(ctx, b.fileId, user) : null;
       const id = await createSource(
         ctx,
         { ...b, format: formatOf(b.filename, b.format), sourceFileId: b.fileId },
         user.userId,
         requestMeta(request),
       );
+      // Made into a source, the file leaves its owner's list of uploads.
+      if (file) publishFile(ctx, file.id, file.ownerId);
       return { source: await sourceSummary(ctx, id) };
     },
     body,
@@ -180,7 +182,7 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
     sourcesUpdate,
     async ({ params, body: b, user }) => {
       await checkSourceSize(ctx, b.text);
-      if (b.fileId) await readyFile(ctx, b.fileId, user);
+      const file = b.fileId ? await readyFile(ctx, b.fileId, user) : null;
       const [source] = await ctx.db.select().from(Source).where(eq(Source.id, params.id));
       if (!source) throw new AppError("source_not_found");
       await addRevision(
@@ -199,6 +201,7 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
         user.userId,
       );
       ctx.events.publish(sourceTopic(params.id));
+      if (file) publishFile(ctx, file.id, file.ownerId);
       return { source: await sourceSummary(ctx, params.id) };
     },
     body,

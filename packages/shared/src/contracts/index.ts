@@ -1039,6 +1039,24 @@ export const sourcesFilesCreate = contract({
   response: z.object({ file: SourceFileView }),
 });
 
+/** Your uploads that still need you: waiting, being read, failed, or read and not yet saved as a source. */
+export const sourcesFilesList = contract({
+  id: "sources.files.list",
+  method: "GET",
+  path: "/sources/files",
+  response: z.object({ files: z.array(SourceFileView) }),
+});
+
+/** Server-sent events: that list at once, and again whenever one of your files changes. */
+export const sourcesFilesListEvents = contract({
+  id: "sources.files.listEvents",
+  method: "GET",
+  path: "/sources/files/events",
+  query: EventsQuery,
+  response: z.string(),
+  responseKind: "text",
+});
+
 export const sourcesFilesGet = contract({
   id: "sources.files.get",
   method: "GET",
@@ -1460,6 +1478,8 @@ export const authoringPublish = contract({
 
 export const CONTRACTS = [
   sourcesFilesCreate,
+  sourcesFilesList,
+  sourcesFilesListEvents,
   sourcesFilesGet,
   sourcesFilesEvents,
   sourcesFilesRetry,

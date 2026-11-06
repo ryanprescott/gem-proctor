@@ -73,7 +73,7 @@ test("M21 a failure says why in words, and can be retried; a scan with little te
   const alert = page.getByRole("alert").filter({ hasText: "couldn't be opened" });
   await expect(alert).toBeVisible({ timeout: 20_000 });
   await expect.poll(() => liveRegionText(page)).toContain("couldn't be opened");
-  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
   await expectNoAxeViolations(page, "/sources with a failed PDF");
   await page.context().close();
 
@@ -122,5 +122,44 @@ test("M23 M24 the whole flow works by keyboard, and at 320 px with no sideways s
   await expect(page.getByRole("region", { name: "What was read from the PDF" })).toBeVisible({ timeout: 20_000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expectNoAxeViolations(page, "/sources with a converted PDF at 320 px");
+  await page.context().close();
+});
+
+test("uploads list: leave while it's read, come back to its progress over the stream, continue, save; retry and remove", async ({
+  browser,
+}) => {
+  const page = await newSignedInPage(browser, proctorEmail);
+  await page.goto("/sources");
+  await choose(page, "later.pdf", "%MOCK:doc=chapter\n%MOCK:pages=2");
+  // Away while it's read, and back: the list has it, and follows it to the end without a reload.
+  await page.goto("/");
+  await page.goto("/sources");
+  const uploads = page.getByRole("region", { name: "PDFs" });
+  const row = uploads.getByRole("row", { name: /^later\.pdf/ });
+  await expect(row).toBeVisible();
+  await expect(row.getByRole("cell", { name: /^Read: 2 pages/ })).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => liveRegionText(page)).toContain("Finished reading later.pdf. It's in the PDFs list");
+  await expectNoAxeViolations(page, "/sources with the uploads list");
+
+  await row.getByRole("button", { name: "Continue with later.pdf" }).click();
+  await expect(page.getByLabel("Title")).toBeFocused();
+  await expect(page.getByLabel("Title")).toHaveValue("later");
+  await expect(page.getByLabel("Markdown or plain text")).not.toHaveValue("");
+  await expect.poll(() => liveRegionText(page)).toContain("The text read from later.pdf is in the form below");
+  await page.getByLabel("Citation label").fill("LT");
+  await page.getByRole("button", { name: "Save source" }).click();
+  await expect(page).toHaveURL(/\/sources\/[0-9a-f-]+/);
+  await page.goto("/sources");
+  await expect(page.getByRole("row", { name: /^later\.pdf/ })).toHaveCount(0);
+
+  // A failed one offers a retry and can be removed, after a question.
+  await choose(page, "broken.pdf", "%MOCK:fail=bad_pdf");
+  const broken = page.getByRole("region", { name: "PDFs" }).getByRole("row", { name: /^broken\.pdf/ });
+  await expect(broken.getByRole("cell", { name: /couldn't be opened/ })).toBeVisible({ timeout: 20_000 });
+  await expect(broken.getByRole("button", { name: "Try again with broken.pdf" })).toBeVisible();
+  await broken.getByRole("button", { name: "Remove broken.pdf" }).click();
+  await page.getByRole("alertdialog", { name: "Remove broken.pdf?" }).getByRole("button", { name: "Remove" }).click();
+  await expect(broken).toHaveCount(0);
+  await expect.poll(() => liveRegionText(page)).toContain("broken.pdf removed.");
   await page.context().close();
 });

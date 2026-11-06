@@ -8,7 +8,7 @@ import {
 } from "@gem/shared/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useDeferredValue, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { FileTrigger, Form } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client.ts";
@@ -20,6 +20,7 @@ import { Markdown } from "../ui/Markdown.tsx";
 import { findUnparsedMath } from "../ui/math.ts";
 import { PdfReader } from "./SourcePdf.tsx";
 import styles from "./Sources.module.css";
+import { SourceUploads } from "./SourceUploads.tsx";
 
 export function EmbedStatus({ source }: { source: Pick<SourceSummary, "latest"> }) {
   const { t } = useTranslation();
@@ -113,7 +114,14 @@ function PreviewPanel({ preview }: { preview: SourcePreview }) {
   );
 }
 
-function AddSource() {
+function AddSource({
+  resume,
+  onFollow,
+}: {
+  /** A finished upload picked from the list, to carry on with. */
+  resume: SourceFileDetail | null;
+  onFollow: (id: string) => void;
+}) {
   const { t } = useTranslation();
   const { announce } = useLive();
   const navigate = useNavigate();
@@ -138,6 +146,14 @@ function AddSource() {
     setPreview(null);
     setTitle((current) => current || file.filename.replace(/\.[^.]+$/, ""));
   }, []);
+  const titleField = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!resume) return;
+    converted(resume);
+    // On to the form, at its first field: the text is in, and what's left is to name and save it.
+    titleField.current?.focus();
+    announce(t("sources:uploads.continued", { name: resume.filename }));
+  }, [resume, converted, announce, t]);
 
   const body = () => ({
     text,
@@ -189,7 +205,13 @@ function AddSource() {
           save.mutate();
         }}
       >
-        <TextField label={t("sources:add.titleLabel")} value={title} onChange={setTitle} isRequired />
+        <TextField
+          label={t("sources:add.titleLabel")}
+          value={title}
+          onChange={setTitle}
+          isRequired
+          inputRef={titleField}
+        />
         <TextField
           label={t("sources:add.citationLabel")}
           description={t("sources:add.citationHelp")}
@@ -206,7 +228,7 @@ function AddSource() {
           </FileTrigger>
           {filename ? <span>{t("sources:add.chosen", { name: filename })}</span> : null}
         </div>
-        <PdfReader onReady={converted} />
+        <PdfReader onReady={converted} onFollow={onFollow} />
         {fileId ? <ConversionPanel warnings={fileWarnings} unparsed={unparsed} text={deferred} /> : null}
         <TextField
           label={t("sources:add.text")}
@@ -280,6 +302,8 @@ function SourcesTable() {
 
 export function SourcesPage() {
   const { t } = useTranslation();
+  const [resume, setResume] = useState<SourceFileDetail | null>(null);
+  const [following, setFollowing] = useState<string | null>(null);
   useDocumentTitle(t("sources:list.title"));
   return (
     <RequireRole minRole="proctor">
@@ -287,7 +311,8 @@ export function SourcesPage() {
         <>
           <h1>{t("sources:list.title")}</h1>
           <SourcesTable />
-          <AddSource />
+          <SourceUploads following={following} onContinue={setResume} />
+          <AddSource resume={resume} onFollow={setFollowing} />
         </>
       )}
     </RequireRole>

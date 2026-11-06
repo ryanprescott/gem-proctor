@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import {
   Button as AriaButton,
   Link as AriaLink,
@@ -44,6 +44,8 @@ interface TextFieldProps extends Omit<AriaTextFieldProps, "children"> {
   rows?: number;
   inputType?: InputProps["type"];
   inputProps?: Partial<InputProps>;
+  /** The input itself, e.g. to move focus to it. */
+  inputRef?: Ref<HTMLInputElement>;
 }
 
 export function TextField({
@@ -54,6 +56,7 @@ export function TextField({
   rows,
   inputType,
   inputProps,
+  inputRef,
   ...props
 }: TextFieldProps) {
   return (
@@ -62,7 +65,7 @@ export function TextField({
       {multiline ? (
         <TextArea className={styles.textarea} rows={rows ?? 6} />
       ) : (
-        <Input className={styles.input} type={inputType} {...inputProps} />
+        <Input className={styles.input} type={inputType} {...inputProps} ref={inputRef} />
       )}
       {description ? (
         <Text slot="description" className={styles.description}>

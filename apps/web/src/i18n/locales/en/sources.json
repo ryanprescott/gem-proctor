@@ -115,5 +115,30 @@
     "retry": "Try again",
     "resultTitle": "What was read from the PDF",
     "rendered": "How the text and equations will look"
+  },
+  "uploads": {
+    "title": "PDFs",
+    "help": "PDFs you've added that aren't saved as sources yet. They're read in the background: you can leave this page and come back.",
+    "caption": "{{count}} PDFs",
+    "colFile": "File",
+    "colProgress": "Progress",
+    "colAdded": "Added",
+    "colActions": "Actions",
+    "pending": "Waiting to be read",
+    "converting": "Being read",
+    "convertingOf": "Being read: {{done}} of {{total}} pages",
+    "convertingSome": "Being read: {{done}} pages so far",
+    "ready": "Read: {{pages}} pages. Ready to check and save.",
+    "readyAnnounce": "Finished reading {{name}}. It's in the PDFs list, ready to continue.",
+    "failedAnnounce": "{{name}} couldn't be read. It's in the PDFs list, with a retry.",
+    "continue": "Continue",
+    "continueFor": "Continue with {{name}}",
+    "continued": "The text read from {{name}} is in the form below. Check it, name the source and save.",
+    "retryFor": "Try again with {{name}}",
+    "remove": "Remove",
+    "removeFor": "Remove {{name}}",
+    "removeTitle": "Remove {{name}}?",
+    "removeHelp": "It leaves this list and won't be read or saved. Sources already made from it keep it.",
+    "removed": "{{name}} removed."
   }
 }

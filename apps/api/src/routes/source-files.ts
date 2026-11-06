@@ -6,13 +6,24 @@ import {
   sourcesFilesDelete,
   sourcesFilesEvents,
   sourcesFilesGet,
+  sourcesFilesList,
+  sourcesFilesListEvents,
   sourcesFilesOriginal,
   sourcesFilesRetry,
 } from "@gem/shared/contracts";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { AppContext } from "../context.ts";
-import { createFile, deleteFile, fileDetail, fileTopic, loadFile, retryFile } from "../convert.ts";
+import {
+  createFile,
+  deleteFile,
+  fileDetail,
+  fileTopic,
+  loadFile,
+  ownerFilesTopic,
+  pendingFiles,
+  retryFile,
+} from "../convert.ts";
 import { streamState } from "../events.ts";
 import { route } from "../http/route.ts";
 import { requestMeta } from "./auth.ts";
@@ -60,6 +71,20 @@ export function sourceFilesRoutes(app: FastifyInstance, ctx: AppContext) {
         keyGenerator: (request) => request.user?.userId ?? request.ip,
       },
     },
+  );
+
+  // The caller's own uploads, even for an admin: like the sources list, this is their own work to finish.
+  route(app, sourcesFilesList, async ({ user }) => ({ files: await pendingFiles(ctx, user.userId) }));
+
+  route(app, sourcesFilesListEvents, async ({ query, user, request, reply }) =>
+    streamState(
+      ctx.events,
+      ownerFilesTopic(user.userId),
+      request,
+      reply,
+      async () => ({ files: await pendingFiles(ctx, user.userId) }),
+      query.once === "true",
+    ),
   );
 
   route(app, sourcesFilesGet, async ({ params }) => ({ file: await fileDetail(ctx, params.id) }));

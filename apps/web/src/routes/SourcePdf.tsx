@@ -33,7 +33,14 @@ const PAGES = new RegExp(PAGE_RANGE_PATTERN);
  * Choosing a PDF (docs/P2.2.md §6): the upload, the reader's progress said aloud as it changes, a failure in words with
  * a retry, and the finished Markdown handed up for the creator to look at and edit before anything is saved.
  */
-export function PdfReader({ onReady }: { onReady: (file: SourceFileDetail) => void }) {
+export function PdfReader({
+  onReady,
+  onFollow,
+}: {
+  onReady: (file: SourceFileDetail) => void;
+  /** The file this reader follows, so the list of uploads doesn't say the same thing again. */
+  onFollow?: (id: string) => void;
+}) {
   const { t } = useTranslation();
   const { announce } = useLive();
   const [pages, setPages] = useState("");
@@ -50,6 +57,7 @@ export function PdfReader({ onReady }: { onReady: (file: SourceFileDetail) => vo
       }),
     onSuccess: ({ file }) => {
       setFileId(file.id);
+      onFollow?.(file.id);
       setState({ ...file, markdown: null });
     },
     onError: (e) => announce(errorText(t, e)),
