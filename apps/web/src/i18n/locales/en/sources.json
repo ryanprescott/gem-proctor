@@ -24,7 +24,12 @@
     "text": "Markdown or plain text",
     "textHelp": "Paste text here, or upload a file. LaTeX in $…$ and $$…$$ stays as written.",
     "preview": "Preview",
-    "save": "Save source"
+    "save": "Save source",
+    "sourceText": "Source text",
+    "typed": "Typed or pasted text, or a .md or .txt file",
+    "fromPdf": "Read from {{name}}",
+    "pdfText": "Text read from {{name}}",
+    "pdfTextHelp": "Correct anything that was misread before saving. Equations are LaTeX between $ signs."
   },
   "preview": {
     "title": "Preview",
@@ -102,23 +107,18 @@
     "confirm": "Delete"
   },
   "pdf": {
-    "title": "Or read a PDF",
     "pages": "Pages (optional)",
-    "pagesHelp": "For example 5-23, or 1,4,9-12. Leave empty to read every page: a whole book works, read 20 pages at a time, at about 8 seconds a page.",
+    "pagesHelp": "Applies to the PDFs you choose next: for example 5-23, or 1,4,9-12. Leave empty to read every page: a whole book works, read 20 pages at a time.",
     "pagesInvalid": "Write pages like 5-23 or 1,4,9-12.",
-    "choose": "Choose a PDF",
-    "pending": "{{name}} is waiting to be read.",
-    "converting": "Reading {{name}}. This can take a few minutes.",
-    "convertingOf": "Reading {{name}}: {{done}} of {{total}} pages so far. You can leave this page; it carries on.",
-    "convertingSome": "Reading {{name}}: {{done}} pages so far. You can leave this page; it carries on.",
-    "ready": "Finished reading {{name}}: {{pages}} pages. Check the text below before saving.",
+    "choose": "Choose PDFs",
     "retry": "Try again",
     "resultTitle": "What was read from the PDF",
-    "rendered": "How the text and equations will look"
+    "rendered": "How the text and equations will look",
+    "added": "{{count}} PDFs added. They're read in the background and appear in the list below."
   },
   "uploads": {
     "title": "PDFs",
-    "help": "PDFs you've added that aren't saved as sources yet. They're read in the background: you can leave this page and come back.",
+    "help": "Add PDFs here. They're read in the background, so you can leave this page; when one is read, make a source from it in the form below.",
     "caption": "{{count}} PDFs",
     "colFile": "File",
     "colProgress": "Progress",
@@ -130,15 +130,16 @@
     "convertingSome": "Being read: {{done}} pages so far",
     "ready": "Read: {{pages}} pages. Ready to check and save.",
     "readyAnnounce": "Finished reading {{name}}. It's in the PDFs list, ready to continue.",
-    "failedAnnounce": "{{name}} couldn't be read. It's in the PDFs list, with a retry.",
-    "continue": "Continue",
-    "continueFor": "Continue with {{name}}",
-    "continued": "The text read from {{name}} is in the form below. Check it, name the source and save.",
+    "failedAnnounce": "{{name}} couldn't be read: {{reason}}",
     "retryFor": "Try again with {{name}}",
     "remove": "Remove",
     "removeFor": "Remove {{name}}",
     "removeTitle": "Remove {{name}}?",
     "removeHelp": "It leaves this list and won't be read or saved. Sources already made from it keep it.",
-    "removed": "{{name}} removed."
+    "removed": "{{name}} removed.",
+    "empty": "No PDFs waiting. Ones you add appear here until they're made into sources.",
+    "makeSource": "Make a source",
+    "makeSourceFor": "Make a source from {{name}}",
+    "madeSource": "The text read from {{name}} is in the form below. Check it, name the source and save."
   }
 }

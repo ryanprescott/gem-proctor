@@ -1,24 +1,25 @@
 import type { SourcePreview, SourceWarning } from "@gem/shared";
 import {
-  type SourceFileDetail,
+  type SourceFileView,
   type SourceSummary,
   sourcesCreate,
+  sourcesFilesGet,
   sourcesList,
   sourcesPreview,
 } from "@gem/shared/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { FileTrigger, Form } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client.ts";
+import { useServerState } from "../api/events.ts";
 import { RequireRole } from "../auth.tsx";
 import { formatDate, formatNumber } from "../format.ts";
-import { Button, Card, ErrorMessage, errorText, TextField } from "../ui/controls.tsx";
+import { Button, Card, ErrorMessage, errorText, Select, TextField } from "../ui/controls.tsx";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
 import { Markdown } from "../ui/Markdown.tsx";
 import { findUnparsedMath } from "../ui/math.ts";
-import { PdfReader } from "./SourcePdf.tsx";
 import styles from "./Sources.module.css";
 import { SourceUploads } from "./SourceUploads.tsx";
 
@@ -114,13 +115,22 @@ function PreviewPanel({ preview }: { preview: SourcePreview }) {
   );
 }
 
+/** The form's text: typed or pasted (or a `.md`/`.txt` file), or what was read from one of the creator's PDFs. */
+const TYPED = "typed";
+
 function AddSource({
-  resume,
-  onFollow,
+  pdfs,
+  chosen,
+  onChoose,
+  focusRequest,
 }: {
-  /** A finished upload picked from the list, to carry on with. */
-  resume: SourceFileDetail | null;
-  onFollow: (id: string) => void;
+  /** The creator's PDFs that have been read and aren't sources yet. */
+  pdfs: SourceFileView[];
+  /** `TYPED`, or the id of the PDF the text comes from. */
+  chosen: string;
+  onChoose: (id: string) => void;
+  /** Bumped to move focus to the form, as "Make a source" in the PDFs list does. */
+  focusRequest: number;
 }) {
   const { t } = useTranslation();
   const { announce } = useLive();
@@ -131,36 +141,45 @@ function AddSource({
   const [author, setAuthor] = useState("");
   const [edition, setEdition] = useState("");
   const [url, setUrl] = useState("");
-  const [text, setText] = useState("");
+  // The typed text and the PDF's text are kept apart: choosing one never loses the other.
+  const [typed, setTyped] = useState("");
   const [filename, setFilename] = useState<string | undefined>();
+  const [pdfText, setPdfText] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<SourcePreview | null>(null);
-  const [fileId, setFileId] = useState<string | undefined>();
-  const [fileWarnings, setFileWarnings] = useState<SourceWarning[]>([]);
+  const fileId = chosen === TYPED ? undefined : chosen;
+  const pdf = pdfs.find((f) => f.id === fileId);
+
+  // The chosen PDF's text, read once; the creator's corrections are kept per PDF.
+  const detail = useQuery({
+    queryKey: ["sources", "files", fileId],
+    queryFn: () => api.call(sourcesFilesGet, { params: { id: fileId as string } }),
+    enabled: fileId !== undefined,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  useEffect(() => {
+    const file = detail.data?.file;
+    if (!file || pdfText[file.id] !== undefined) return;
+    setPdfText((m) => ({ ...m, [file.id]: file.markdown ?? "" }));
+    setTitle((current) => current || file.filename.replace(/\.[^.]+$/, ""));
+  }, [detail.data, pdfText]);
+  const text = fileId ? (pdfText[fileId] ?? "") : typed;
+  const setText = (v: string) => (fileId ? setPdfText((m) => ({ ...m, [fileId]: v })) : setTyped(v));
   const deferred = useDeferredValue(text);
   const unparsed = useMemo(() => (fileId ? findUnparsedMath(deferred) : []), [fileId, deferred]);
-  const converted = useCallback((file: SourceFileDetail) => {
-    setText(file.markdown ?? "");
-    setFilename(undefined);
-    setFileId(file.id);
-    setFileWarnings(file.warnings);
-    setPreview(null);
-    setTitle((current) => current || file.filename.replace(/\.[^.]+$/, ""));
-  }, []);
+
   const titleField = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (!resume) return;
-    converted(resume);
-    // On to the form, at its first field: the text is in, and what's left is to name and save it.
+    if (focusRequest === 0) return;
     titleField.current?.focus();
-    announce(t("sources:uploads.continued", { name: resume.filename }));
-  }, [resume, converted, announce, t]);
+  }, [focusRequest]);
+  // A PDF that's gone from the list (removed, or saved elsewhere) can't be chosen any more.
+  useEffect(() => {
+    if (fileId && !pdf && !detail.isPending) onChoose(TYPED);
+  }, [fileId, pdf, detail.isPending, onChoose]);
 
-  const body = () => ({
-    text,
-    ...(filename ? { filename } : {}),
-  });
+  const body = () => (fileId ? { text, fileId } : { text, ...(filename ? { filename } : {}) });
   const look = useMutation({
-    mutationFn: () => api.call(sourcesPreview, { body: { ...body(), ...(title ? { title } : {}) } }),
+    mutationFn: () => api.call(sourcesPreview, { body: { text, ...(title ? { title } : {}) } }),
     onSuccess: (p) => {
       setPreview(p);
       announce(t("sources:preview.ready", { count: p.sections.length }));
@@ -177,7 +196,6 @@ function AddSource({
           ...(author ? { author } : {}),
           ...(edition ? { edition } : {}),
           ...(url ? { url } : {}),
-          ...(fileId ? { fileId } : {}),
         },
       }),
     onSuccess: async ({ source }) => {
@@ -191,7 +209,7 @@ function AddSource({
   const pick = async (files: FileList | null) => {
     const file = files?.[0];
     if (!file) return;
-    setText(await file.text());
+    setTyped(await file.text());
     setFilename(file.name);
     setPreview(null);
     if (!title) setTitle(file.name.replace(/\.[^.]+$/, ""));
@@ -222,26 +240,61 @@ function AddSource({
         <TextField label={t("sources:add.author")} value={author} onChange={setAuthor} />
         <TextField label={t("sources:add.edition")} value={edition} onChange={setEdition} />
         <TextField label={t("sources:add.url")} value={url} onChange={setUrl} inputType="url" />
-        <div className={styles.row}>
-          <FileTrigger acceptedFileTypes={[".md", ".markdown", ".txt"]} onSelect={(f) => void pick(f)}>
-            <Button variant="secondary">{t("sources:add.upload")}</Button>
-          </FileTrigger>
-          {filename ? <span>{t("sources:add.chosen", { name: filename })}</span> : null}
-        </div>
-        <PdfReader onReady={converted} onFollow={onFollow} />
-        {fileId ? <ConversionPanel warnings={fileWarnings} unparsed={unparsed} text={deferred} /> : null}
-        <TextField
-          label={t("sources:add.text")}
-          description={t("sources:add.textHelp")}
-          value={text}
-          onChange={(v) => {
-            setText(v);
-            setFilename(undefined);
+        <Select
+          label={t("sources:add.sourceText")}
+          selectedKey={chosen}
+          onSelectionChange={(id) => {
             setPreview(null);
+            onChoose(id);
           }}
-          multiline
-          rows={12}
+          options={[
+            { id: TYPED, label: t("sources:add.typed") },
+            ...pdfs.map((f) => ({ id: f.id, label: t("sources:add.fromPdf", { name: f.filename }) })),
+          ]}
         />
+        {fileId ? (
+          <>
+            {detail.isPending ? <p>{t("common:loading")}</p> : null}
+            <ErrorMessage error={detail.error} />
+            {detail.data ? (
+              <>
+                <ConversionPanel warnings={detail.data.file.warnings} unparsed={unparsed} text={deferred} />
+                <TextField
+                  label={t("sources:add.pdfText", { name: detail.data.file.filename })}
+                  description={t("sources:add.pdfTextHelp")}
+                  value={text}
+                  onChange={(v) => {
+                    setText(v);
+                    setPreview(null);
+                  }}
+                  multiline
+                  rows={12}
+                />
+              </>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <div className={styles.row}>
+              <FileTrigger acceptedFileTypes={[".md", ".markdown", ".txt"]} onSelect={(f) => void pick(f)}>
+                <Button variant="secondary">{t("sources:add.upload")}</Button>
+              </FileTrigger>
+              {filename ? <span>{t("sources:add.chosen", { name: filename })}</span> : null}
+            </div>
+            <TextField
+              label={t("sources:add.text")}
+              description={t("sources:add.textHelp")}
+              value={typed}
+              onChange={(v) => {
+                setTyped(v);
+                setFilename(undefined);
+                setPreview(null);
+              }}
+              multiline
+              rows={12}
+            />
+          </>
+        )}
         <div className={styles.row}>
           <Button variant="secondary" onPress={() => look.mutate()} isDisabled={text.trim() === "" || look.isPending}>
             {t("sources:add.preview")}
@@ -302,17 +355,30 @@ function SourcesTable() {
 
 export function SourcesPage() {
   const { t } = useTranslation();
-  const [resume, setResume] = useState<SourceFileDetail | null>(null);
-  const [following, setFollowing] = useState<string | null>(null);
+  const { announce } = useLive();
   useDocumentTitle(t("sources:list.title"));
+  // One stream for the page: the PDFs section shows it, and the form offers the read ones.
+  const [files, setFiles] = useState<SourceFileView[] | null>(null);
+  useServerState<{ files: SourceFileView[] }>("/sources/files/events", ({ files }) => setFiles(files));
+  const [chosen, setChosen] = useState(TYPED);
+  const [focusRequest, setFocusRequest] = useState(0);
+  const ready = (files ?? []).filter((f) => f.status === "ready");
   return (
     <RequireRole minRole="proctor">
       {() => (
         <>
           <h1>{t("sources:list.title")}</h1>
           <SourcesTable />
-          <SourceUploads following={following} onContinue={setResume} />
-          <AddSource resume={resume} onFollow={setFollowing} />
+          <SourceUploads
+            files={files}
+            onMakeSource={(id) => {
+              setChosen(id);
+              setFocusRequest((n) => n + 1);
+              const name = ready.find((f) => f.id === id)?.filename ?? "";
+              announce(t("sources:uploads.madeSource", { name }));
+            }}
+          />
+          <AddSource pdfs={ready} chosen={chosen} onChoose={setChosen} focusRequest={focusRequest} />
         </>
       )}
     </RequireRole>
