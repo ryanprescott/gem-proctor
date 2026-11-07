@@ -10,6 +10,7 @@ import {
   sourcesFilesListEvents,
   sourcesFilesOriginal,
   sourcesFilesRetry,
+  sourcesFilesSummary,
 } from "@gem/shared/contracts";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -18,6 +19,7 @@ import {
   createFile,
   deleteFile,
   fileDetail,
+  fileSummary,
   fileTopic,
   loadFile,
   ownerFilesTopic,
@@ -88,6 +90,8 @@ export function sourceFilesRoutes(app: FastifyInstance, ctx: AppContext) {
   );
 
   route(app, sourcesFilesGet, async ({ params }) => ({ file: await fileDetail(ctx, params.id) }));
+
+  route(app, sourcesFilesSummary, async ({ params }) => fileSummary(ctx, params.id));
 
   route(app, sourcesFilesEvents, async ({ params, query, request, reply }) =>
     streamState(

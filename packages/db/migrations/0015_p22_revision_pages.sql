@@ -1,0 +1,1 @@
+ALTER TABLE "source_revision" ADD COLUMN "source_page_range" text;

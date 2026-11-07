@@ -875,11 +875,26 @@ export const sourcesPreview = contract({
   response: SourcePreview,
 });
 
+/**
+ * A source's text: typed or uploaded (`text`), or from one of the creator's PDFs (`fileId`), made on the server from
+ * its stored pages, all of them or `pageRange` (a chapter), so a book never passes through the browser. `text` with a
+ * `fileId` is the creator's corrected version of that PDF's text.
+ */
+const FromFile = {
+  text: z.string().optional(),
+  fileId: Uuid.optional(),
+  pageRange: z.string().max(100).regex(new RegExp(PAGE_RANGE_PATTERN)).optional(),
+};
+const textOrFile = (b: { text?: string; fileId?: string; pageRange?: string }, ctx: z.RefinementCtx) => {
+  if (b.text === undefined && !b.fileId) ctx.addIssue({ code: "custom", path: ["text"], message: "text or fileId" });
+  if (b.pageRange && !b.fileId) ctx.addIssue({ code: "custom", path: ["pageRange"], message: "only with fileId" });
+};
+
 export const sourcesCreate = contract({
   id: "sources.create",
   method: "POST",
   path: "/sources",
-  body: SourceMeta.extend(SourceText.shape).extend({ fileId: Uuid.optional() }),
+  body: SourceMeta.extend(SourceText.shape).extend(FromFile).superRefine(textOrFile),
   response: z.object({ source: SourceSummary }),
 });
 
@@ -903,7 +918,7 @@ export const sourcesUpdate = contract({
   method: "PUT",
   path: "/sources/:id",
   params: IdParams,
-  body: SourceMeta.partial().extend(SourceText.shape).extend({ fileId: Uuid.optional() }),
+  body: SourceMeta.partial().extend(SourceText.shape).extend(FromFile).superRefine(textOrFile),
   response: z.object({ source: SourceSummary }),
 });
 
@@ -1063,6 +1078,35 @@ export const sourcesFilesGet = contract({
   path: "/sources/files/:id",
   params: IdParams,
   response: z.object({ file: SourceFileDetail }),
+});
+
+/** An outline entry with the pages it covers: from its page to the page before the next at its depth or above. */
+export const OutlineRange = z.object({
+  title: z.string(),
+  level: z.number().int(),
+  page: z.number().int(),
+  lastPage: z.number().int(),
+});
+export type OutlineRange = z.infer<typeof OutlineRange>;
+
+/**
+ * What a read PDF holds, without its text: its outline (chapters and sections with their pages), and the section
+ * tree, size and warnings of the text it makes. For the form to show a book without the browser loading it.
+ */
+export const SourceFileSummary = z.object({
+  file: SourceFileView,
+  outline: z.array(OutlineRange),
+  preview: SourcePreview,
+  characters: z.number().int(),
+});
+export type SourceFileSummary = z.infer<typeof SourceFileSummary>;
+
+export const sourcesFilesSummary = contract({
+  id: "sources.files.summary",
+  method: "GET",
+  path: "/sources/files/:id/summary",
+  params: IdParams,
+  response: SourceFileSummary,
 });
 
 /** Server-sent events: the file's state at once, and again on every change. */
@@ -1480,6 +1524,7 @@ export const CONTRACTS = [
   sourcesFilesCreate,
   sourcesFilesList,
   sourcesFilesListEvents,
+  sourcesFilesSummary,
   sourcesFilesGet,
   sourcesFilesEvents,
   sourcesFilesRetry,

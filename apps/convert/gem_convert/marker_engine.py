@@ -24,6 +24,45 @@ BATCH_PAGES = 10
 #: points would otherwise ask for a bitmap of terabytes; it is scaled down to fit, and no size at all is refused.
 MAX_PIXELS = 30_000_000
 _IMAGE_LINK = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+# Marker's mark at the start of each page when asked to paginate: `{N}` and 48 dashes, N its own page index.
+_PAGE_MARK = re.compile(r"\n*\{(\d+)\}-{48}\n*")
+OUTLINE_MAX = 5000
+
+
+def split_pages(markdown: str, page_of: list[int]) -> list[dict[str, Any]]:
+    """Marker's paginated Markdown as one entry per page. `page_of[i]` is the PDF page (from 0) that Marker's page
+    `i` is; a page Marker wrote nothing for is there, empty, so a page read is a page stored."""
+    texts: dict[int, list[str]] = {}
+    parts = _PAGE_MARK.split(markdown)
+    # Text before the first mark (there shouldn't be any) belongs to the first page.
+    if parts[0].strip():
+        texts.setdefault(0, []).append(parts[0])
+    for i in range(1, len(parts), 2):
+        index = int(parts[i])
+        if 0 <= index < len(page_of):
+            texts.setdefault(index, []).append(parts[i + 1])
+    return [{"page": page_of[i] + 1, "markdown": "\n\n".join(texts.get(i, [])).strip()} for i in range(len(page_of))]
+
+
+def read_outline(document: Any) -> list[dict[str, Any]]:
+    """The PDF's bookmarks with the pages they open at. A damaged or looping outline gives what could be read."""
+    entries: list[dict[str, Any]] = []
+    try:
+        for item in document.get_toc(max_depth=15):
+            if len(entries) >= OUTLINE_MAX:
+                break
+            dest = item.get_dest()
+            index = dest.get_index() if dest is not None else None
+            entries.append(
+                {
+                    "title": " ".join((item.get_title() or "").split())[:500],
+                    "level": min(int(item.level), 15),
+                    "page": index + 1 if isinstance(index, int) and index >= 0 else None,
+                }
+            )
+    except Exception:
+        return entries
+    return entries
 
 
 def _compress(indexes: list[int]) -> str:
@@ -76,10 +115,22 @@ def marker_settings(mode: str, page_range: str | None = None) -> dict[str, Any]:
         "mode": mode,
         "disable_image_extraction": True,
         "keep_pageheader_in_output": True,
+        # Page by page, so the API stores pages and never reads a book twice (and knows each page's top and bottom).
+        "paginate_output": True,
     }
     if page_range:
         settings["page_range"] = page_range
     return settings
+
+
+def _result(pages: list[dict[str, Any]], outline: list[dict[str, Any]]) -> dict[str, Any]:
+    markdown = "\n\n".join(p["markdown"] for p in pages if p["markdown"])
+    return {
+        "markdown": markdown,
+        "pages": pages,
+        "outline": outline,
+        "figures": len(_IMAGE_LINK.findall(markdown)),
+    }
 
 
 class MarkerEngine:
@@ -143,26 +194,39 @@ class MarkerEngine:
         return text
 
     def _text(self, pdf: bytes, pages: list[int]) -> dict[str, Any]:
+        import pypdfium2 as pdfium
+
         converter = self._converter("balanced", _compress(pages))
         with tempfile.NamedTemporaryFile(suffix=".pdf") as fp:
             fp.write(pdf)
             fp.flush()
             markdown = self._markdown(converter, fp.name)
-        return {"markdown": markdown, "figures": len(_IMAGE_LINK.findall(markdown))}
+        # With a page range, Marker numbers pages as the PDF does.
+        by_index = {p: i for i, p in enumerate(pages)}
+        split = split_pages(markdown, list(range(max(pages) + 1)))
+        read = [entry for entry in split if entry["page"] - 1 in by_index]
+        document = pdfium.PdfDocument(pdf)
+        try:
+            outline = read_outline(document)
+        finally:
+            document.close()
+        return _result(read, outline)
 
     def _rasterize(self, pdf: bytes, pages: list[int]) -> dict[str, Any]:
         import pypdfium2 as pdfium
 
         converter = self._converter("fast")
         document = pdfium.PdfDocument(pdf)
-        parts: list[str] = []
+        read: list[dict[str, Any]] = []
         try:
+            outline = read_outline(document)
             for start in range(0, len(pages), BATCH_PAGES):
-                images = [render_page(document, i, self._dpi) for i in pages[start : start + BATCH_PAGES]]
+                batch = pages[start : start + BATCH_PAGES]
+                images = [render_page(document, i, self._dpi) for i in batch]
                 with tempfile.NamedTemporaryFile(suffix=".pdf") as fp:
                     images[0].save(fp.name, "PDF", save_all=True, append_images=images[1:], resolution=float(self._dpi))
-                    parts.append(self._markdown(converter, fp.name))
+                    # The image PDF's page i is the batch's i-th page.
+                    read.extend(split_pages(self._markdown(converter, fp.name), batch))
         finally:
             document.close()
-        markdown = "\n\n".join(p.strip() for p in parts if p.strip())
-        return {"markdown": markdown, "figures": len(_IMAGE_LINK.findall(markdown))}
+        return _result(read, outline)

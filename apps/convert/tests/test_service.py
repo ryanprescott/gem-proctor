@@ -272,3 +272,73 @@ class MarkerSettings(unittest.TestCase):
         self.assertIs(settings["disable_image_extraction"], True)
         self.assertEqual(settings["page_range"], "0-1")
         self.assertNotIn("page_range", marker_settings("balanced"))
+
+
+class Pages(unittest.TestCase):
+    """Marker's paginated output as pages, and the PDF's outline, without Marker or pdfium."""
+
+    def test_split_maps_markers_to_pdf_pages_and_keeps_blank_ones(self) -> None:
+        from gem_convert.marker_engine import split_pages
+
+        sep = "-" * 48
+        md = f"\n\n{{0}}{sep}\n\n# One\n\nFirst.\n\n{{1}}{sep}\n\n\n\n{{2}}{sep}\n\nThird $x$.\n"
+        # Marker's pages 0, 1, 2 are the PDF's pages 5, 6 and 9 (from 0): the batch it was given.
+        self.assertEqual(
+            split_pages(md, [4, 5, 8]),
+            [
+                {"page": 5, "markdown": "# One\n\nFirst."},
+                {"page": 6, "markdown": ""},
+                {"page": 9, "markdown": "Third $x$."},
+            ],
+        )
+        # No marks at all: everything is the first page's.
+        self.assertEqual(
+            split_pages("Just text.", [0, 1]), [{"page": 1, "markdown": "Just text."}, {"page": 2, "markdown": ""}]
+        )
+
+    def test_outline_reads_titles_levels_and_pages_and_survives_a_bad_one(self) -> None:
+        from gem_convert.marker_engine import read_outline
+
+        class Dest:
+            def __init__(self, index: int | None) -> None:
+                self.index = index
+
+            def get_index(self) -> int | None:
+                return self.index
+
+        class Item:
+            def __init__(self, title: str, level: int, index: int | None) -> None:
+                self.title, self.level, self.dest = title, level, Dest(index) if index is not None else None
+
+            def get_title(self) -> str:
+                return self.title
+
+            def get_dest(self) -> Dest | None:
+                return self.dest
+
+        class Doc:
+            def __init__(self, items: list[Item], fail_after: int | None = None) -> None:
+                self.items, self.fail_after = items, fail_after
+
+            def get_toc(self, max_depth: int) -> Any:
+                for n, item in enumerate(self.items):
+                    if self.fail_after is not None and n == self.fail_after:
+                        raise RuntimeError("a looping outline")
+                    yield item
+
+        items = [Item("I  Vectors", 0, 10), Item("Vectors", 1, 12), Item("No page", 1, None)]
+        self.assertEqual(
+            read_outline(Doc(items)),
+            [
+                {"title": "I Vectors", "level": 0, "page": 11},
+                {"title": "Vectors", "level": 1, "page": 13},
+                {"title": "No page", "level": 1, "page": None},
+            ],
+        )
+        # What could be read before the outline broke is kept; the conversion doesn't fail for it.
+        self.assertEqual(len(read_outline(Doc(items, fail_after=2))), 2)
+
+    def test_marker_is_asked_to_paginate(self) -> None:
+        from gem_convert.marker_engine import marker_settings
+
+        self.assertIs(marker_settings("fast")["paginate_output"], True)

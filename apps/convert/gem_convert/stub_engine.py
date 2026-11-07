@@ -50,4 +50,10 @@ class StubEngine:
         markdown = "" if _flag(pdf, "empty") is not None else "# Stub\n\nThe stub read this. $x^T y = 0$.\n"
         if _flag(pdf, "big") is not None:
             markdown = "x" * int(_flag(pdf, "big") or 0)
-        return {"markdown": markdown, "figures": int(_flag(pdf, "figures") or 0)}
+        # Page by page, as the real engine: the stub's text is the first page read, the others are blank.
+        read = [{"page": p + 1, "markdown": markdown if i == 0 else ""} for i, p in enumerate(pages)]
+        outline = [
+            {"title": title, "level": int(level), "page": int(page)}
+            for title, level, page in (part.split(":") for part in (_flag(pdf, "outline") or "").split(";") if part)
+        ]
+        return {"markdown": markdown, "pages": read, "outline": outline, "figures": int(_flag(pdf, "figures") or 0)}

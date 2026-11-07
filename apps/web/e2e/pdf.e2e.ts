@@ -1,5 +1,6 @@
 // P2.2 F3 (M20–M24a) and the PDFs section: PDFs are added and read on their own, followed in a list streamed over SSE,
-// and made into sources through the add-source form. Against the real API and pg-boss, with the mock converter.
+// and made into sources through the add-source form, on the server, from their stored pages: the whole PDF or a
+// chapter at a time. Against the real API and pg-boss, with the mock converter.
 import { expect, type Page, test } from "@playwright/test";
 import { createUser, expectNoAxeViolations, liveRegionText, newSignedInPage, tabTo } from "./helpers.ts";
 
@@ -32,8 +33,9 @@ async function choose(page: Page, files: [name: string, flags: string][]) {
 const pdfs = (page: Page) => page.getByRole("region", { name: "PDFs" });
 const row = (page: Page, name: string) =>
   pdfs(page).getByRole("row", { name: new RegExp(`^${name.replace(".", "\\.")}`) });
+const summary = (page: Page) => page.getByRole("region", { name: "What was read from the PDF" });
 
-test("M20 M22 a PDF is read in the list, announced, made a source with equations and warnings, edited, saved, downloadable", async ({
+test("M20 a PDF is read in the list, announced, shown as a summary, made a source on the server, downloadable", async ({
   browser,
 }) => {
   const page = await newSignedInPage(browser, proctorEmail);
@@ -51,34 +53,56 @@ test("M20 M22 a PDF is read in the list, announced, made a source with equations
   await expect(page.getByLabel("Title")).toBeFocused();
   await expect(page.getByLabel("Title")).toHaveValue("vectors");
   await expect(page.getByRole("button", { name: / Source text$/ })).toContainText("Read from vectors.pdf");
-  // Choosing a PDF hides the typed text and the .md upload.
+  // Choosing a PDF hides the typed text and the .md upload; the PDF is a summary, its text stays on the server.
   await expect(page.getByLabel("Markdown or plain text")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Upload .md or .txt" })).toHaveCount(0);
-
-  const result = page.getByRole("region", { name: "What was read from the PDF" });
-  await expect(result.getByText("figures or images were left out")).toBeVisible();
-  // Equations are rendered, with MathML for screen readers, and the one KaTeX can't read is listed as written (M22).
-  await expect(result.locator(".katex-mathml math").first()).toBeAttached();
-  await expect(result.getByText("couldn't be displayed")).toBeVisible();
-  await expect(result.locator("code", { hasText: "\\notacommand{x}" })).toBeVisible();
+  await expect(summary(page).getByText(/^vectors\.pdf: 2 pages read, \d+ sections/)).toBeVisible();
+  await expect(summary(page).getByText("figures or images were left out")).toBeVisible();
+  await expect(summary(page).getByText("This PDF has no bookmarks")).toBeVisible();
+  await expect(summary(page).getByText("inner product")).toHaveCount(0);
   await expectNoAxeViolations(page, "/sources with a PDF chosen for the source");
 
-  const text = page.getByLabel("Text read from vectors.pdf");
-  await expect(text).toHaveValue(/inner product/);
-  await text.fill(`${await text.inputValue()}\nAn edited closing line.\n`);
   await page.getByLabel("Citation label").fill("VEC");
   await page.getByRole("button", { name: "Save source" }).click();
   await expect(page).toHaveURL(/\/sources\/[0-9a-f-]+/);
-
   const link = page.getByRole("link", { name: "Download the PDF for revision 1" });
   await expect(link).toBeVisible();
   const original = await page.request.get((await link.getAttribute("href")) as string);
   expect(original.status()).toBe(200);
   expect(original.headers()["content-type"]).toBe("application/pdf");
   expect((await original.body()).toString()).toContain("%MOCK:doc=chapter");
-  // Saved, it has left the list.
+  // Made into a source of all of it, it has left the list.
   await page.goto("/sources");
-  await expect(pdfs(page).getByText("No PDFs waiting")).toBeVisible();
+  await expect(row(page, "vectors.pdf")).toHaveCount(0);
+  await page.context().close();
+});
+
+test("a PDF with bookmarks: one source per chapter ticked, and it stays in the list for the rest", async ({
+  browser,
+}) => {
+  const page = await newSignedInPage(browser, proctorEmail);
+  await page.goto("/sources");
+  await choose(page, [["book.pdf", "%MOCK:doc=chapter\n%MOCK:pages=2\n%MOCK:outline=Vectors:0:1;Inner product:1:1"]]);
+  await row(page, "book.pdf").getByRole("button", { name: "Make a source from book.pdf" }).click({ timeout: 20_000 });
+  await page.getByRole("button", { name: / Make$/ }).click();
+  await page.getByRole("option", { name: /One source per chapter$/ }).click();
+  const chapters = page.getByRole("group", { name: "Chapters" });
+  await expect(chapters.getByText("pages 1–2").first()).toBeVisible();
+  // A row is its label: clicked as a person would, then checked as a screen reader reports it.
+  for (const name of [/^Vectors/, /^Inner product/]) {
+    const box = chapters.getByRole("checkbox", { name });
+    await chapters.locator("label", { has: page.getByRole("checkbox", { name }) }).click();
+    await expect(box).toBeChecked();
+  }
+  await expect(page.getByLabel("Title")).toHaveCount(0);
+  await expectNoAxeViolations(page, "/sources choosing chapters");
+  await page.getByLabel("Citation label").fill("BK");
+  await page.getByRole("button", { name: "Make 2 sources" }).click();
+  await expect.poll(() => liveRegionText(page)).toContain("2 sources made, one per chapter");
+  const sources = page.getByRole("table", { name: /sources/i }).first();
+  await expect(sources.getByRole("link", { name: "Vectors", exact: true })).toBeVisible();
+  await expect(sources.getByRole("link", { name: "Inner product", exact: true })).toBeVisible();
+  await expect(row(page, "book.pdf")).toBeVisible();
   await page.context().close();
 });
 
@@ -101,14 +125,13 @@ test("M21 a failure says why in words, and can be retried or removed; a scan wit
 
   await choose(page, [["scan.pdf", "%MOCK:pages=3"]]);
   await row(page, "scan.pdf").getByRole("button", { name: "Make a source from scan.pdf" }).click({ timeout: 20_000 });
-  await expect(page.getByText("Very little text was found")).toBeVisible();
+  await expect(summary(page).getByText("Very little text was found")).toBeVisible();
   await page.context().close();
 });
 
 test("several PDFs at once, read while away; the typed text survives choosing a PDF and back", async ({ browser }) => {
   const page = await newSignedInPage(browser, proctorEmail);
   await page.goto("/sources");
-  await page.getByLabel("Markdown or plain text").fill("# Typed\n\nWritten by hand.");
   await choose(page, [
     ["one.pdf", "%MOCK:doc=chapter\n%MOCK:pages=2"],
     ["two.pdf", "%MOCK:doc=chapter\n%MOCK:pages=2"],
@@ -125,7 +148,7 @@ test("several PDFs at once, read while away; the typed text survives choosing a 
   await page.getByLabel("Markdown or plain text").fill("# Typed\n\nWritten by hand.");
   await page.getByRole("button", { name: / Source text$/ }).click();
   await page.getByRole("option", { name: /Read from two\.pdf$/ }).click();
-  await expect(page.getByLabel("Text read from two.pdf")).toHaveValue(/inner product/);
+  await expect(summary(page).getByText(/^two\.pdf: 2 pages read/)).toBeVisible();
   await page.getByRole("button", { name: / Source text$/ }).click();
   await page.getByRole("option", { name: /Typed or pasted text/ }).click();
   await expect(page.getByLabel("Markdown or plain text")).toHaveValue("# Typed\n\nWritten by hand.");
@@ -168,9 +191,9 @@ test("M23 M24 the whole flow works by keyboard, and at 320 px with no sideways s
   await expectNoAxeViolations(page, "source from a PDF at 320 px");
 
   await page.goto("/sources");
-  await choose(page, [["wide.pdf", "%MOCK:doc=chapter"]]);
+  await choose(page, [["wide.pdf", "%MOCK:doc=chapter\n%MOCK:outline=Vectors:0:1;Inner product:1:1"]]);
   await row(page, "wide.pdf").getByRole("button", { name: "Make a source from wide.pdf" }).click({ timeout: 20_000 });
-  await expect(page.getByRole("region", { name: "What was read from the PDF" })).toBeVisible();
+  await expect(summary(page)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expectNoAxeViolations(page, "/sources with a PDF chosen at 320 px");
   await page.context().close();

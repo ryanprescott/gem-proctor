@@ -28,8 +28,8 @@
     "sourceText": "Source text",
     "typed": "Typed or pasted text, or a .md or .txt file",
     "fromPdf": "Read from {{name}}",
-    "pdfText": "Text read from {{name}}",
-    "pdfTextHelp": "Correct anything that was misread before saving. Equations are LaTeX between $ signs."
+    "chapterTitles": "Each chapter's source is named after the chapter.",
+    "saveChapters": "Make {{count}} sources"
   },
   "preview": {
     "title": "Preview",
@@ -113,8 +113,14 @@
     "choose": "Choose PDFs",
     "retry": "Try again",
     "resultTitle": "What was read from the PDF",
-    "rendered": "How the text and equations will look",
-    "added": "{{count}} PDFs added. They're read in the background and appear in the list below."
+    "added": "{{count}} PDFs added. They're read in the background and appear in the list below.",
+    "summary": "{{name}}: {{pages}} pages read, {{sections}} sections, {{characters}} characters. The text stays on the server; the source is made there.",
+    "make": "Make",
+    "makeWhole": "One source of the whole PDF",
+    "makeChapters": "One source per chapter",
+    "chapters": "Chapters",
+    "chapterPages": "pages {{first}}–{{last}}",
+    "noOutline": "This PDF has no bookmarks, so it's made into one source; its headings become the sections."
   },
   "uploads": {
     "title": "PDFs",
@@ -141,5 +147,6 @@
     "makeSource": "Make a source",
     "makeSourceFor": "Make a source from {{name}}",
     "madeSource": "The text read from {{name}} is in the form below. Check it, name the source and save."
-  }
+  },
+  "savedMany": "{{count}} sources made, one per chapter. They're in the list above, embedding."
 }

@@ -74,6 +74,7 @@ export const ROUTE_PERMISSIONS = {
   "sources.files.create": { objType: "source_file", act: "create" },
   "sources.files.list": { objType: "source_file", act: "list" },
   "sources.files.listEvents": { objType: "source_file", act: "list" },
+  "sources.files.summary": { objType: "source_file", act: "read", resource: "source_file" },
   "sources.files.get": { objType: "source_file", act: "read", resource: "source_file" },
   "sources.files.events": { objType: "source_file", act: "read", resource: "source_file" },
   "sources.files.retry": { objType: "source_file", act: "update", resource: "source_file" },

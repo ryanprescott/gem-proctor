@@ -145,6 +145,8 @@ export interface SourceInput {
   format: SourceFormat;
   /** The converted PDF this text came from. */
   sourceFileId?: string | undefined;
+  /** Which of its pages (a chapter); none for all of it. */
+  sourcePageRange?: string | undefined;
 }
 
 async function queueEmbed(ctx: AppContext, revisionId: string) {
@@ -173,6 +175,7 @@ export async function createSource(ctx: AppContext, input: SourceInput, userId: 
       text: input.text,
       format: input.format,
       sourceFileId: input.sourceFileId ?? null,
+      sourcePageRange: input.sourcePageRange ?? null,
       createdBy: userId,
       prepared,
     });
@@ -216,6 +219,7 @@ export async function addRevision(ctx: AppContext, source: SourceRow, input: Sou
       text: input.text,
       format: input.format,
       sourceFileId: input.sourceFileId ?? null,
+      sourcePageRange: input.sourcePageRange ?? null,
       createdBy: userId,
       prepared,
     });

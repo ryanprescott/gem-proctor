@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ConvertClient } from "@gem/convert";
 import { MockConvertServer } from "@gem/convert/mock";
-import { AuditLog, LlmCallLog, SourceFile } from "@gem/db";
+import { AuditLog, LlmCallLog, SourceFile, SourceFilePage, SourceRevision } from "@gem/db";
 import { and, asc, eq } from "drizzle-orm";
 import { assign, hasDb, setLocalOnly } from "../../../packages/llm/test/helpers.ts";
 import { trackInteractive } from "../src/activity.ts";
@@ -358,6 +358,134 @@ describe.skipIf(!hasDb)("your uploads, as a list that updates itself", () => {
     } finally {
       stop();
     }
+  });
+});
+
+describe.skipIf(!hasDb)("a book: pages stored, a manifest, sources made from pages on the server", () => {
+  let env: SourceEnv;
+  // A small book as Marker reads it: page numbers and running headers at the tops, two chapters, an outline.
+  const words = ["vectors", "matrices", "norms", "angles", "bases", "clusters", "inverses", "projections"];
+  const pageText = (page: number) => {
+    const body =
+      page === 3
+        ? "# Chapter 1\n\n# Vectors\n\nA vector is an ordered list of numbers, written $x = (x_1, x_2)$."
+        : page === 7
+          ? "# Chapter 2\n\n# Matrices\n\nA matrix is a rectangular array of numbers."
+          : `This page is about ${words[page % 8]} and ${words[(page + 3) % 8]}, with $y_${page}$ in a sentence.`;
+    if (page === 3 || page === 7) return body;
+    const header = page < 7 ? "# 1 Vectors" : "# 2 Matrices";
+    return `${page}\n\n${header}\n\n${body}`;
+  };
+  const OUTLINE = [
+    { title: "Vectors", level: 0, page: 3 },
+    { title: "Matrices", level: 0, page: 7 },
+  ];
+  const book = new MockConvertServer({ pageAnswer: (page) => pageText(page), outline: OUTLINE });
+  beforeAll(async () => {
+    env = await createSourceEnv({
+      CONVERT_URL: book.url,
+      CONVERT_SHARED_SECRET: SECRET,
+      UPLOAD_RATE_LIMIT_MAX: "1000",
+    });
+    env.t.ctx.convert = new ConvertClient(book.url);
+  });
+  afterAll(async () => {
+    book.stop();
+    await env.queue.stop();
+    await env.close();
+  });
+  let fileId = "";
+
+  test("each page is stored as read, the outline goes in the manifest, and the text is put together from them", async () => {
+    const res = await upload(env.proctor, pdf("%MOCK:pages=10"), "filename=book.pdf&pageRange=3-10");
+    fileId = res.json().file.id;
+    const file = await until<Record<string, unknown>>(
+      env.proctor,
+      fileId,
+      (f) => f.status === "ready" || f.status === "failed",
+    );
+    expect(file).toMatchObject({ status: "ready", pageCount: 10, pagesConverted: 8 });
+    const pages = await env.t.db.select().from(SourceFilePage).where(eq(SourceFilePage.fileId, fileId));
+    expect(pages.map((p) => p.page).sort((a, b) => a - b)).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(pages.find((p) => p.page === 4)?.markdown).toContain("# 1 Vectors");
+    const [row] = await env.t.db.select().from(SourceFile).where(eq(SourceFile.id, fileId));
+    expect(row?.manifest).toEqual({ outline: OUTLINE });
+    // The assembled text: the outline's headings, the running headers, page numbers and chapter labels gone.
+    const md = row?.markdown ?? "";
+    expect([...md.matchAll(/^#+ .+$/gm)].map((m) => m[0])).toEqual(["# Vectors", "# Matrices"]);
+    expect(md).not.toContain("1 Vectors");
+    expect(md).not.toContain("Chapter 1");
+    expect(md).not.toMatch(/^\d+$/m);
+    expect(md).toContain("$y_10$");
+  });
+
+  test("the summary has the outline with its pages and the text's sections, and no text", async () => {
+    const res = await env.proctor.get(`${API}/sources/files/${fileId}/summary`);
+    expect(res.statusCode).toBe(200);
+    const summary = res.json();
+    expect(summary.outline).toEqual([
+      { title: "Vectors", level: 0, page: 3, lastPage: 6 },
+      { title: "Matrices", level: 0, page: 7, lastPage: 10 },
+    ]);
+    expect(summary.preview.sections.map((s: { title: string }) => s.title)).toEqual(["Vectors", "Matrices"]);
+    expect(summary.characters).toBeGreaterThan(100);
+    expect(JSON.stringify(summary)).not.toContain("rectangular array");
+    // Another user's file, as for every file route.
+    expect((await env.other.get(`${API}/sources/files/${fileId}/summary`)).statusCode).toBe(404);
+  });
+
+  test("a source from the whole PDF or one chapter, made on the server from the stored pages", async () => {
+    const listed = async () =>
+      ((await env.proctor.get(`${API}/sources/files`)).json().files as { id: string }[]).map((f) => f.id);
+    const chapter = await env.proctor.post(`${API}/sources`, {
+      title: "Matrices",
+      citationLabel: "BK2",
+      fileId,
+      pageRange: "7-10",
+    });
+    expect(chapter.statusCode).toBe(200);
+    // A chapter made, the PDF stays in its owner's list for the next one; made whole, it leaves.
+    expect(await listed()).toContain(fileId);
+    const [rev] = await env.t.db
+      .select()
+      .from(SourceRevision)
+      .where(eq(SourceRevision.sourceId, chapter.json().source.id));
+    expect(rev).toMatchObject({ sourceFileId: fileId, sourcePageRange: "7-10" });
+    const whole = await env.proctor.post(`${API}/sources`, { title: "Book", citationLabel: "BK", fileId });
+    expect(whole.statusCode).toBe(200);
+    expect(await listed()).not.toContain(fileId);
+    const text = async (sourceId: string) =>
+      (await env.t.db.select().from(SourceRevision).where(eq(SourceRevision.sourceId, sourceId)))[0]?.markdown ?? "";
+    const [file] = await env.t.db.select().from(SourceFile).where(eq(SourceFile.id, fileId));
+    expect(await text(whole.json().source.id)).toBe(file?.markdown as string);
+    const ch = await text(chapter.json().source.id);
+    expect(ch.startsWith("# Matrices")).toBe(true);
+    expect(ch).not.toContain("ordered list");
+    expect(ch).toContain("$y_10$");
+    // Pages that weren't read can't be made into a source; text sent with the file is the creator's own, and wins.
+    const outside = await env.proctor.post(`${API}/sources`, {
+      title: "X",
+      citationLabel: "X",
+      fileId,
+      pageRange: "1-2",
+    });
+    expect(outside.json().code).toBe("convert_bad_range");
+    const own = await env.proctor.post(`${API}/sources`, {
+      title: "Fixed",
+      citationLabel: "FX",
+      fileId,
+      text: "# Vectors\n\nCorrected by hand.",
+    });
+    expect(await text(own.json().source.id)).toBe("# Vectors\n\nCorrected by hand.");
+    // Neither text nor a file is refused; so is a page range without a file.
+    expect((await env.proctor.post(`${API}/sources`, { title: "N", citationLabel: "N" })).statusCode).toBe(400);
+    const loose = await env.proctor.post(`${API}/sources`, {
+      title: "N",
+      citationLabel: "N",
+      text: "x",
+      pageRange: "1",
+    });
+    expect(loose.statusCode).toBe(400);
   });
 });
 

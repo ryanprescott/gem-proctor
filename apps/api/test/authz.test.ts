@@ -237,6 +237,7 @@ function fileRows(id: () => string, proctor: Record<Who, Expect>, own: Record<Wh
     },
     { id: "sources.files.list", method: "GET", url: () => "/sources/files", expect: proctor },
     { id: "sources.files.listEvents", method: "GET", url: () => "/sources/files/events?once=true", expect: proctor },
+    { id: "sources.files.summary", method: "GET", url: () => `/sources/files/${id()}/summary`, expect: own },
     { id: "sources.files.get", method: "GET", url: () => `/sources/files/${id()}`, expect: own },
     { id: "sources.files.events", method: "GET", url: () => `/sources/files/${id()}/events?once=true`, expect: own },
     { id: "sources.files.original", method: "GET", url: () => `/sources/files/${id()}/original`, expect: own },

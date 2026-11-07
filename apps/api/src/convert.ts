@@ -1,14 +1,23 @@
 import { createHash } from "node:crypto";
 import { ConvertClientError } from "@gem/convert";
-import { AuthoringBatch, newId, SourceFile, SourceRevision } from "@gem/db";
-import { cleanMarkdown } from "@gem/knowledge";
-import { AppError, type ConvertErrorCode, type ConvertOptions, type ErrorCode, type SourceWarning } from "@gem/shared";
-import type { SourceFileDetail, SourceFileView } from "@gem/shared/contracts";
-import { and, desc, eq, getTableColumns, inArray, isNull, notExists } from "drizzle-orm";
+import { AuthoringBatch, newId, SourceFile, SourceFilePage, SourceRevision } from "@gem/db";
+import { assemblePages, chunkCap, cleanMarkdown, outlineRanges, previewSource } from "@gem/knowledge";
+import {
+  AppError,
+  type ConvertErrorCode,
+  type ConvertOptions,
+  type ConvertPage,
+  type ErrorCode,
+  type OutlineEntry,
+  type SourceWarning,
+} from "@gem/shared";
+import type { SourceFileDetail, SourceFileSummary, SourceFileView } from "@gem/shared/contracts";
+import { and, count, desc, eq, getTableColumns, inArray, isNull, notExists, sql } from "drizzle-orm";
 import { interactiveBusy } from "./activity.ts";
 import { writeAudit } from "./audit.ts";
 import type { AppContext } from "./context.ts";
 import { getSettings } from "./settings.ts";
+import { embeddingsTarget } from "./sources.ts";
 
 /** PDF upload and conversion (docs/P2.2.md §4–§6). The converter reads; this keeps the file and the outcome. */
 
@@ -203,7 +212,8 @@ export async function deleteFile(ctx: AppContext, id: string, userId: string, me
 
 /**
  * An owner's uploads that still need them, newest first: waiting, being read, failed, or read and not yet made into a
- * source. Once a revision points at a file, it's done and leaves the list (the source shows it from then on).
+ * source of all of it. Once a revision is made from the whole file, it's done and leaves the list (the source shows
+ * it from then on); one made from a chapter leaves it there, for the next chapter.
  */
 export async function pendingFiles(ctx: Pick<AppContext, "db">, ownerId: string): Promise<SourceFileView[]> {
   const rows = await ctx.db
@@ -217,7 +227,7 @@ export async function pendingFiles(ctx: Pick<AppContext, "db">, ownerId: string)
           ctx.db
             .select({ id: SourceRevision.id })
             .from(SourceRevision)
-            .where(eq(SourceRevision.sourceFileId, SourceFile.id)),
+            .where(and(eq(SourceRevision.sourceFileId, SourceFile.id), isNull(SourceRevision.sourcePageRange))),
         ),
       ),
     )
@@ -231,6 +241,61 @@ export async function readyFile(ctx: AppContext, id: string, user: { userId: str
   if (row.ownerId !== user.userId && user.role !== "admin") throw new AppError("convert_file_not_found");
   if (row.status !== "ready") throw new AppError("convert_file_not_ready");
   return row;
+}
+
+const IMAGE_LINK = /!\[[^\]]*\]\([^)]*\)/g;
+
+/** The outline a file's manifest holds; none for a file read before manifests, or a PDF without bookmarks. */
+export function outlineOf(file: Pick<Row, "manifest">): OutlineEntry[] {
+  const manifest = file.manifest as { outline?: OutlineEntry[] } | null;
+  return Array.isArray(manifest?.outline) ? manifest.outline : [];
+}
+
+/**
+ * A file's text from its stored pages: the pages the file was read for, or `pageRange` of them (a chapter), put
+ * together with its outline (`assemblePages`) and cleaned. Nothing is read again.
+ */
+export async function assembleFile(
+  ctx: Pick<AppContext, "db">,
+  file: Row,
+  pageRange?: string,
+): Promise<{ markdown: string; warnings: SourceWarning[]; pages: number; figures: number }> {
+  const rows = await ctx.db
+    .select({ page: SourceFilePage.page, markdown: SourceFilePage.markdown })
+    .from(SourceFilePage)
+    .where(eq(SourceFilePage.fileId, file.id))
+    .orderBy(SourceFilePage.page);
+  const wanted = new Set(pageRange ? selectedPages(pageRange, file.pageCount ?? 0) : rows.map((r) => r.page));
+  const pages = rows.filter((r) => wanted.has(r.page));
+  if (pageRange && pages.length < wanted.size) throw new AppError("convert_bad_range");
+  const figures = pages.reduce((n, p) => n + (p.markdown.match(IMAGE_LINK)?.length ?? 0), 0);
+  const cleaned = cleanMarkdown({
+    markdown: assemblePages(pages, outlineOf(file)),
+    pageCount: pageRange ? pages.length : (file.pageCount ?? pages.length),
+    pagesConverted: pages.length,
+    figures,
+  });
+  return { markdown: cleaned.markdown, warnings: cleaned.warnings, pages: pages.length, figures };
+}
+
+/** A read PDF without its text (`sources.files.summary`): its outline with pages, and the text's sections and size. */
+export async function fileSummary(ctx: AppContext, id: string): Promise<SourceFileSummary> {
+  const file = await loadFile(ctx, id);
+  if (file.status !== "ready") throw new AppError("convert_file_not_ready");
+  const markdown = file.markdown ?? "";
+  const target = await embeddingsTarget(ctx);
+  const cap = target ? chunkCap(target) : undefined;
+  return {
+    file: toFileView(file),
+    outline: outlineRanges(outlineOf(file), file.pageCount ?? 0),
+    preview: previewSource(markdown, {
+      title: file.filename,
+      citationLabel: "source",
+      format: "markdown",
+      ...(cap === undefined ? {} : { maxTokens: cap }),
+    }),
+    characters: markdown.length,
+  };
 }
 
 /** Whether question generation or its checks are queued or running, in this process or waiting in the database. */
@@ -327,67 +392,80 @@ export async function processConvertJob(ctx: AppContext, fileId: string, idlePol
 
   try {
     const client = await convertReady(ctx);
-    // While converting, `markdown` holds Marker's raw text of the pages done so far and `pagesConverted` their
-    // count, so a retry after a failure continues from there. The clean-up runs once, on the whole text: running
-    // headers are found by repeating across pages.
-    let raw = started.markdown ?? "";
-    let done = started.pagesConverted ?? 0;
+    // Each page is stored as it's read (`source_file_page`), so a retry reads only the pages missing and the text
+    // is assembled from the pages, as often as needed, without reading anything again.
     let pageCount = started.pageCount;
-    let figures = started.figures ?? 0;
     let converter = started.converter;
+    const store = async (asked: number[], reply: { pages: ConvertPage[]; outline: OutlineEntry[] } | null) => {
+      // A request of blank pages is answered `empty`: those pages are read, and blank.
+      const pages = reply ? reply.pages : asked.map((page) => ({ page, markdown: "" }));
+      await ctx.db.transaction(async (tx) => {
+        if (pages.length > 0) {
+          await tx
+            .insert(SourceFilePage)
+            .values(pages.map((p) => ({ fileId, page: p.page, markdown: p.markdown })))
+            .onConflictDoUpdate({
+              target: [SourceFilePage.fileId, SourceFilePage.page],
+              set: { markdown: sql`excluded.markdown`, readAt: new Date() },
+            });
+        }
+        const [{ n } = { n: 0 }] = await tx
+          .select({ n: count() })
+          .from(SourceFilePage)
+          .where(eq(SourceFilePage.fileId, fileId));
+        await tx
+          .update(SourceFile)
+          .set({
+            pagesConverted: n,
+            pageCount,
+            converter,
+            ...(reply ? { manifest: { outline: reply.outline } } : {}),
+          })
+          .where(eq(SourceFile.id, fileId));
+      });
+      publish();
+    };
     const read = async (pages: number[]) => {
       try {
         const reply = await client.convert(started.content, { strategy: started.strategy, pageRange: rangeOf(pages) });
-        figures += reply.figures;
         converter = reply.converter;
         pageCount = reply.pageCount;
-        return reply.markdown;
+        await store(pages, reply);
       } catch (err) {
-        // A batch of blank pages is nothing to add, not a failure; the whole being empty still is.
-        if (err instanceof ConvertClientError && err.code === "empty") return "";
+        if (err instanceof ConvertClientError && err.code === "empty") return store(pages, null);
         throw err;
       }
     };
-    const save = async () => {
-      await ctx.db
-        .update(SourceFile)
-        .set({ markdown: raw, pagesConverted: done, pageCount, figures, converter })
-        .where(eq(SourceFile.id, fileId));
-      publish();
-    };
-    const add = (text: string) => {
-      if (text.trim() !== "") raw = raw === "" ? text : `${raw.trimEnd()}\n\n${text.trimStart()}`;
-    };
 
-    if (pageCount === null || done === 0) {
+    if (pageCount === null) {
       // The first selected page alone: its reply says how many pages the PDF has.
-      raw = "";
-      figures = 0;
-      add(await read([firstPage(started.pageRange)]));
-      done = 1;
-      await save();
+      await read([firstPage(started.pageRange)]);
     }
-    const pages = selectedPages(started.pageRange, pageCount as number);
-    while (done < pages.length) {
+    const wanted = selectedPages(started.pageRange, pageCount as number);
+    const have = new Set(
+      (
+        await ctx.db.select({ page: SourceFilePage.page }).from(SourceFilePage).where(eq(SourceFilePage.fileId, fileId))
+      ).map((r) => r.page),
+    );
+    const missing = wanted.filter((p) => !have.has(p));
+    for (let i = 0; i < missing.length; i += CONVERT_BATCH_PAGES) {
       // Interactive work comes first between batches too.
       while (await interactiveWork(ctx)) await sleep(idlePollMs);
-      const batch = pages.slice(done, done + CONVERT_BATCH_PAGES);
-      add(await read(batch));
-      done += batch.length;
-      await save();
+      await read(missing.slice(i, i + CONVERT_BATCH_PAGES));
     }
 
-    const cleaned = cleanMarkdown({ markdown: raw, pageCount: pageCount as number, pagesConverted: done, figures });
-    if (cleaned.markdown.trim() === "") throw new AppError("convert_empty");
+    const [file] = await ctx.db.select().from(SourceFile).where(eq(SourceFile.id, fileId));
+    const assembled = await assembleFile(ctx, file as Row);
+    if (assembled.markdown.trim() === "") throw new AppError("convert_empty");
     await ctx.db
       .update(SourceFile)
       .set({
         status: "ready",
-        markdown: cleaned.markdown,
+        markdown: assembled.markdown,
         pageCount,
-        pagesConverted: done,
-        figures,
-        warnings: cleaned.warnings,
+        pagesConverted: assembled.pages,
+        figures: assembled.figures,
+        warnings: assembled.warnings,
         converter,
         errorCode: null,
         errorParams: null,

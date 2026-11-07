@@ -1,15 +1,14 @@
-import type { SourcePreview, SourceWarning } from "@gem/shared";
+import type { SourcePreview } from "@gem/shared";
 import {
   type SourceFileView,
   type SourceSummary,
   sourcesCreate,
-  sourcesFilesGet,
   sourcesList,
   sourcesPreview,
 } from "@gem/shared/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileTrigger, Form } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client.ts";
@@ -19,9 +18,10 @@ import { formatDate, formatNumber } from "../format.ts";
 import { Button, Card, ErrorMessage, errorText, Select, TextField } from "../ui/controls.tsx";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
 import { Markdown } from "../ui/Markdown.tsx";
-import { findUnparsedMath } from "../ui/math.ts";
+import { PdfChoice, type PdfPlan } from "./SourcePdfChoice.tsx";
 import styles from "./Sources.module.css";
 import { SourceUploads } from "./SourceUploads.tsx";
+import { Warnings } from "./SourceWarnings.tsx";
 
 export function EmbedStatus({ source }: { source: Pick<SourceSummary, "latest"> }) {
   const { t } = useTranslation();
@@ -34,59 +34,6 @@ export function EmbedStatus({ source }: { source: Pick<SourceSummary, "latest"> 
         ? ` ${t("sources:progress", { done: formatNumber(embedded), total: formatNumber(chunks) })}`
         : null}
     </span>
-  );
-}
-
-function Warnings({ warnings }: { warnings: SourceWarning[] }) {
-  const { t } = useTranslation();
-  if (warnings.length === 0) return <p>{t("sources:preview.noWarnings")}</p>;
-  return (
-    <ul className={styles.warnings}>
-      {warnings.map((w) => (
-        <li key={`${w.code}:${w.heading ?? ""}`}>
-          {t(`sources:warnings.${w.code}`, {
-            heading: w.heading ?? "",
-            tokens: formatNumber(w.tokens ?? 0),
-            count: w.count ?? 0,
-          })}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** What the converter and our clean-up found, and the equations the browser can't read. */
-function ConversionPanel({
-  warnings,
-  unparsed,
-  text,
-}: {
-  warnings: SourceWarning[];
-  unparsed: string[];
-  text: string;
-}) {
-  const { t } = useTranslation();
-  return (
-    <section aria-labelledby="pdf-result" className={styles.pdf}>
-      <h3 id="pdf-result">{t("sources:pdf.resultTitle")}</h3>
-      <Warnings warnings={warnings} />
-      {unparsed.length > 0 ? (
-        <>
-          <p>{t("sources:warnings.math_unparsed")}</p>
-          <ul>
-            {unparsed.map((tex) => (
-              <li key={tex}>
-                <code>{tex}</code>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-      <h4>{t("sources:pdf.rendered")}</h4>
-      <div className={styles.rendered}>
-        <Markdown quoted>{text}</Markdown>
-      </div>
-    </section>
   );
 }
 
@@ -115,7 +62,7 @@ function PreviewPanel({ preview }: { preview: SourcePreview }) {
   );
 }
 
-/** The form's text: typed or pasted (or a `.md`/`.txt` file), or what was read from one of the creator's PDFs. */
+/** The form's text: typed or pasted (or a `.md`/`.txt` file), or one of the creator's read PDFs. */
 const TYPED = "typed";
 
 function AddSource({
@@ -126,7 +73,7 @@ function AddSource({
 }: {
   /** The creator's PDFs that have been read and aren't sources yet. */
   pdfs: SourceFileView[];
-  /** `TYPED`, or the id of the PDF the text comes from. */
+  /** `TYPED`, or the id of the PDF to make the source from. */
   chosen: string;
   onChoose: (id: string) => void;
   /** Bumped to move focus to the form, as "Make a source" in the PDFs list does. */
@@ -141,45 +88,41 @@ function AddSource({
   const [author, setAuthor] = useState("");
   const [edition, setEdition] = useState("");
   const [url, setUrl] = useState("");
-  // The typed text and the PDF's text are kept apart: choosing one never loses the other.
+  // The typed text is kept while a PDF is chosen: choosing one never loses it.
   const [typed, setTyped] = useState("");
   const [filename, setFilename] = useState<string | undefined>();
-  const [pdfText, setPdfText] = useState<Record<string, string>>({});
+  const [plan, setPlan] = useState<PdfPlan>({ perChapter: false, chapters: [] });
   const [preview, setPreview] = useState<SourcePreview | null>(null);
   const fileId = chosen === TYPED ? undefined : chosen;
   const pdf = pdfs.find((f) => f.id === fileId);
-
-  // The chosen PDF's text, read once; the creator's corrections are kept per PDF.
-  const detail = useQuery({
-    queryKey: ["sources", "files", fileId],
-    queryFn: () => api.call(sourcesFilesGet, { params: { id: fileId as string } }),
-    enabled: fileId !== undefined,
-    staleTime: Number.POSITIVE_INFINITY,
-  });
-  useEffect(() => {
-    const file = detail.data?.file;
-    if (!file || pdfText[file.id] !== undefined) return;
-    setPdfText((m) => ({ ...m, [file.id]: file.markdown ?? "" }));
-    setTitle((current) => current || file.filename.replace(/\.[^.]+$/, ""));
-  }, [detail.data, pdfText]);
-  const text = fileId ? (pdfText[fileId] ?? "") : typed;
-  const setText = (v: string) => (fileId ? setPdfText((m) => ({ ...m, [fileId]: v })) : setTyped(v));
-  const deferred = useDeferredValue(text);
-  const unparsed = useMemo(() => (fileId ? findUnparsedMath(deferred) : []), [fileId, deferred]);
+  const perChapter = fileId !== undefined && plan.perChapter;
 
   const titleField = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (focusRequest === 0) return;
     titleField.current?.focus();
   }, [focusRequest]);
-  // A PDF that's gone from the list (removed, or saved elsewhere) can't be chosen any more.
+  // A PDF newly chosen: its name for the title if there's none yet, and a fresh plan. Keyed on the choice, not on
+  // the list's entry, which the stream replaces on every change to any file.
+  const pdfName = pdf?.filename;
   useEffect(() => {
-    if (fileId && !pdf && !detail.isPending) onChoose(TYPED);
-  }, [fileId, pdf, detail.isPending, onChoose]);
+    if (fileId === undefined) return;
+    setPlan({ perChapter: false, chapters: [] });
+    if (pdfName) setTitle((current) => current || pdfName.replace(/\.[^.]+$/, ""));
+  }, [fileId, pdfName]);
+  // A PDF that's gone from the list (removed, or made into a source elsewhere) can't be chosen any more.
+  useEffect(() => {
+    if (fileId && !pdf) onChoose(TYPED);
+  }, [fileId, pdf, onChoose]);
 
-  const body = () => (fileId ? { text, fileId } : { text, ...(filename ? { filename } : {}) });
+  const meta = () => ({
+    citationLabel: label,
+    ...(author ? { author } : {}),
+    ...(edition ? { edition } : {}),
+    ...(url ? { url } : {}),
+  });
   const look = useMutation({
-    mutationFn: () => api.call(sourcesPreview, { body: { text, ...(title ? { title } : {}) } }),
+    mutationFn: () => api.call(sourcesPreview, { body: { text: typed, ...(title ? { title } : {}) } }),
     onSuccess: (p) => {
       setPreview(p);
       announce(t("sources:preview.ready", { count: p.sections.length }));
@@ -187,21 +130,33 @@ function AddSource({
     onError: (e) => announce(errorText(t, e)),
   });
   const save = useMutation({
-    mutationFn: () =>
-      api.call(sourcesCreate, {
-        body: {
-          ...body(),
-          title,
-          citationLabel: label,
-          ...(author ? { author } : {}),
-          ...(edition ? { edition } : {}),
-          ...(url ? { url } : {}),
-        },
-      }),
-    onSuccess: async ({ source }) => {
+    mutationFn: async () => {
+      if (!fileId) {
+        return [
+          await api.call(sourcesCreate, { body: { ...meta(), title, text: typed, ...(filename ? { filename } : {}) } }),
+        ];
+      }
+      if (!perChapter) return [await api.call(sourcesCreate, { body: { ...meta(), title, fileId } })];
+      // One source per chapter, each made on the server from its pages.
+      const made = [];
+      for (const c of plan.chapters) {
+        made.push(
+          await api.call(sourcesCreate, {
+            body: { ...meta(), title: c.title, fileId, pageRange: `${c.page}-${c.lastPage}` },
+          }),
+        );
+      }
+      return made;
+    },
+    onSuccess: async (made) => {
       await qc.invalidateQueries({ queryKey: ["sources"] });
-      announce(t("sources:saved", { title: source.title }));
-      await navigate({ to: "/sources/$sourceId", params: { sourceId: source.id }, search: {} });
+      if (made.length === 1 && made[0]) {
+        announce(t("sources:saved", { title: made[0].source.title }));
+        await navigate({ to: "/sources/$sourceId", params: { sourceId: made[0].source.id }, search: {} });
+        return;
+      }
+      announce(t("sources:savedMany", { count: made.length }));
+      onChoose(TYPED);
     },
     onError: (e) => announce(errorText(t, e)),
   });
@@ -214,22 +169,31 @@ function AddSource({
     setPreview(null);
     if (!title) setTitle(file.name.replace(/\.[^.]+$/, ""));
   };
+  const ready = fileId
+    ? perChapter
+      ? plan.chapters.length > 0
+      : title.trim() !== ""
+    : typed.trim() !== "" && title.trim() !== "";
 
   return (
     <Card title={t("sources:add.title")}>
       <Form
         onSubmit={(e) => {
           e.preventDefault();
-          save.mutate();
+          if (ready && label.trim()) save.mutate();
         }}
       >
-        <TextField
-          label={t("sources:add.titleLabel")}
-          value={title}
-          onChange={setTitle}
-          isRequired
-          inputRef={titleField}
-        />
+        {perChapter ? (
+          <p>{t("sources:add.chapterTitles")}</p>
+        ) : (
+          <TextField
+            label={t("sources:add.titleLabel")}
+            value={title}
+            onChange={setTitle}
+            isRequired
+            inputRef={titleField}
+          />
+        )}
         <TextField
           label={t("sources:add.citationLabel")}
           description={t("sources:add.citationHelp")}
@@ -253,26 +217,7 @@ function AddSource({
           ]}
         />
         {fileId ? (
-          <>
-            {detail.isPending ? <p>{t("common:loading")}</p> : null}
-            <ErrorMessage error={detail.error} />
-            {detail.data ? (
-              <>
-                <ConversionPanel warnings={detail.data.file.warnings} unparsed={unparsed} text={deferred} />
-                <TextField
-                  label={t("sources:add.pdfText", { name: detail.data.file.filename })}
-                  description={t("sources:add.pdfTextHelp")}
-                  value={text}
-                  onChange={(v) => {
-                    setText(v);
-                    setPreview(null);
-                  }}
-                  multiline
-                  rows={12}
-                />
-              </>
-            ) : null}
-          </>
+          <PdfChoice fileId={fileId} plan={plan} onPlan={setPlan} />
         ) : (
           <>
             <div className={styles.row}>
@@ -296,16 +241,22 @@ function AddSource({
           </>
         )}
         <div className={styles.row}>
-          <Button variant="secondary" onPress={() => look.mutate()} isDisabled={text.trim() === "" || look.isPending}>
-            {t("sources:add.preview")}
-          </Button>
-          <Button type="submit" isDisabled={!title.trim() || !label.trim() || !text.trim() || save.isPending}>
-            {t("sources:add.save")}
+          {fileId ? null : (
+            <Button
+              variant="secondary"
+              onPress={() => look.mutate()}
+              isDisabled={typed.trim() === "" || look.isPending}
+            >
+              {t("sources:add.preview")}
+            </Button>
+          )}
+          <Button type="submit" isDisabled={!ready || !label.trim() || save.isPending}>
+            {perChapter ? t("sources:add.saveChapters", { count: plan.chapters.length }) : t("sources:add.save")}
           </Button>
         </div>
         <ErrorMessage error={look.error ?? save.error} />
       </Form>
-      {preview ? <PreviewPanel preview={preview} /> : null}
+      {preview && !fileId ? <PreviewPanel preview={preview} /> : null}
     </Card>
   );
 }

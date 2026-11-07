@@ -88,6 +88,8 @@ def make_handler(config: Config, manager: Manager) -> type[BaseHTTPRequestHandle
                 total, count, result = manager.convert(path, options)
                 reply = {
                     "markdown": result["markdown"],
+                    "pages": result.get("pages", []),
+                    "outline": result.get("outline", []),
                     "pageCount": total,
                     "pagesConverted": count,
                     "figures": int(result.get("figures", 0)),

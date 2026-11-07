@@ -23,7 +23,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { writeAudit } from "../audit.ts";
 import type { AppContext } from "../context.ts";
-import { publishFile, readyFile } from "../convert.ts";
+import { assembleFile, publishFile, readyFile } from "../convert.ts";
 import { streamState } from "../events.ts";
 import { route } from "../http/route.ts";
 import { getSettings } from "../settings.ts";
@@ -147,11 +147,19 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
     app,
     sourcesCreate,
     async ({ body: b, user, request }) => {
-      await checkSourceSize(ctx, b.text);
       const file = b.fileId ? await readyFile(ctx, b.fileId, user) : null;
+      // From a PDF without text: made here from its stored pages (all, or a chapter's), never sent by the browser.
+      const text = b.text ?? (file ? (await assembleFile(ctx, file, b.pageRange)).markdown : "");
+      await checkSourceSize(ctx, text);
       const id = await createSource(
         ctx,
-        { ...b, format: formatOf(b.filename, b.format), sourceFileId: b.fileId },
+        {
+          ...b,
+          text,
+          format: file ? "markdown" : formatOf(b.filename, b.format),
+          sourceFileId: b.fileId,
+          sourcePageRange: file ? b.pageRange : undefined,
+        },
         user.userId,
         requestMeta(request),
       );
@@ -181,8 +189,9 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
     app,
     sourcesUpdate,
     async ({ params, body: b, user }) => {
-      await checkSourceSize(ctx, b.text);
       const file = b.fileId ? await readyFile(ctx, b.fileId, user) : null;
+      const text = b.text ?? (file ? (await assembleFile(ctx, file, b.pageRange)).markdown : "");
+      await checkSourceSize(ctx, text);
       const [source] = await ctx.db.select().from(Source).where(eq(Source.id, params.id));
       if (!source) throw new AppError("source_not_found");
       await addRevision(
@@ -194,9 +203,10 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
           author: b.author ?? source.author ?? undefined,
           edition: b.edition ?? source.edition ?? undefined,
           url: b.url ?? source.url ?? undefined,
-          text: b.text,
-          format: formatOf(b.filename, b.format),
+          text,
+          format: file ? "markdown" : formatOf(b.filename, b.format),
           sourceFileId: b.fileId,
+          sourcePageRange: file ? b.pageRange : undefined,
         },
         user.userId,
       );

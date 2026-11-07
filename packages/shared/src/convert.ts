@@ -41,9 +41,25 @@ export const ConvertOptions = z.strictObject({
 });
 export type ConvertOptions = z.infer<typeof ConvertOptions>;
 
+/** One page as read: its number in the PDF (from 1) and Marker's Markdown for it alone. */
+export const ConvertPage = z.strictObject({ page: z.number().int().min(1), markdown: z.string() });
+export type ConvertPage = z.infer<typeof ConvertPage>;
+
+/** A bookmark in the PDF's own outline: its title, depth (0 at the top) and the page it opens at, if it says. */
+export const OutlineEntry = z.strictObject({
+  title: z.string().max(500),
+  level: z.number().int().min(0).max(15),
+  page: z.number().int().min(1).nullable(),
+});
+export type OutlineEntry = z.infer<typeof OutlineEntry>;
+
 export const ConvertReply = z.strictObject({
-  /** Marker's Markdown, with equations as `$…$` and `$$…$$`; cleaned up by the API, not here. */
+  /** Marker's Markdown, with equations as `$…$` and `$$…$$`; cleaned up by the API, not here. The pages, joined. */
   markdown: z.string(),
+  /** The same, page by page, in order: what the API stores, so a book is never read twice. */
+  pages: z.array(ConvertPage).max(1000),
+  /** The PDF's bookmarks, whole (not only the pages read): chapters and sections with their pages. */
+  outline: z.array(OutlineEntry).max(5000),
   /** Pages in the document, and how many of them were read. */
   pageCount: z.number().int().min(1),
   pagesConverted: z.number().int().min(1),

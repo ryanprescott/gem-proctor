@@ -515,6 +515,8 @@ export const SourceFile = pgTable(
     figures: integer("figures"),
     warnings: jsonValue("warnings").notNull(),
     converter: jsonValue("converter"),
+    /** What the PDF says about itself: `{ outline }`, its bookmarks with their pages (`OutlineEntry[]`). */
+    manifest: jsonValue("manifest"),
     createdAt: ts("created_at").notNull().defaultNow(),
     startedAt: ts("started_at"),
     finishedAt: ts("finished_at"),
@@ -525,6 +527,23 @@ export const SourceFile = pgTable(
     check("source_file_status_check", sql`${t.status} IN ('pending', 'converting', 'ready', 'failed')`),
     check("source_file_strategy_check", sql`${t.strategy} IN ('rasterize', 'text')`),
   ],
+);
+
+/**
+ * A page of a PDF as read: Marker's Markdown for that page alone. A book is read once, then assembled from its pages,
+ * as often as the clean-up or the choice of chapters needs; a retry reads only the pages missing.
+ */
+export const SourceFilePage = pgTable(
+  "source_file_page",
+  {
+    fileId: uuid("file_id")
+      .notNull()
+      .references(() => SourceFile.id),
+    page: integer("page").notNull(),
+    markdown: text("markdown").notNull(),
+    readAt: ts("read_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.fileId, t.page] })],
 );
 
 export const SourceRevision = pgTable(
@@ -543,6 +562,8 @@ export const SourceRevision = pgTable(
     embedError: jsonValue("embed_error"),
     /** The PDF the Markdown was converted from (P2.2.md §4). */
     sourceFileId: uuid("source_file_id").references((): AnyPgColumn => SourceFile.id),
+    /** Which of that PDF's pages it was made from (a chapter); null for all of them. */
+    sourcePageRange: text("source_page_range"),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => User.id),

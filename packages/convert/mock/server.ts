@@ -3,7 +3,9 @@ import {
   CONVERT_OPTIONS_HEADER,
   type ConvertErrorCode,
   ConvertOptions,
+  type ConvertPage,
   type ConvertReply,
+  type OutlineEntry,
 } from "@gem/shared";
 
 /**
@@ -19,6 +21,10 @@ export interface MockConvertOptions {
   documents?: Record<string, string>;
   /** Answers a real PDF, which can't carry flags (the fixtures, for `convert-smoke`): Markdown, or undefined to fall through. */
   answer?: (pdf: Buffer, options: ConvertOptions) => string | undefined;
+  /** Page by page instead: the Markdown for one page (from 1), or undefined for a blank one. */
+  pageAnswer?: (page: number, options: ConvertOptions) => string | undefined;
+  /** The PDF's bookmarks; a PDF can also say `%MOCK:outline=Title:level:page;…`. */
+  outline?: OutlineEntry[];
   /** Every conversion waits this long. */
   delayMs?: number;
   /** Every conversion fails with this code. */
@@ -38,6 +44,27 @@ const DEFAULT_MARKDOWN = "# Mock\n\nThe mock read this. $x^T y = 0$.\n";
 const flag = (text: string, name: string) => new RegExp(`%MOCK:${name}(?:=([^\\r\\n]*))?`).exec(text)?.[1];
 /** Whether the flag is there at all, with or without a value. */
 const has = (text: string, name: string) => new RegExp(`%MOCK:${name}(?:=|[\\r\\n]|$)`).test(text);
+
+/** The pages a range selects (from 1), or null for one past the end. */
+function pagesOf(range: string | undefined, pageCount: number): number[] | null {
+  if (!range) return Array.from({ length: pageCount }, (_, i) => i + 1);
+  const pages = new Set<number>();
+  for (const part of range.split(",")) {
+    const [low, high = low] = part.split("-").map(Number) as [number, number?];
+    if (low < 1 || (high as number) < low || (high as number) > pageCount) return null;
+    for (let p = low; p <= (high as number); p++) pages.add(p);
+  }
+  return [...pages].sort((a, b) => a - b);
+}
+
+const outlineOf = (text: string | undefined): OutlineEntry[] =>
+  (text ?? "")
+    .split(";")
+    .filter(Boolean)
+    .map((part) => {
+      const [title = "", level = "0", page = ""] = part.split(":");
+      return { title, level: Number(level), page: page === "" ? null : Number(page) };
+    });
 
 export class MockConvertServer {
   readonly conversions: CapturedConversion[] = [];
@@ -106,18 +133,38 @@ export class MockConvertServer {
       if (fail) return this.error(fail);
       const pageCount = Number(flag(text, "pages") ?? 1);
       if (pageCount > (this.options.maxPages ?? 400)) return this.error("too_many_pages");
+      const selected = pagesOf(options.pageRange, pageCount);
+      if (!selected) return this.error("bad_range");
       const named = this.options.documents?.[flag(text, "doc") ?? ""];
       const answered = this.options.answer?.(pdf, options);
-      // The canned Markdown is the whole document: it is what a request from the first page reads, and later pages
-      // alone read as blank, as the API's batches ask for them (the real converter answers `empty` for blank pages).
-      const fromStart = !options.pageRange || options.pageRange.split(",").some((part) => part.split("-")[0] === "1");
-      const canned = fromStart ? (named ?? this.options.markdown ?? DEFAULT_MARKDOWN) : "";
-      const markdown = has(text, "empty") ? "" : (answered ?? canned);
+      // The canned Markdown is the whole document, and page 1's: later pages read alone are blank, as the API's
+      // batches ask for them (the real converter answers `empty` for a request of blank pages).
+      const canned = named ?? this.options.markdown ?? DEFAULT_MARKDOWN;
+      const pages: ConvertPage[] = selected.map((page, i) => ({
+        page,
+        markdown: has(text, "empty")
+          ? ""
+          : this.options.pageAnswer
+            ? (this.options.pageAnswer(page, options) ?? "")
+            : answered !== undefined
+              ? i === 0
+                ? answered
+                : ""
+              : page === 1
+                ? canned
+                : "",
+      }));
+      const markdown = pages
+        .map((p) => p.markdown)
+        .filter((m) => m.trim() !== "")
+        .join("\n\n");
       if (markdown.trim() === "") return this.error("empty");
       const reply: ConvertReply = {
         markdown,
+        pages,
+        outline: this.options.outline ?? outlineOf(flag(text, "outline")),
         pageCount,
-        pagesConverted: pageCount,
+        pagesConverted: selected.length,
         figures: Number(flag(text, "figures") ?? 0),
         strategy: options.strategy ?? "rasterize",
         converter: { name: "mock", version: "0" },

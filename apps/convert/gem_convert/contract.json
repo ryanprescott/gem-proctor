@@ -25,6 +25,64 @@
       "markdown": {
         "type": "string"
       },
+      "pages": {
+        "maxItems": 1000,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "page": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "markdown": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "page",
+            "markdown"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "outline": {
+        "maxItems": 5000,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "page": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "title",
+            "level",
+            "page"
+          ],
+          "additionalProperties": false
+        }
+      },
       "pageCount": {
         "type": "integer",
         "minimum": 1,
@@ -72,6 +130,8 @@
     },
     "required": [
       "markdown",
+      "pages",
+      "outline",
       "pageCount",
       "pagesConverted",
       "figures",
