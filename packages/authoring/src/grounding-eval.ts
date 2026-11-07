@@ -1,6 +1,6 @@
 import { type EvalReport, type EvalRunOptions, type GroundingEvalSet, LlmError, type LlmRuntime } from "@gem/llm";
 import { type GeneratedQuestion, GenerationBatch } from "@gem/shared";
-import { checkGrounding } from "./validate/grounding.ts";
+import { checkGrounding, matchQuote } from "./validate/grounding.ts";
 import { checkForm } from "./validate/leakage.ts";
 import { checkStructure } from "./validate/structure.ts";
 
@@ -40,6 +40,7 @@ function check(q: GeneratedQuestion, set: GroundingEvalSet) {
     {
       objectiveIds: new Set(set.fixtures.objectives.map((o) => o.id)),
       chunkIds: new Set(set.fixtures.chunks.map((c) => c.id)),
+      chunks: texts,
     },
   );
   const l2 = checkGrounding(evidence, texts, THRESHOLD);
@@ -52,7 +53,20 @@ function check(q: GeneratedQuestion, set: GroundingEvalSet) {
     passages: [...evidence.map((e) => e.quote), ...evidence.flatMap((e) => texts.get(e.chunkId) ?? [])],
     computable: q.computable,
   });
-  return { l1: l1.outcome !== "fail", l2: l2.outcome !== "fail", l3: l3.outcome !== "fail" };
+  const failed = (layer: string, r: { issues: { code: string; severity: string }[] }) =>
+    r.issues.filter((i) => i.severity === "fail").map((i) => `${layer}:${i.code}`);
+  return {
+    l1: l1.outcome !== "fail",
+    l2: l2.outcome !== "fail",
+    l3: l3.outcome !== "fail",
+    // What failed, so a pass rate below 1 can be read: "L2:quote_not_found", "L1:source_not_in_quote".
+    failed: [...failed("L1", l1), ...failed("L2", l2), ...failed("L3", l3)],
+    // The quotes L2 refused, shortened: to see whether a model is quoting equations, joining text with "...", or
+    // paraphrasing.
+    badQuotes: evidence
+      .filter((e) => matchQuote(e.quote, texts.get(e.chunkId) ?? "", THRESHOLD).match === "missing")
+      .map((e) => e.quote.slice(0, 220)),
+  };
 }
 
 export async function runGroundingEval(
@@ -80,6 +94,8 @@ export async function runGroundingEval(
         l1: checked.filter((c) => c.l1).length,
         l2: checked.filter((c) => c.l2).length,
         l3: checked.filter((c) => c.l3).length,
+        failed: checked.flatMap((c) => c.failed),
+        badQuotes: checked.flatMap((c) => c.badQuotes),
         seconds: round(r.latencyMs / 1000, 3),
       });
     } catch (err) {

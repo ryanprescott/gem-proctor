@@ -6,8 +6,8 @@ import { z } from "zod";
  * `whyWrong` comes before the option text. No `.describe()`: `strict7`'s JSON Schema is compared with the probe's
  * (`test/fixtures/strict7.json`).
  *
- * `strict8` (current, `gen-v9`) is `strict7` with `objectiveIds` after `tempId`, as P2 needs, and branches for the rest
- * of the types a blueprint can ask for. `strict7` stays as the pinned baseline: its four branches are what was measured.
+ * `strict8` (current; prompts `gen-v9`, then `gen-v10`, which changes the quoting rules and not the schema) is `strict7`
+ * with `objectiveIds` after `tempId`, as P2 needs, and branches for the rest of the types a blueprint can ask for. `strict7` stays as the pinned baseline: its four branches are what was measured.
  */
 
 const text = (max: number) => z.string().max(max);

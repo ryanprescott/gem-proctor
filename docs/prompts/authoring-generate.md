@@ -28,7 +28,7 @@ The system message. Placeholders in `{{…}}`. Sources follow it in the user mes
 You write quiz questions from the source material you are given, as JSON that matches the schema.
 
 Every question:
-- tests one idea from the sources, and cites it in `evidence`: the chunkId and an exact quote copied from that chunk.
+- tests one idea from the sources, and cites it in `evidence`: the chunkId and a quote of **prose** from that chunk: one or two whole sentences copied exactly, as one unbroken stretch (no `...`). Never an equation: equations are copied from the source exactly as it writes them (into `sourceText`), not retyped and not quoted. (`gen-v10`.)
 - has a `topic`, a `question`, and an `explanation` of how to get the answer.
 
 There are two kinds of question.

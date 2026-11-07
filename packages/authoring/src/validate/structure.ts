@@ -21,6 +21,12 @@ export interface StructureContext {
   objectiveIds: ReadonlySet<string>;
   /** The chunks the call sent. A citation to anything else can't be checked (SPEC §3A.2). */
   chunkIds: ReadonlySet<string>;
+  /**
+   * The text of those chunks. A value a question takes from the source (`from: "source"`) may be anywhere in a chunk
+   * it cites, an equation included: quotes are prose, and equations are copied from the source, not quoted. Without
+   * the texts, the value has to be in a quote, as before.
+   */
+  chunks?: ReadonlyMap<string, string>;
 }
 
 const COMPUTABLE_TYPES = new Set(["single_choice", "true_false", "numeric", "short_answer"]);
@@ -37,7 +43,7 @@ export function placeholdersIn(text: string): string[] {
 
 const withoutPlaceholders = (text: string) => text.replace(/\{[a-zA-Z][a-zA-Z0-9]{0,5}\}/g, " ");
 
-function computableIssues(q: StructureInput): ValidationIssue[] {
+function computableIssues(q: StructureInput, chunks?: ReadonlyMap<string, string>): ValidationIssue[] {
   const out: ValidationIssue[] = [];
   if (!COMPUTABLE_TYPES.has(q.type)) out.push(issue("not_computable_type", "fail", { type: q.type }));
   if (q.answerProgram.trim() === "") out.push(issue("program_missing", "fail"));
@@ -59,8 +65,11 @@ function computableIssues(q: StructureInput): ValidationIssue[] {
   }
 
   const quotes = q.evidence.map((e) => normalizeText(e.quote)).join("\n");
+  // What a value taken from the source can be copied from: a quote, or a chunk the question cites.
+  const cited = q.evidence.map((e) => normalizeText(chunks?.get(e.chunkId) ?? "")).join("\n");
   for (const input of q.inputs) {
-    if (input.from === "source" && !quotes.includes(normalizeText(input.sourceText))) {
+    const value = normalizeText(input.sourceText);
+    if (input.from === "source" && !quotes.includes(value) && !cited.includes(value)) {
       out.push(issue("source_not_in_quote", "fail", { name: input.name }));
     }
   }
@@ -88,7 +97,7 @@ function conceptIssues(q: StructureInput): ValidationIssue[] {
 }
 
 export function checkStructure(q: StructureInput, ctx: StructureContext): LayerResult {
-  const issues: ValidationIssue[] = q.computable ? computableIssues(q) : conceptIssues(q);
+  const issues: ValidationIssue[] = q.computable ? computableIssues(q, ctx.chunks) : conceptIssues(q);
   const texts = q.options.map((o) => normalizeText(o.text));
   if (new Set(texts).size !== texts.length) issues.push(issue("options_not_unique", "fail"));
   for (const id of q.objectiveIds) {

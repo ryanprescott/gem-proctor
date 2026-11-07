@@ -189,6 +189,40 @@ describe("E29: L1", () => {
     expect(codes(source("zero"))).not.toContain("source_not_in_quote");
   });
 
+  test("a source value may come from the cited chunk, an equation included, without being in the quote", () => {
+    const chunk =
+      "Subtracting is similar. $$\\begin{bmatrix} 1 \\\\ 9 \\end{bmatrix} - \\begin{bmatrix} 1 \\\\ 1 \\end{bmatrix}$$ " +
+      "The result of vector subtraction is called the difference of the two vectors.";
+    const withChunks = {
+      ...ctx,
+      chunkIds: new Set(["c1", "c2"]),
+      chunks: new Map([
+        ["c1", chunk],
+        ["c2", "A different passage with $\\begin{bmatrix} 5 \\\\ 6 \\end{bmatrix}$ in it."],
+      ]),
+    };
+    // The quote is prose; the value is an equation in the chunk, copied exactly as the chunk writes it.
+    const source = (sourceText: string, chunkId = "c1", context: typeof withChunks | typeof ctx = withChunks) =>
+      checkStructure(
+        calc({
+          evidence: [
+            { chunkId, quote: "The result of vector subtraction is called the difference of the two vectors." },
+          ],
+          inputs: [
+            { name: "x", from: "source", sourceText },
+            { name: "y", from: "sample", sourceText: "" },
+          ],
+        }),
+        context,
+      );
+    expect(codes(source("\\begin{bmatrix} 1 \\\\ 9 \\end{bmatrix}"))).not.toContain("source_not_in_quote");
+    // Not in the cited chunk: still refused, even if another chunk of the call has it.
+    expect(codes(source("\\begin{bmatrix} 5 \\\\ 6 \\end{bmatrix}"))).toContain("source_not_in_quote");
+    expect(codes(source("\\begin{bmatrix} 7 \\\\ 7 \\end{bmatrix}"))).toContain("source_not_in_quote");
+    // Without the chunk texts the old rule holds: the value has to be in a quote.
+    expect(codes(source("\\begin{bmatrix} 1 \\\\ 9 \\end{bmatrix}", "c1", ctx))).toContain("source_not_in_quote");
+  });
+
   test("after L7 exactly one option is true, and there is an answer", () => {
     expect(
       checkAfterL7({ type: "single_choice", options: [{ isCorrect: true }, { isCorrect: false }], correctAnswer: "a" })

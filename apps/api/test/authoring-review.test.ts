@@ -456,7 +456,7 @@ describe.skipIf(!hasDb || !verifyPython)("authoring review and publish", () => {
       expect(p.questions).toHaveLength(3);
       const pq = p.questions.find((x) => x.draftId === q.id) as Provenance["questions"][number];
       expect(pq.call.callLogId).not.toBeNull();
-      expect(pq.call).toMatchObject({ promptVersion: "gen-v9", model: "mock-model" });
+      expect(pq.call).toMatchObject({ promptVersion: "gen-v10", model: "mock-model" });
       expect(pq.evidence[0]).toMatchObject({
         sourceRevisionNumber: detail.sources[0]?.revisionNumber,
         sourceTitle: "Book",

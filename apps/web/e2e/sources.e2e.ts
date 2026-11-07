@@ -91,7 +91,12 @@ test("E16 E18 add, preview, save, and watch embedding finish, announced", async 
     .toMatch(/Embedding: \d+ of \d+ chunks/);
   await expect.poll(() => liveRegionText(page), { timeout: 20_000 }).toContain("is ready to use");
   // The header says it, with its mark (the mark itself is hidden from screen readers).
-  await expect(page.getByRole("main").getByText(/Ready$/).first()).toBeVisible();
+  await expect(
+    page
+      .getByRole("main")
+      .getByText(/Ready$/)
+      .first(),
+  ).toBeVisible();
   await expectNoAxeViolations(page, "source ready");
 
   await page.goto("/sources");

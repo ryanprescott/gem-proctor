@@ -258,7 +258,7 @@ export function localChecks(
       options: content.computable ? [] : (content.options ?? []),
       mistakes: content.mistakes,
     },
-    context,
+    { ...context, chunks },
   );
   const grounding = checkGrounding(evidence, chunks, threshold);
   const passages = [

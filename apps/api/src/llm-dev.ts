@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { encryptSecret } from "@gem/db";
-import { createLlmRuntime, type LlmStore, type Target } from "@gem/llm";
+import { createLlmRuntime, type LlmStore, type PromptSource, type Target } from "@gem/llm";
 import type { ModelRole } from "@gem/shared";
 import type { Config } from "./config.ts";
 import { devAssignments } from "./llm-seed.ts";
@@ -44,6 +44,7 @@ function devStore(config: Config): LlmStore {
   };
 }
 
-export function devRuntime(config: Config) {
-  return createLlmRuntime({ store: devStore(config), secretKey: runKey });
+/** `prompts` picks other prompt versions than the active ones: to compare two on the same model, in one run. */
+export function devRuntime(config: Config, prompts?: PromptSource) {
+  return createLlmRuntime({ store: devStore(config), secretKey: runKey, ...(prompts ? { prompts } : {}) });
 }

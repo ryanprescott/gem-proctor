@@ -43,7 +43,7 @@ const batch = (quote = QUOTE) =>
 describe("C28: prompts", () => {
   test("every prompt has its version id, in its file, and renders", () => {
     expect(ACTIVE_PROMPTS).toMatchObject({
-      "authoring.generate": "gen-v9",
+      "authoring.generate": "gen-v10",
       "verify.solve.blind": "blind-v2",
       "verify.solve.classify": "classify-v1",
       "program-repair": "repair-v1",
@@ -75,7 +75,13 @@ describe("C28: prompts", () => {
   });
 
   test("the eval sets parse, with the sizes §5 asks for", () => {
-    expect(listEvalSets()).toEqual(["generate-smoke", "grounding-smoke", "l7-smoke", "retrieval-mini"]);
+    expect(listEvalSets()).toEqual([
+      "generate-smoke",
+      "grounding-latex",
+      "grounding-smoke",
+      "l7-smoke",
+      "retrieval-mini",
+    ]);
     const r = loadEvalSet("retrieval-mini");
     if (r.kind !== "retrieval") throw new Error("kind");
     expect(r.fixtures.chunks.length).toBeGreaterThanOrEqual(14);
@@ -143,7 +149,12 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
     const res = await start({ evalSet: "generate-smoke", trials: 2 });
     expect(res.statusCode).toBe(200);
     const queued = res.json().run;
-    expect(queued).toMatchObject({ status: "queued", role: "authoring.generate", model: "m", promptVersion: "gen-v9" });
+    expect(queued).toMatchObject({
+      status: "queued",
+      role: "authoring.generate",
+      model: "m",
+      promptVersion: "gen-v10",
+    });
     const run = await finished(queued.id);
     expect(run.status).toBe("done");
     expect(run.summary).toMatchObject({
@@ -158,7 +169,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
     expect(run.items).toHaveLength(2);
     const calls = await t.db.select().from(LlmCallLog).where(eq(LlmCallLog.evalRunId, queued.id));
     expect(calls).toHaveLength(2);
-    expect(calls[0]).toMatchObject({ kind: "eval", promptVersion: "gen-v9", role: "authoring.generate" });
+    expect(calls[0]).toMatchObject({ kind: "eval", promptVersion: "gen-v10", role: "authoring.generate" });
     expect(calls[0]?.requestBody).not.toBeNull();
   });
 
@@ -199,7 +210,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
   test("E51: grounding-smoke: L1 to L3 pass rates of the generated questions, through the job", async () => {
     const run = await finished((await start({ evalSet: "grounding-smoke", trials: 2 })).json().run.id);
     expect(run.status).toBe("done");
-    expect(run.promptVersion).toBe("gen-v9");
+    expect(run.promptVersion).toBe("gen-v10");
     // The mock's batch: four questions on the fixture's first chunk, the last quoting words that aren't in it.
     expect(run.summary).toMatchObject({
       trials: 2,
@@ -237,7 +248,13 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
   test("an unknown set is 404; the list is newest first and filters by role", async () => {
     expect((await start({ evalSet: "nope" })).statusCode).toBe(404);
     const body = (await admin.get(`${API}/admin/llm/evals`)).json();
-    expect(body.evalSets).toEqual(["generate-smoke", "grounding-smoke", "l7-smoke", "retrieval-mini"]);
+    expect(body.evalSets).toEqual([
+      "generate-smoke",
+      "grounding-latex",
+      "grounding-smoke",
+      "l7-smoke",
+      "retrieval-mini",
+    ]);
     const stamps = body.runs.map((r: { createdAt: string }) => r.createdAt);
     expect([...stamps].sort().reverse()).toEqual(stamps);
     const only = (await admin.get(`${API}/admin/llm/evals?role=embeddings`)).json().runs;
@@ -281,7 +298,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
     expect(err).toBe("");
     expect(code).toBe(0);
     expect(out).toContain("eval generate-smoke (authoring.generate)");
-    expect(out).toContain("prompt gen-v9");
+    expect(out).toContain("prompt gen-v10");
     for (const [k, v] of Object.entries(run.summary)) {
       if (k !== "secondsPerQuestion") expect(out).toContain(`  ${k}: ${v}`);
     }

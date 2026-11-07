@@ -1,0 +1,40 @@
+{
+  "name": "grounding-latex",
+  "kind": "grounding",
+  "role": "authoring.generate",
+  "prompt": "authoring.generate",
+  "schema": "strict8",
+  "defaultTrials": 3,
+  "request": {
+    "vars": {
+      "allowedImports": "fractions, itertools, math, numpy, statistics, sympy",
+      "resultTypeRules": "for single_choice, numeric and short_answer: a number, Fraction, list (vector), list of lists (matrix) or sympy expression; for true_false: True or False (a bool, not a number)",
+      "styleGuidance": "Test type: chapter quiz. Test individual concepts and definitions, evenly across the chapter's sections."
+    },
+    "count": 4,
+    "counts": "2 single_choice, 1 true_false, 1 short_answer"
+  },
+  "fixtures": {
+    "chunks": [
+      {
+        "id": "evals:subtraction:c1",
+        "text": "$$\\begin{bmatrix} 7 \\\\ 3 \\end{bmatrix} - \\begin{bmatrix} 2 \\\\ 1 \\end{bmatrix} = \\begin{bmatrix} 5 \\\\ 2 \\end{bmatrix}.$$\n\n**Properties.** Several properties of vector addition are easily verified. For any vectors $a$, $b$, and $c$ of the same size we have the following.\n\nThe result of vector subtraction is called the *difference* of the two vectors.\n\n- Vector addition is *commutative*: $a + b = b + a$.\n- Vector addition is *associative*: $(a + b) + c = a + (b + c)$. We can therefore write both as $a + b + c$.\n- Subtracting a vector from itself yields the zero vector: $a - a = 0$.\n\nTo show that these properties hold, we argue using the definition of vector addition and vector equality. For example, the $i$th entry of $a + b$ is $a_i + b_i$, which equals $b_i + a_i$, the $i$th entry of $b + a$."
+      },
+      {
+        "id": "evals:norms:c1",
+        "text": "The *norm* of an $n$-vector $x$ is $$\\|x\\| = \\sqrt{x_1^2 + x_2^2 + \\cdots + x_n^2} = \\sqrt{x^T x}.$$\n\nThe norm is never negative, and it is zero only for the zero vector. Scaling a vector scales its norm by the size of the number: $\\|\\beta x\\| = |\\beta| \\|x\\|$.\n\nAs an example, for $x = (2, -1, 2)$ we have $x^T x = 4 + 1 + 4 = 9$, so $\\|x\\| = 3$.\n\nThe *distance* between two vectors $a$ and $b$ is $\\mathbf{dist}(a, b) = \\|a - b\\|$. Two vectors are close when this number is small."
+      }
+    ],
+    "objectives": [
+      {
+        "id": "O1",
+        "label": "Vector addition, subtraction and their properties"
+      },
+      {
+        "id": "O2",
+        "label": "The norm of a vector and the distance between vectors"
+      }
+    ]
+  },
+  "metrics": ["validFirstTry", "validAfterRepairs", "l1Pass", "l2Pass", "l3Pass", "secondsPerQuestion"]
+}
