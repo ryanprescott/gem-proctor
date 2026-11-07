@@ -13,6 +13,8 @@ export const email = (who: string) => `${who}-${RUN}@example.com`;
 /** WCAG 2.2 AA rule set (SPEC §1.3). */
 export async function expectNoAxeViolations(page: Page, label: string) {
   await page.waitForLoadState("networkidle");
+  // A dialog or menu fading in is partly transparent, which reads as low contrast: check it once it's there.
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa", "best-practice"])
     .analyze();

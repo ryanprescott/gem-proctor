@@ -132,9 +132,17 @@ test("a session from a source: objectives from its headings, a blueprint, genera
   sessionUrl = new URL(page.url()).pathname;
   await expect(page.getByRole("heading", { name: "Vectors quiz", level: 1 })).toBeVisible();
   // One objective per section with text, from the headings.
-  await expect(page.getByLabel("Objective 1", { exact: true })).toHaveValue("Chapter 1: Vectors");
-  await expect(page.getByLabel("Objective 2", { exact: true })).toHaveValue("Inner product");
-  await expect(page.getByLabel("Objective 3", { exact: true })).toHaveValue("Norms");
+  const objectives = page.getByRole("list", { name: "Objectives" }).getByRole("listitem");
+  await expect(objectives.nth(0)).toContainText("Chapter 1: Vectors");
+  await expect(objectives.nth(1)).toContainText("Inner product");
+  await expect(objectives.nth(2)).toContainText("Norms");
+  // Editing one opens a dialog with its fields, rather than every objective's fields on the page.
+  await page.getByRole("button", { name: "Actions for objective 2" }).click();
+  await page.getByRole("menuitem", { name: "Edit" }).click();
+  const edit = page.getByRole("dialog", { name: "Edit objective" });
+  await expect(edit.getByLabel("Objective", { exact: true })).toHaveValue("Inner product");
+  await expectNoAxeViolations(page, "editing an objective");
+  await edit.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByText("Set the blueprint first.")).toBeVisible();
   await expectNoAxeViolations(page, "session draft");
 

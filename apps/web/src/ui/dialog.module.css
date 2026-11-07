@@ -1,20 +1,52 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgb(0 0 0 / 0.5);
+  background: var(--color-overlay);
+  backdrop-filter: blur(2px);
   display: grid;
   place-items: center;
-  z-index: 30;
+  padding: var(--space-4);
+  z-index: 40;
+}
+
+.overlay[data-entering] {
+  animation: fade-in var(--duration) var(--ease-out);
 }
 
 .modal {
   background: var(--color-surface-raised);
   color: var(--color-text);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  inline-size: min(32rem, calc(100vw - 2rem));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  inline-size: min(32rem, 100%);
   max-block-size: calc(100vh - 2rem);
   overflow-y: auto;
+}
+
+.modal[data-entering] {
+  animation: rise-in var(--duration) var(--ease-out);
+}
+
+.medium {
+  inline-size: min(40rem, 100%);
+}
+
+.large {
+  inline-size: min(56rem, 100%);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
 }
 
 .dialog {
@@ -23,14 +55,16 @@
 }
 
 .title {
-  margin-block-start: 0;
-  font-size: 1.25rem;
+  margin-block: 0 var(--space-4);
+  font-size: var(--text-lg);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: end;
-  gap: var(--space-3);
-  margin-block-start: var(--space-4);
+  gap: var(--space-2);
+  margin-block-start: var(--space-5);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--color-border);
 }

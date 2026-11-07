@@ -151,3 +151,61 @@
     font-weight: 700;
   }
 }
+
+/* The session page */
+.headerMeta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.objectiveList {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.objectiveRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  min-block-size: 2.75rem;
+  border-block-end: 1px solid var(--color-border);
+}
+
+.objectiveRow:last-child {
+  border-block-end: 0;
+}
+
+.objectiveRow:hover {
+  background: var(--color-surface);
+}
+
+.objectivePick {
+  inline-size: 1rem;
+  block-size: 1rem;
+  accent-color: var(--color-accent);
+}
+
+.objectiveNumber {
+  inline-size: 1.5rem;
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.objectiveText {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.objectiveLabel {
+  font-weight: var(--weight-medium);
+}

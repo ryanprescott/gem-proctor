@@ -19,21 +19,48 @@ import {
   sourcesSections,
 } from "@gem/shared/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Form } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client.ts";
 import { useServerState } from "../api/events.ts";
 import { RequireRole } from "../auth.tsx";
 import { formatNumber } from "../format.ts";
-import { Button, Card, ErrorMessage, Select, TextField } from "../ui/controls.tsx";
+import { Badge } from "../ui/Badge.tsx";
+import { Button, ButtonLink, Card, ErrorMessage, Select, TextField } from "../ui/controls.tsx";
+import { Dialog } from "../ui/Dialog.tsx";
+import { Disclosure } from "../ui/Disclosure.tsx";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
+import { Menu, MenuItem } from "../ui/Menu.tsx";
+import { PageHeader } from "../ui/PageHeader.tsx";
 import { ScopeTree } from "../ui/ScopeTree.tsx";
 import styles from "./Authoring.module.css";
 import { ReviewSection } from "./AuthoringReview.tsx";
 
 type Refresh = () => Promise<unknown>;
+
+/**
+ * One stage of a session (scope, objectives, blueprint, generation): a section that opens and closes, with a line
+ * saying where it stands while closed. The stage you're on opens by default; the others stay out of the way.
+ */
+function Step({
+  title,
+  summary,
+  open,
+  children,
+}: {
+  title: string;
+  summary: string;
+  open: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Disclosure title={title} summary={summary} defaultExpanded={open} level={2}>
+      {children}
+    </Disclosure>
+  );
+}
 
 // ── Sources and scope ────────────────────────────────────────────────
 
@@ -82,7 +109,7 @@ function SourceScope({
   );
 }
 
-function ScopeSection({ detail, refresh }: { detail: SessionDetail; refresh: Refresh }) {
+function ScopeSection({ detail, refresh, open }: { detail: SessionDetail; refresh: Refresh; open: boolean }) {
   const { t } = useTranslation();
   const { announce } = useLive();
   const editable = detail.session.status === "draft" && detail.questions.length === 0;
@@ -112,7 +139,13 @@ function ScopeSection({ detail, refresh }: { detail: SessionDetail; refresh: Ref
   });
   const changed = detail.sources.filter((s) => s.changed);
   return (
-    <Card title={t("authoring:scope.title")}>
+    <Step
+      title={t("authoring:scope.title")}
+      summary={detail.sources
+        .map((s) => t("authoring:scope.source", { title: s.title, revision: s.revisionNumber }))
+        .join(", ")}
+      open={open || changed.length > 0}
+    >
       {changed.length > 0 ? (
         <div className={styles.notice} role="status">
           <p>
@@ -143,7 +176,7 @@ function ScopeSection({ detail, refresh }: { detail: SessionDetail; refresh: Ref
         </div>
       ) : null}
       <ErrorMessage error={save.error} />
-    </Card>
+    </Step>
   );
 }
 
@@ -160,12 +193,14 @@ const toItem = (o: ObjectiveView): Item => ({
   sectionIds: o.sectionIds,
 });
 
-function ObjectivesSection({ detail, refresh }: { detail: SessionDetail; refresh: Refresh }) {
+function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; refresh: Refresh; open: boolean }) {
   const { t } = useTranslation();
   const { announce } = useLive();
   const editable = detail.session.status === "draft" && detail.questions.length === 0;
   const [items, setItems] = useState<Item[]>(() => detail.objectives.map(toItem));
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // The objective being edited in the dialog (a copy), or a new one; null when the dialog is closed.
+  const [editing, setEditing] = useState<{ item: Item; isNew: boolean } | null>(null);
   const seen = useRef(JSON.stringify(detail.objectives));
   useEffect(() => {
     const now = JSON.stringify(detail.objectives);
@@ -200,8 +235,6 @@ function ObjectivesSection({ detail, refresh }: { detail: SessionDetail; refresh
       );
     },
   });
-  const edit = (key: string, patch: Partial<Item>) =>
-    setItems((list) => list.map((i) => (i.key === key ? { ...i, ...patch } : i)));
   const merge = () => {
     const chosen = items.filter((i) => picked.has(i.key));
     const [first] = chosen;
@@ -216,60 +249,66 @@ function ObjectivesSection({ detail, refresh }: { detail: SessionDetail; refresh
     setPicked(new Set());
   };
   return (
-    <Card title={t("authoring:objectives.title")}>
-      <p>{t("authoring:objectives.help")}</p>
-      <ul className={styles.questions}>
+    <Step
+      title={t("authoring:objectives.title")}
+      summary={t("authoring:objectives.summary", { count: items.length })}
+      open={open}
+    >
+      <p className={styles.muted}>{t("authoring:objectives.help")}</p>
+      <ol className={styles.objectiveList} aria-label={t("authoring:objectives.title")}>
         {items.map((o, n) => (
-          <li key={o.key} className={styles.objective}>
-            <TextField
-              label={t("authoring:objectives.label", { n: n + 1 })}
-              value={o.label}
-              onChange={(label) => edit(o.key, { label })}
-              isDisabled={!editable}
-            />
-            <TextField
-              label={t("authoring:objectives.description", { n: n + 1 })}
-              value={o.description ?? ""}
-              onChange={(description) => edit(o.key, { description })}
-              isDisabled={!editable}
-              multiline
-              rows={2}
-            />
-            <p className={styles.muted}>{t("authoring:objectives.evidence", { count: o.evidence.length })}</p>
+          <li key={o.key} className={styles.objectiveRow}>
             {editable ? (
-              <div className={styles.row}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={picked.has(o.key)}
-                    onChange={(e) =>
-                      setPicked((p) => {
-                        const next = new Set(p);
-                        if (e.target.checked) next.add(o.key);
-                        else next.delete(o.key);
-                        return next;
-                      })
-                    }
-                  />{" "}
-                  {t("authoring:objectives.pick", { n: n + 1 })}
-                </label>
-                <Button variant="secondary" onPress={() => setItems((l) => l.filter((i) => i.key !== o.key))}>
-                  {t("authoring:objectives.remove", { n: n + 1 })}
-                </Button>
-              </div>
+              <input
+                type="checkbox"
+                className={styles.objectivePick}
+                aria-label={t("authoring:objectives.pick", { n: n + 1 })}
+                checked={picked.has(o.key)}
+                onChange={(e) =>
+                  setPicked((p) => {
+                    const next = new Set(p);
+                    if (e.target.checked) next.add(o.key);
+                    else next.delete(o.key);
+                    return next;
+                  })
+                }
+              />
+            ) : null}
+            <span className={styles.objectiveNumber} aria-hidden="true">
+              {n + 1}
+            </span>
+            <div className={styles.objectiveText}>
+              <span className={styles.objectiveLabel}>{o.label || t("authoring:objectives.untitled")}</span>
+              {o.description ? <span className={styles.muted}>{o.description}</span> : null}
+            </div>
+            <Badge>{t("authoring:objectives.evidence", { count: o.evidence.length })}</Badge>
+            {editable ? (
+              <Menu
+                label={t("authoring:objectives.actions", { n: n + 1 })}
+                items={
+                  <>
+                    <MenuItem onAction={() => setEditing({ item: { ...o }, isNew: false })}>
+                      {t("authoring:objectives.edit")}
+                    </MenuItem>
+                    <MenuItem danger onAction={() => setItems((l) => l.filter((i) => i.key !== o.key))}>
+                      {t("authoring:objectives.removeShort")}
+                    </MenuItem>
+                  </>
+                }
+              />
             ) : null}
           </li>
         ))}
-      </ul>
+      </ol>
       {editable ? (
         <div className={styles.row}>
           <Button
             variant="secondary"
             onPress={() =>
-              setItems((l) => [
-                ...l,
-                { key: crypto.randomUUID(), label: "", description: "", evidence: [], sectionIds: [] },
-              ])
+              setEditing({
+                item: { key: crypto.randomUUID(), label: "", description: "", evidence: [], sectionIds: [] },
+                isNew: true,
+              })
             }
           >
             {t("authoring:objectives.add")}
@@ -289,7 +328,47 @@ function ObjectivesSection({ detail, refresh }: { detail: SessionDetail; refresh
         </div>
       ) : null}
       <ErrorMessage error={save.error ?? propose.error} />
-    </Card>
+      {editing ? (
+        <Dialog
+          isOpen
+          onOpenChange={(isOpen) => !isOpen && setEditing(null)}
+          title={editing.isNew ? t("authoring:objectives.addTitle") : t("authoring:objectives.editTitle")}
+          size="medium"
+          actions={
+            <>
+              <Button variant="secondary" onPress={() => setEditing(null)}>
+                {t("common:cancel")}
+              </Button>
+              <Button
+                isDisabled={editing.item.label.trim() === ""}
+                onPress={() => {
+                  const item = editing.item;
+                  setItems((l) => (editing.isNew ? [...l, item] : l.map((i) => (i.key === item.key ? item : i))));
+                  setEditing(null);
+                }}
+              >
+                {t("authoring:objectives.apply")}
+              </Button>
+            </>
+          }
+        >
+          <TextField
+            label={t("authoring:objectives.labelField")}
+            value={editing.item.label}
+            onChange={(label) => setEditing({ ...editing, item: { ...editing.item, label } })}
+            autoFocus
+          />
+          <TextField
+            label={t("authoring:objectives.descriptionField")}
+            value={editing.item.description ?? ""}
+            onChange={(description) => setEditing({ ...editing, item: { ...editing.item, description } })}
+            multiline
+            rows={3}
+          />
+          <p className={styles.muted}>{t("authoring:objectives.applyHelp")}</p>
+        </Dialog>
+      ) : null}
+    </Step>
   );
 }
 
@@ -297,7 +376,7 @@ function ObjectivesSection({ detail, refresh }: { detail: SessionDetail; refresh
 
 const num = (s: string) => Math.max(0, Math.floor(Number(s) || 0));
 
-function BlueprintSection({ detail, refresh }: { detail: SessionDetail; refresh: Refresh }) {
+function BlueprintSection({ detail, refresh, open }: { detail: SessionDetail; refresh: Refresh; open: boolean }) {
   const { t } = useTranslation();
   const { announce } = useLive();
   const editable = detail.session.status === "draft" && detail.questions.length === 0;
@@ -323,8 +402,12 @@ function BlueprintSection({ detail, refresh }: { detail: SessionDetail; refresh:
   const sum = (o: Record<string, number | undefined>) => Object.values(o).reduce<number>((n, c) => n + (c ?? 0), 0);
   const label = (id: string) => detail.objectives.find((o) => o.id === id)?.label ?? id;
   return (
-    <Card title={t("authoring:blueprint.title")}>
-      <p>{t("authoring:blueprint.help")}</p>
+    <Step
+      title={t("authoring:blueprint.title")}
+      summary={bp ? t("authoring:blueprint.summary", { count: bp.questionCount }) : t("authoring:blueprint.notSet")}
+      open={open}
+    >
+      <p className={styles.muted}>{t("authoring:blueprint.help")}</p>
       <Select
         label={t("authoring:blueprint.testType")}
         selectedKey={bp?.testType ?? detail.session.testType}
@@ -428,7 +511,7 @@ function BlueprintSection({ detail, refresh }: { detail: SessionDetail; refresh:
         <p>{t("authoring:blueprint.none")}</p>
       )}
       <ErrorMessage error={apply.error} />
-    </Card>
+    </Step>
   );
 }
 
@@ -475,7 +558,7 @@ function BatchRow({ batch, detail, refresh }: { batch: BatchView; detail: Sessio
   );
 }
 
-function GenerateSection({ detail, refresh }: { detail: SessionDetail; refresh: Refresh }) {
+function GenerateSection({ detail, refresh, open }: { detail: SessionDetail; refresh: Refresh; open: boolean }) {
   const { t } = useTranslation();
   const roles = useQuery({ queryKey: ["llm", "roles"], queryFn: () => api.call(llmRoles) });
   const cloud = (roles.data?.roles ?? []).filter(
@@ -491,8 +574,14 @@ function GenerateSection({ detail, refresh }: { detail: SessionDetail; refresh: 
     onSuccess: refresh,
   });
   const p = detail.progress;
+  const summary =
+    detail.blueprint === null && status === "draft"
+      ? t("authoring:generate.needsBlueprint")
+      : p.batches.length > 0
+        ? t("authoring:generate.summary", { count: p.written })
+        : t("authoring:generate.ready");
   return (
-    <Card title={t("authoring:generate.title")}>
+    <Step title={t("authoring:generate.title")} summary={summary} open={open}>
       {cloud.length > 0 ? (
         <p className={styles.notice} role="note">
           {t("authoring:generate.cloud", {
@@ -512,7 +601,6 @@ function GenerateSection({ detail, refresh }: { detail: SessionDetail; refresh: 
           </Button>
         ) : null}
       </div>
-      {detail.blueprint === null && status === "draft" ? <p>{t("authoring:generate.needsBlueprint")}</p> : null}
       <ErrorMessage error={start.error ?? cancel.error} />
       {p.batches.length > 0 ? (
         <>
@@ -544,7 +632,7 @@ function GenerateSection({ detail, refresh }: { detail: SessionDetail; refresh: 
           </div>
         </>
       ) : null}
-    </Card>
+    </Step>
   );
 }
 
@@ -616,20 +704,33 @@ function Session({ sessionId }: { sessionId: string }) {
   });
 
   if (!detail) return <ErrorMessage error={query.error} />;
+  // The stage you're on opens; the ones before it are done, the ones after it wait.
+  const hasQuestions = detail.questions.length > 0;
+  const generating = detail.session.status === "generating";
+  const failedBatch = detail.progress.batches.some((b) => b.status === "failed");
+  const STATUS_TONE = { draft: "neutral", generating: "accent", review: "warning", published: "success" } as const;
   return (
     <>
-      <h1>{detail.session.title}</h1>
-      <p>
-        {t("authoring:session.summary", {
-          type: t(`authoring:testTypes.${detail.session.testType}`),
-          status: t(`authoring:session.status.${detail.session.status}`),
-        })}{" "}
-        <Link to="/authoring">{t("authoring:session.back")}</Link>
-      </p>
-      <ScopeSection detail={detail} refresh={refresh} />
-      <ObjectivesSection detail={detail} refresh={refresh} />
-      <BlueprintSection detail={detail} refresh={refresh} />
-      <GenerateSection detail={detail} refresh={refresh} />
+      <PageHeader
+        title={detail.session.title}
+        description={
+          <span className={styles.headerMeta}>
+            <Badge tone={STATUS_TONE[detail.session.status] ?? "neutral"}>
+              {t(`authoring:session.status.${detail.session.status}`)}
+            </Badge>
+            <span>{t(`authoring:testTypes.${detail.session.testType}`)}</span>
+          </span>
+        }
+        actions={
+          <ButtonLink href="/authoring" variant="ghost">
+            {t("authoring:session.back")}
+          </ButtonLink>
+        }
+      />
+      <ScopeSection detail={detail} refresh={refresh} open={detail.objectives.length === 0 && !hasQuestions} />
+      <ObjectivesSection detail={detail} refresh={refresh} open={!hasQuestions && detail.blueprint === null} />
+      <BlueprintSection detail={detail} refresh={refresh} open={!hasQuestions} />
+      <GenerateSection detail={detail} refresh={refresh} open={!hasQuestions || generating || failedBatch} />
       {detail.questions.length > 0 ? <ReviewSection detail={detail} refresh={refresh} /> : null}
       {detail.questions.length > 0 ? <PublishSection detail={detail} /> : null}
     </>
