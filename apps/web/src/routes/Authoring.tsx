@@ -1,6 +1,12 @@
 import { TEST_TYPES, type TestType } from "@gem/shared";
-import { authoringSessionsCreate, authoringSessionsList, sourcesList } from "@gem/shared/contracts";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  authoringSessionsCreate,
+  authoringSessionsDelete,
+  authoringSessionsList,
+  type SessionSummary,
+  sourcesList,
+} from "@gem/shared/contracts";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Form } from "react-aria-components";
@@ -8,8 +14,9 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client.ts";
 import { RequireRole } from "../auth.tsx";
 import { formatDate, formatNumber } from "../format.ts";
-import { Button, Card, ErrorMessage, Select, TextField } from "../ui/controls.tsx";
-import { useDocumentTitle } from "../ui/live.tsx";
+import { ConfirmDialog } from "../ui/ConfirmDialog.tsx";
+import { Button, Card, ErrorMessage, errorText, Select, TextField } from "../ui/controls.tsx";
+import { useDocumentTitle, useLive } from "../ui/live.tsx";
 import styles from "./Authoring.module.css";
 
 function NewSession() {
@@ -65,7 +72,19 @@ function NewSession() {
 
 function SessionsTable() {
   const { t } = useTranslation();
+  const { announce } = useLive();
+  const qc = useQueryClient();
   const query = useQuery({ queryKey: ["authoring", "sessions"], queryFn: () => api.call(authoringSessionsList) });
+  const [deleting, setDeleting] = useState<SessionSummary | null>(null);
+  const remove = useMutation({
+    mutationFn: (s: SessionSummary) => api.call(authoringSessionsDelete, { params: { id: s.id } }),
+    onSuccess: async (_r, s) => {
+      setDeleting(null);
+      await qc.invalidateQueries({ queryKey: ["authoring", "sessions"] });
+      announce(t("authoring:list.deleted", { title: s.title }));
+    },
+    onError: (e) => announce(errorText(t, e)),
+  });
   if (!query.data) return <ErrorMessage error={query.error} />;
   if (query.data.sessions.length === 0) return <p>{t("authoring:list.empty")}</p>;
   return (
@@ -79,6 +98,7 @@ function SessionsTable() {
             <th scope="col">{t("authoring:list.colStatus")}</th>
             <th scope="col">{t("authoring:list.colQuestions")}</th>
             <th scope="col">{t("authoring:list.colCreated")}</th>
+            <th scope="col">{t("authoring:list.colActions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -93,10 +113,32 @@ function SessionsTable() {
               <td data-label={t("authoring:list.colStatus")}>{t(`authoring:session.status.${s.status}`)}</td>
               <td data-label={t("authoring:list.colQuestions")}>{formatNumber(s.questionCount)}</td>
               <td data-label={t("authoring:list.colCreated")}>{formatDate(s.createdAt)}</td>
+              <td data-label={t("authoring:list.colActions")}>
+                <Button
+                  variant="secondary"
+                  onPress={() => setDeleting(s)}
+                  aria-label={t("authoring:list.deleteFor", { title: s.title })}
+                >
+                  {t("authoring:list.delete")}
+                </Button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      <ErrorMessage error={remove.error} />
+      <ConfirmDialog
+        isOpen={deleting !== null}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        title={t("authoring:list.deleteTitle", { title: deleting?.title ?? "" })}
+        confirmLabel={t("authoring:list.delete")}
+        cancelLabel={t("common:cancel")}
+        onConfirm={() => deleting && remove.mutate(deleting)}
+        isPending={remove.isPending}
+        variant="danger"
+      >
+        <p>{t("authoring:list.deleteHelp")}</p>
+      </ConfirmDialog>
     </div>
   );
 }

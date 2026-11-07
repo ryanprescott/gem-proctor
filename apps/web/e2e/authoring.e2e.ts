@@ -317,3 +317,23 @@ test("E18 E35 a prompt-injected source: the question fails, and the source page 
   await expectNoAxeViolations(page, "source with a flagged passage at 320px");
   await page.context().close();
 });
+
+test("a session is deleted from the list after a question, and said so", async ({ browser }) => {
+  const page = await signedIn(browser);
+  const made = await page.request.post("/api/v1/authoring/sessions", {
+    data: { title: "Throwaway quiz", testType: "chapter_quiz", sources: [{ sourceId }] },
+  });
+  expect(made.status(), await made.text()).toBe(200);
+  await page.goto("/authoring");
+  const row = page.getByRole("row", { name: /^Throwaway quiz/ });
+  await row.getByRole("button", { name: "Delete Throwaway quiz" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Delete Throwaway quiz?" });
+  await expect(dialog.getByText("Tests you already published from it keep their questions")).toBeVisible();
+  await expectNoAxeViolations(page, "/authoring deleting a session");
+  await dialog.getByRole("button", { name: "Delete" }).click();
+  await expect(row).toHaveCount(0);
+  await expect.poll(() => liveRegionText(page)).toContain("Throwaway quiz deleted.");
+  // The others are untouched.
+  await expect(page.getByRole("row", { name: /^Vectors quiz/ })).toBeVisible();
+  await page.context().close();
+});

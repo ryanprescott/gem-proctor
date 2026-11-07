@@ -265,6 +265,41 @@ describe.skipIf(!hasDb || !verifyPython)("authoring generation", () => {
       const rows = await env.t.db.select().from(AuthoringBatch).where(eq(AuthoringBatch.sessionId, s.session.id));
       expect(rows.every((r) => r.status === "cancelled")).toBe(true);
     }, 60_000);
+
+    test("deleting a session while it generates stops its generation first", async () => {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((r) => {
+        release = r;
+      });
+      const real = scripted({});
+      const before = env.mock.chatRequests().length;
+      env.setReply((body) => {
+        const reply = real(body);
+        return typeof reply === "string" && reply.startsWith('{"questions"') ? { text: reply, holdUntil: gate } : reply;
+      });
+      const s = await ready({ titles: ["Inner product", "Norms"], count: 1 });
+      await generate(s.session.id);
+      await waitFor("the call to reach the model", async () =>
+        env.mock
+          .chatRequests()
+          .slice(before)
+          .some((r) => JSON.stringify(r.body).includes("Source chunk [")),
+      );
+      expect((await env.proctor.delete(`${API}/authoring/sessions/${s.session.id}`)).statusCode).toBe(200);
+      release();
+      await waitFor("the batches to settle", async () => {
+        const rows = await env.t.db.select().from(AuthoringBatch).where(eq(AuthoringBatch.sessionId, s.session.id));
+        return rows.every((r) => r.status === "cancelled");
+      });
+      expect((await env.proctor.get(`${API}/authoring/sessions/${s.session.id}`)).statusCode).toBe(404);
+      await Bun.sleep(300);
+      // The call in flight was aborted, and nothing queued behind it started.
+      const started = env.mock
+        .chatRequests()
+        .slice(before)
+        .filter((r) => JSON.stringify(r.body).includes("Source chunk ["));
+      expect(started).toHaveLength(1);
+    }, 60_000);
   });
 
   describe("E27: progress events", () => {

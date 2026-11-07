@@ -132,7 +132,10 @@ export function authoringRoutes(app: FastifyInstance, ctx: AppContext) {
   route(app, authoringSessionsGet, async ({ params }) => detail(ctx, params.id));
 
   route(app, authoringSessionsDelete, async ({ params, user, request }) => {
-    await deleteSession(ctx, await loadSession(ctx, params.id), user.userId, requestMeta(request));
+    const session = await loadSession(ctx, params.id);
+    // Its generation stops first: questions for a deleted session would only take the model's time.
+    if (session.status === "generating") await cancelGeneration(ctx, session.id);
+    await deleteSession(ctx, session, user.userId, requestMeta(request));
     return { ok: true as const };
   });
 

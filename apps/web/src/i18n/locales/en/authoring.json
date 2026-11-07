@@ -7,7 +7,13 @@
     "colType": "Test type",
     "colStatus": "Status",
     "colQuestions": "Questions",
-    "colCreated": "Created"
+    "colCreated": "Created",
+    "colActions": "Actions",
+    "delete": "Delete",
+    "deleteFor": "Delete {{title}}",
+    "deleteTitle": "Delete {{title}}?",
+    "deleteHelp": "Its questions that weren't published go with it, and if it's generating, that stops. Tests you already published from it keep their questions and their trail.",
+    "deleted": "{{title}} deleted."
   },
   "new": {
     "title": "New session",
