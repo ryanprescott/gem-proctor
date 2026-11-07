@@ -67,20 +67,19 @@
     "failed": "Embedding {{title}} failed."
   },
   "detail": {
-    "citation": "Cited as {{label}}"
+    "citation": "Cited as {{label}}",
+    "actions": "More actions for this source"
   },
   "revisions": {
-    "title": "Revisions",
     "item": "Revision {{number}}, {{date}}",
-    "edit": "Edit",
     "start": "Edit as a new revision",
     "help": "Saving makes a new revision. Earlier ones stay, so published citations keep working.",
     "save": "Save new revision",
     "saved": "Revision {{number}} saved.",
-    "original": "Download the PDF for revision {{number}}"
+    "original": "Download the PDF for revision {{number}}",
+    "editHelp": "Editing makes a new revision; the old one, and every citation of it, stays."
   },
   "scope": {
-    "title": "Scope",
     "help": "Pick the sections to use. Ticking a heading includes everything under it.",
     "label": "Sections",
     "sectionSize": "{{chunks}} chunks, about {{tokens}} tokens",
@@ -90,13 +89,11 @@
     "unassigned": "not assigned"
   },
   "viewer": {
-    "title": "Passages",
     "empty": "No passages in the selected sections.",
     "cited": "Cited passage:",
     "citation": "{{label}} § {{path}}"
   },
   "flagged": {
-    "title": "Flagged passages",
     "help": "A program written from these passages tried something the sandbox denied. Check them for instructions aimed at the model. Nothing has been removed.",
     "chunk": "Flagged {{date}}"
   },
@@ -148,5 +145,18 @@
     "makeSourceFor": "Make a source from {{name}}",
     "madeSource": "The text read from {{name}} is in the form below. Check it, name the source and save."
   },
-  "savedMany": "{{count}} sources made, one per chapter. They're in the list above, embedding."
+  "savedMany": "{{count}} sources made, one per chapter. They're in the list above, embedding.",
+  "tabs": {
+    "label": "Source",
+    "contents": "Contents",
+    "revisions": "Revisions",
+    "edit": "Edit",
+    "size": "Size check",
+    "flagged": "Flagged"
+  },
+  "contents": {
+    "passages_one": "{{count}} passage",
+    "passages_other": "{{count}} passages",
+    "noPassages": "No passages of its own"
+  }
 }

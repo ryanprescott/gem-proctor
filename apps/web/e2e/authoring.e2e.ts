@@ -317,7 +317,7 @@ test("E18 E35 a prompt-injected source: the question fails, and the source page 
   await expectNoAxeViolations(page, "a failed question");
 
   await page.goto(`/sources/${hostileId}`);
-  await expect(page.getByRole("heading", { name: "Flagged passages" })).toBeVisible();
+  await page.getByRole("tab", { name: /^Flagged/ }).click();
   await expect(page.getByText(/flagged/i).first()).toBeVisible();
   await expectNoAxeViolations(page, "source with a flagged passage");
   await page.setViewportSize({ width: 320, height: 800 });

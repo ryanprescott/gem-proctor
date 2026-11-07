@@ -183,7 +183,8 @@
       "chose": "Answer for question {{n}} taken from the chosen program.",
       "reclassified": "Question {{n}} marked as not a calculation.",
       "regenerating": "Question {{n}} is being regenerated."
-    }
+    },
+    "openSource": "Open it in its source"
   },
   "layers": {
     "L1": "Structure",

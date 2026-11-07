@@ -1,0 +1,42 @@
+.preview {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+/* A short window onto the passage; it scrolls only by script, to the quote. */
+.window {
+  position: relative;
+  inline-size: 100%;
+  max-block-size: 9.5rem;
+  overflow: hidden;
+  font-size: var(--text-base);
+  line-height: var(--leading);
+  color: var(--color-text);
+  --fade: 2.75rem;
+}
+
+.fadeBottom {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade)), transparent);
+}
+
+.fadeTop {
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade));
+}
+
+.fadeTop.fadeBottom {
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+}
+
+.citation {
+  margin-block: 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.full {
+  font-size: var(--text-read);
+  line-height: var(--leading-read);
+  max-inline-size: var(--reading-width);
+}

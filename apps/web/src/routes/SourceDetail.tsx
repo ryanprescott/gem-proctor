@@ -20,10 +20,14 @@ import { useServerState } from "../api/events.ts";
 import { RequireRole } from "../auth.tsx";
 import { formatDateTime, formatNumber } from "../format.ts";
 import { ConfirmDialog } from "../ui/ConfirmDialog.tsx";
-import { Button, Card, ErrorMessage, errorText, TextField } from "../ui/controls.tsx";
+import { Button, ErrorMessage, errorText, TextField } from "../ui/controls.tsx";
+import { Disclosure } from "../ui/Disclosure.tsx";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
+import { Menu, MenuItem } from "../ui/Menu.tsx";
+import { PageHeader } from "../ui/PageHeader.tsx";
 import { Passage } from "../ui/Passage.tsx";
 import { ScopeTree } from "../ui/ScopeTree.tsx";
+import { Tab, TabList, TabPanel, Tabs } from "../ui/Tabs.tsx";
 import styles from "./Sources.module.css";
 import { EmbedStatus } from "./Sources.tsx";
 
@@ -154,7 +158,8 @@ function EditRevision({ source }: { source: SourceSummary }) {
     onError: (e) => announce(errorText(t, e)),
   });
   return (
-    <Card title={t("sources:revisions.edit")}>
+    <div>
+      <p className={styles.muted}>{t("sources:revisions.editHelp")}</p>
       {text === null ? (
         <Button variant="secondary" onPress={() => load.mutate()} isDisabled={load.isPending}>
           {t("sources:revisions.start")}
@@ -180,11 +185,15 @@ function EditRevision({ source }: { source: SourceSummary }) {
         </>
       )}
       <ErrorMessage error={load.error ?? save.error} />
-    </Card>
+    </div>
   );
 }
 
-function Viewer({ source, search, revision }: { source: SourceSummary; search: SourceSearch; revision: number }) {
+/**
+ * The source's own table of contents: a row per section, opening to its passages. Passages are drawn only for the
+ * sections open (a book has hundreds), and a link to a cited passage opens its section and shows it.
+ */
+function Contents({ source, search, revision }: { source: SourceSummary; search: SourceSearch; revision: number }) {
   const { t } = useTranslation();
   const sourceId = source.id;
   const sections = useQuery({
@@ -195,50 +204,100 @@ function Viewer({ source, search, revision }: { source: SourceSummary; search: S
     queryKey: ["source", sourceId, "chunks", revision],
     queryFn: () => api.call(sourcesChunks, { params: { id: sourceId }, query: { revision } }),
   });
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const list = sections.data?.sections ?? [];
-  const seeded = useRef(-1);
+  const bySection = new Map<string, SourceChunkView[]>();
+  for (const c of chunks.data?.chunks ?? []) bySection.set(c.sectionId, [...(bySection.get(c.sectionId) ?? []), c]);
+  const cited = (chunks.data?.chunks ?? []).find((c) => c.id === search.chunk)?.sectionId;
+  const [open, setOpen] = useState<Set<string>>(new Set());
   useEffect(() => {
-    if (list.length === 0 || seeded.current === revision) return;
-    seeded.current = revision;
-    setSelected(new Set(list.map((s) => s.id)));
-  }, [list, revision]);
+    if (cited) setOpen((o) => new Set(o).add(cited));
+  }, [cited]);
+  const top = list.length > 0 ? Math.min(...list.map((s) => s.level)) : 1;
+  return (
+    <>
+      <ErrorMessage error={sections.error ?? chunks.error} />
+      {list.length === 0 && !sections.isPending ? <p>{t("sources:viewer.empty")}</p> : null}
+      <div className={styles.contents}>
+        {list.map((s) => {
+          const own = bySection.get(s.id) ?? [];
+          return (
+            <div key={s.id} style={{ paddingInlineStart: `${(s.level - top) * 1.25}rem` }}>
+              <Disclosure
+                variant="row"
+                level={2}
+                title={s.title}
+                summary={
+                  own.length > 0
+                    ? t("sources:contents.passages", { count: own.length })
+                    : t("sources:contents.noPassages")
+                }
+                isExpanded={open.has(s.id)}
+                onExpandedChange={(isOpen) =>
+                  setOpen((o) => {
+                    const next = new Set(o);
+                    if (isOpen) next.add(s.id);
+                    else next.delete(s.id);
+                    return next;
+                  })
+                }
+              >
+                {open.has(s.id) ? (
+                  <ul className={styles.chunks}>
+                    {own.map((c) => (
+                      <ChunkItem
+                        key={c.id}
+                        chunk={c}
+                        focused={c.id === search.chunk}
+                        quote={search.quote}
+                        label={source.citationLabel}
+                      />
+                    ))}
+                  </ul>
+                ) : null}
+              </Disclosure>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
 
-  const shown = (chunks.data?.chunks ?? []).filter((c) => selected.has(c.sectionId) || c.id === search.chunk);
+/** Which sections fit each model role: the size of a choice of sections, before a session is made from them. */
+function SizeCheck({ source, revision }: { source: SourceSummary; revision: number }) {
+  const { t } = useTranslation();
+  const sections = useQuery({
+    queryKey: ["source", source.id, "sections", revision],
+    queryFn: () => api.call(sourcesSections, { params: { id: source.id }, query: { revision } }),
+  });
+  const list = sections.data?.sections ?? [];
+  const [selected, setSelected] = useState<Set<string> | null>(null);
+  const chosen = selected ?? new Set(list.map((s) => s.id));
+  return (
+    <>
+      <p className={styles.muted}>{t("sources:scope.help")}</p>
+      <ErrorMessage error={sections.error} />
+      <ScopeTree sections={list} selected={chosen} onChange={setSelected} label={t("sources:scope.label")} />
+      <Estimate sourceId={source.id} revision={revision} sectionIds={[...chosen]} />
+    </>
+  );
+}
+
+function Flagged({ source, revision }: { source: SourceSummary; revision: number }) {
+  const { t } = useTranslation();
+  const chunks = useQuery({
+    queryKey: ["source", source.id, "chunks", revision],
+    queryFn: () => api.call(sourcesChunks, { params: { id: source.id }, query: { revision } }),
+  });
   const flagged = (chunks.data?.chunks ?? []).filter((c) => c.flaggedAt !== null);
   return (
     <>
-      {flagged.length > 0 ? (
-        <Card title={t("sources:flagged.title")}>
-          <p>{t("sources:flagged.help")}</p>
-          <ul className={styles.chunks}>
-            {flagged.map((c) => (
-              <ChunkItem key={c.id} chunk={c} focused={false} label={source.citationLabel} />
-            ))}
-          </ul>
-        </Card>
-      ) : null}
-      <Card title={t("sources:scope.title")}>
-        <p>{t("sources:scope.help")}</p>
-        <ErrorMessage error={sections.error} />
-        <ScopeTree sections={list} selected={selected} onChange={setSelected} label={t("sources:scope.label")} />
-        <Estimate sourceId={sourceId} revision={revision} sectionIds={[...selected]} />
-      </Card>
-      <Card title={t("sources:viewer.title")}>
-        <ErrorMessage error={chunks.error} />
-        {shown.length === 0 ? <p>{t("sources:viewer.empty")}</p> : null}
-        <ul className={styles.chunks}>
-          {shown.map((c) => (
-            <ChunkItem
-              key={c.id}
-              chunk={c}
-              focused={c.id === search.chunk}
-              quote={search.quote}
-              label={source.citationLabel}
-            />
-          ))}
-        </ul>
-      </Card>
+      <p className={styles.muted}>{t("sources:flagged.help")}</p>
+      <ul className={styles.chunks}>
+        {flagged.map((c) => (
+          <ChunkItem key={c.id} chunk={c} focused={false} label={source.citationLabel} />
+        ))}
+      </ul>
     </>
   );
 }
@@ -274,6 +333,16 @@ function Detail({ sourceId, search }: { sourceId: string; search: SourceSearch }
       announce(t("sources:announce.failed", { title: state.title }));
     }
   });
+  const flaggedCount = useQuery({
+    queryKey: ["source", sourceId, "chunks", search.revision ?? query.data?.source.latest.number],
+    queryFn: () =>
+      api.call(sourcesChunks, {
+        params: { id: sourceId },
+        query: { revision: search.revision ?? (query.data?.source.latest.number as number) },
+      }),
+    enabled: query.data !== undefined,
+    select: (d) => d.chunks.filter((c) => c.flaggedAt !== null).length,
+  });
 
   const retry = useMutation({
     mutationFn: () => api.call(sourcesEmbedRetry, { params: { id: sourceId } }),
@@ -297,12 +366,29 @@ function Detail({ sourceId, search }: { sourceId: string; search: SourceSearch }
   const { source, revisions } = query.data;
   const error = source.latest.embedError;
   const revision = search.revision ?? source.latest.number;
+  const flagged = flaggedCount.data ?? 0;
   return (
     <>
-      <h1>{source.title}</h1>
-      <p>
-        {t("sources:detail.citation", { label: source.citationLabel })} · <EmbedStatus source={source} />
-      </p>
+      <PageHeader
+        title={source.title}
+        description={
+          <span className={styles.headerMeta}>
+            <span>{t("sources:detail.citation", { label: source.citationLabel })}</span>
+            <EmbedStatus source={source} />
+          </span>
+        }
+        actions={
+          <Menu
+            label={t("sources:detail.actions")}
+            variant="secondary"
+            items={
+              <MenuItem danger onAction={() => setDeleting(true)}>
+                {t("sources:delete.action")}
+              </MenuItem>
+            }
+          />
+        }
+      />
       {error ? (
         <div className={styles.row}>
           <p className={styles.bad}>{errorText(t, new ApiClientError(error.code, error.params, 0))}</p>
@@ -312,14 +398,38 @@ function Detail({ sourceId, search }: { sourceId: string; search: SourceSearch }
         </div>
       ) : null}
       <ErrorMessage error={retry.error} />
-      <Card title={t("sources:revisions.title")}>
-        <RevisionList sourceId={sourceId} revisions={revisions} current={revision} />
-      </Card>
-      <EditRevision source={source} />
-      <Viewer key={revision} source={source} search={search} revision={revision} />
-      <Button variant="danger" onPress={() => setDeleting(true)}>
-        {t("sources:delete.action")}
-      </Button>
+      <Tabs label={t("sources:tabs.label")} defaultSelectedKey="contents">
+        <TabList label={t("sources:tabs.label")}>
+          <Tab id="contents">{t("sources:tabs.contents")}</Tab>
+          <Tab id="revisions" count={revisions.length}>
+            {t("sources:tabs.revisions")}
+          </Tab>
+          <Tab id="edit">{t("sources:tabs.edit")}</Tab>
+          <Tab id="size">{t("sources:tabs.size")}</Tab>
+          {flagged > 0 ? (
+            <Tab id="flagged" count={flagged}>
+              {t("sources:tabs.flagged")}
+            </Tab>
+          ) : null}
+        </TabList>
+        <TabPanel id="contents">
+          <Contents key={revision} source={source} search={search} revision={revision} />
+        </TabPanel>
+        <TabPanel id="revisions">
+          <RevisionList sourceId={sourceId} revisions={revisions} current={revision} />
+        </TabPanel>
+        <TabPanel id="edit">
+          <EditRevision source={source} />
+        </TabPanel>
+        <TabPanel id="size">
+          <SizeCheck key={revision} source={source} revision={revision} />
+        </TabPanel>
+        {flagged > 0 ? (
+          <TabPanel id="flagged">
+            <Flagged source={source} revision={revision} />
+          </TabPanel>
+        ) : null}
+      </Tabs>
       <ConfirmDialog
         isOpen={deleting}
         onOpenChange={setDeleting}

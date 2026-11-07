@@ -65,6 +65,7 @@ test("M20 a PDF is read in the list, announced, shown as a summary, made a sourc
   await page.getByLabel("Citation label").fill("VEC");
   await page.getByRole("button", { name: "Save source" }).click();
   await expect(page).toHaveURL(/\/sources\/[0-9a-f-]+/);
+  await page.getByRole("tab", { name: /^Revisions/ }).click();
   const link = page.getByRole("link", { name: "Download the PDF for revision 1" });
   await expect(link).toBeVisible();
   const original = await page.request.get((await link.getAttribute("href")) as string);

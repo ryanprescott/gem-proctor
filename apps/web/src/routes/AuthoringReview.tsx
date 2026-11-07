@@ -22,7 +22,7 @@ import { ConfirmDialog } from "../ui/ConfirmDialog.tsx";
 import { Button, Card, ErrorMessage, Select, TextField } from "../ui/controls.tsx";
 import { useLive } from "../ui/live.tsx";
 import { Markdown } from "../ui/Markdown.tsx";
-import { Passage } from "../ui/Passage.tsx";
+import { PassagePreview } from "../ui/PassagePreview.tsx";
 import styles from "./Authoring.module.css";
 
 type Refresh = () => Promise<unknown>;
@@ -340,7 +340,20 @@ function QuestionCard({
                     {t("authoring:review.citation", { label: chunk.label, path: chunk.path })}
                   </Link>
                 </p>
-                <Passage text={chunk.text} quote={e.quote} />
+                <PassagePreview
+                  text={chunk.text}
+                  quote={e.quote}
+                  title={t("authoring:review.citation", { label: chunk.label, path: chunk.path })}
+                  citation={
+                    <Link
+                      to="/sources/$sourceId"
+                      params={{ sourceId: chunk.sourceId }}
+                      search={{ revision: chunk.revision, chunk: e.chunkId, quote: e.quote }}
+                    >
+                      {t("authoring:review.openSource")}
+                    </Link>
+                  }
+                />
               </li>
             ))}
           </ul>

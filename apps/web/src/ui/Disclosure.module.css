@@ -78,3 +78,30 @@
 .panel[hidden] {
   display: none;
 }
+
+/* A row of a list: no card, a rule under it, tighter. */
+.row {
+  background: transparent;
+  border: 0;
+  border-block-end: 1px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+}
+
+.row .trigger {
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.row .trigger[data-hovered] {
+  background: var(--color-surface);
+}
+
+.row .title {
+  font-weight: var(--weight-medium);
+}
+
+.row .panel {
+  padding: 0 var(--space-2) var(--space-4) var(--space-6);
+}

@@ -54,5 +54,9 @@
   },
   "account": {
     "menu": "Account: {{name}}"
-  }
+  },
+  "passage": {
+    "readAll": "Read the whole passage"
+  },
+  "close": "Close"
 }

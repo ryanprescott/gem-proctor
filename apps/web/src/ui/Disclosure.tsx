@@ -16,6 +16,7 @@ export function Disclosure({
   onExpandedChange,
   level = 3,
   actions,
+  variant = "card",
 }: {
   title: ReactNode;
   summary?: ReactNode;
@@ -26,10 +27,12 @@ export function Disclosure({
   level?: 2 | 3 | 4;
   /** Controls beside the title that aren't part of opening it. */
   actions?: ReactNode;
+  /** `card` stands alone; `row` is one of a list (a table of contents), with a rule under it. */
+  variant?: "card" | "row";
 }) {
   return (
     <AriaDisclosure
-      className={styles.disclosure}
+      className={`${styles.disclosure} ${variant === "row" ? styles.row : ""}`}
       defaultExpanded={defaultExpanded}
       isExpanded={isExpanded}
       onExpandedChange={onExpandedChange}

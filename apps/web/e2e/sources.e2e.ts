@@ -90,7 +90,8 @@ test("E16 E18 add, preview, save, and watch embedding finish, announced", async 
     .poll(() => liveRegionText(page), { timeout: 20_000, intervals: [50] })
     .toMatch(/Embedding: \d+ of \d+ chunks/);
   await expect.poll(() => liveRegionText(page), { timeout: 20_000 }).toContain("is ready to use");
-  await expect(page.getByText("Ready", { exact: true }).first()).toBeVisible();
+  // The header says it, with its mark (the mark itself is hidden from screen readers).
+  await expect(page.getByRole("main").getByText(/Ready$/).first()).toBeVisible();
   await expectNoAxeViolations(page, "source ready");
 
   await page.goto("/sources");
@@ -111,11 +112,13 @@ test("preview warnings show in text", async ({ browser }) => {
 test("E16 edit to a new revision, and view a highlighted passage", async ({ browser }) => {
   const page = await newSignedInPage(browser, proctorEmail);
   await page.goto(sourceUrl);
+  await page.getByRole("tab", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Edit as a new revision" }).click();
   const box = page.getByLabel("Markdown or plain text");
   await expect(box).toHaveValue(/Chapter 1/);
   await box.fill(`${SOURCE}\n\nA new closing sentence.`);
   await page.getByRole("button", { name: "Save new revision" }).click();
+  await page.getByRole("tab", { name: /^Revisions/ }).click();
   await expect(page.getByRole("link", { name: /Revision 2/ })).toBeVisible();
   await expect.poll(() => liveRegionText(page), { timeout: 20_000 }).toMatch(/Revision 2 saved|is ready to use/);
   await expect(page.getByRole("link", { name: /Revision 1/ })).toBeVisible();
@@ -137,9 +140,12 @@ test("E16 edit to a new revision, and view a highlighted passage", async ({ brow
 test("E17 the scope tree works by keyboard, shows the estimate and fit, and math has MathML", async ({ browser }) => {
   const page = await newSignedInPage(browser, proctorEmail);
   await page.goto(`${sourceUrl}?revision=1`);
+  // Contents: a section's passages are drawn when it's opened.
+  await page.getByRole("button", { name: /^Inner product/ }).click();
   await expect(page.locator(".katex-mathml math").first()).toBeAttached();
   await expect(page.locator("annotation").first()).toContainText("x^T y");
 
+  await page.getByRole("tab", { name: "Size check" }).click();
   const tree = page.getByRole("group", { name: "Sections" });
   const chapter = tree.getByRole("checkbox", { name: /Chapter 2: Matrices/ });
   await expect(chapter).toBeChecked();
@@ -211,7 +217,8 @@ test("E18 320 px, and the delete dialog", async ({ browser }) => {
     await expectNoAxeViolations(page, `${path} at 320 px`);
   }
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.getByRole("button", { name: "Delete source" }).click();
+  await page.getByRole("button", { name: "More actions for this source" }).click();
+  await page.getByRole("menuitem", { name: "Delete source" }).click();
   await expect(page.getByRole("alertdialog")).toBeVisible();
   await expectNoAxeViolations(page, "delete dialog");
   await page.getByRole("button", { name: "Delete", exact: true }).click();
