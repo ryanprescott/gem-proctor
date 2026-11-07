@@ -16,6 +16,8 @@
  * The clean-up of what's inside the text (equations, images, `clean.ts`) runs on the result as for any conversion.
  */
 
+import { displayMathLines } from "./clean.ts";
+
 export interface PageText {
   page: number;
   markdown: string;
@@ -56,9 +58,19 @@ export function titleKey(text: string): string {
 /** A line as a pattern for running headers: digits don't count, so "1 Vectors" and "12 Vectors" are one. */
 const runningKey = (line: string) => plain(line).toLowerCase().replace(/\d+/g, "0");
 
-/** The indexes of a page's edge lines: the first and last non-empty ones. */
+/**
+ * Whether a line could be a running header: short, with words in it, and no mathematics. A line that is only `$$`
+ * (an equation set over several lines) sits at page edges too, and dropping one unpairs every equation after it.
+ */
+const headerLike = (line: string) => {
+  const text = plain(line);
+  return text.length <= RUNNING_MAX_CHARS && /\p{L}/u.test(text) && !text.includes("$");
+};
+
+/** The indexes of a page's edge lines: the first and last non-empty ones that aren't display mathematics. */
 function edges(lines: string[]): number[] {
-  const filled = lines.map((l, i) => (l.trim() === "" ? -1 : i)).filter((i) => i >= 0);
+  const math = displayMathLines(lines);
+  const filled = lines.map((l, i) => (l.trim() === "" || math[i] ? -1 : i)).filter((i) => i >= 0);
   return [...new Set([...filled.slice(0, EDGE_TOP), ...filled.slice(-EDGE_BOTTOM)])];
 }
 
@@ -68,9 +80,8 @@ function runningKeys(pages: { page: number; lines: string[] }[]): Set<string> {
   for (const { page, lines } of pages) {
     for (const i of edges(lines)) {
       const line = lines[i] as string;
-      if (plain(line).length > RUNNING_MAX_CHARS) continue;
+      if (!headerLike(line)) continue;
       const key = runningKey(line);
-      if (key === "") continue;
       const at = seen.get(key) ?? [];
       if (at.at(-1) !== page) at.push(page);
       seen.set(key, at);

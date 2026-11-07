@@ -68,11 +68,44 @@ function rewriteMath(text: string): string {
     .replace(/\\\(([\s\S]*?)\\\)/g, (_m, body: string) => `$${body.trim()}$`);
 }
 
-/** Display mathematics alone on its lines, with a blank line either side, so it is a block and not part of a sentence. */
-function isolateDisplayMath(text: string): string {
-  return text.replace(/([^\n])\s*\$\$([\s\S]+?)\$\$\s*(?=[^\n]|$)/g, (m, before: string, body: string) =>
-    before === "$" ? m : `${before}\n\n$$${body.trim()}$$\n\n`,
-  );
+/**
+ * Display mathematics alone on its lines, with a blank line either side, so it is a block and not part of a sentence.
+ * The `$$` marks are paired in order (the first opens, the second closes, and so on; `\$$` is a dollar sign), not
+ * matched by a pattern: one missed opening then can't pair a closing with the next equation's opening, which turned
+ * every equation after it inside out (a book's chapter became one 15,000-character "equation"). An odd number of
+ * marks is left as it is; `unbalanced_math` says so. An empty pair (`$$$$`) is dropped.
+ */
+export function isolateDisplayMath(text: string): string {
+  const marks: number[] = [];
+  for (let at = text.indexOf("$$"); at >= 0; at = text.indexOf("$$", at + 2)) {
+    if (text[at - 1] !== "\\") marks.push(at);
+  }
+  if (marks.length === 0 || marks.length % 2 !== 0) return text;
+  let out = "";
+  let last = 0;
+  for (let k = 0; k < marks.length; k += 2) {
+    const open = marks[k] as number;
+    const close = marks[k + 1] as number;
+    const body = text.slice(open + 2, close).trim();
+    out += text.slice(last, open).replace(/[ \t]+$/, "");
+    // Over several lines, the marks go on lines of their own: Markdown closes a multi-line `$$` block only at a
+    // line that is `$$` alone, so `\tag{12.12}$$` would leave it open to the end of the book.
+    out += body === "" ? " " : body.includes("\n") ? `\n\n$$\n${body}\n$$\n\n` : `\n\n$$${body}$$\n\n`;
+    last = close + 2;
+  }
+  out += text.slice(last).replace(/^[ \t]+/, "");
+  return out.replace(/\n{3,}/g, "\n\n");
+}
+
+/** Which lines are display mathematics: a `$$` mark on them, or between an opening and a closing one. */
+export function displayMathLines(lines: string[]): boolean[] {
+  let inside = false;
+  return lines.map((line) => {
+    const marks = (line.match(/(?<!\\)\$\$/g) ?? []).length;
+    const math = inside || marks > 0;
+    if (marks % 2 === 1) inside = !inside;
+    return math;
+  });
 }
 
 const IMAGE = /!\[[^\]]*\]\([^)]*\)/g;
@@ -122,16 +155,15 @@ export function cleanMarkdown(input: CleanInput): Cleaned {
     return { ...p, text: dropEmptyHeadings(text) };
   });
 
-  // A line that repeats on every page is dropped, but only a paragraph line: and only outside code.
-  const proseLines = rewritten.filter((p) => !p.code).flatMap((p) => p.text.split("\n"));
-  const running = runningLines(proseLines);
-  const kept = rewritten.map((p) =>
-    p.code
-      ? p.text
-      : p.text
-          .split("\n")
-          .filter((line) => !running.has(line.trim()))
-          .join("\n"),
+  // A line that repeats on every page is dropped, but only a paragraph line: not in code, and not in display
+  // mathematics, where `\end{aligned}` repeats in every other equation of a book.
+  const prose = rewritten.map((p) => {
+    const lines = p.text.split("\n");
+    return { p, lines, math: p.code ? lines.map(() => true) : displayMathLines(lines) };
+  });
+  const running = runningLines(prose.flatMap(({ lines, math }) => lines.filter((_, i) => !math[i])));
+  const kept = prose.map(({ p, lines, math }) =>
+    p.code ? p.text : lines.filter((line, i) => math[i] || !running.has(line.trim())).join("\n"),
   );
 
   const markdown = `${kept

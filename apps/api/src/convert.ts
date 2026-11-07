@@ -265,6 +265,11 @@ export async function assembleFile(
     .from(SourceFilePage)
     .where(eq(SourceFilePage.fileId, file.id))
     .orderBy(SourceFilePage.page);
+  // A file read before pages were stored has only its saved text: all of it, and no chapters.
+  if (rows.length === 0) {
+    if (pageRange) throw new AppError("convert_bad_range");
+    return { markdown: file.markdown ?? "", warnings: [], pages: file.pagesConverted ?? 0, figures: file.figures ?? 0 };
+  }
   const wanted = new Set(pageRange ? selectedPages(pageRange, file.pageCount ?? 0) : rows.map((r) => r.page));
   const pages = rows.filter((r) => wanted.has(r.page));
   if (pageRange && pages.length < wanted.size) throw new AppError("convert_bad_range");
@@ -282,7 +287,13 @@ export async function assembleFile(
 export async function fileSummary(ctx: AppContext, id: string): Promise<SourceFileSummary> {
   const file = await loadFile(ctx, id);
   if (file.status !== "ready") throw new AppError("convert_file_not_ready");
-  const markdown = file.markdown ?? "";
+  // Assembled now from the stored pages, as a source would be, so a better clean-up applies to files read before
+  // it; a file read before pages were stored has only its saved text.
+  const [{ n } = { n: 0 }] = await ctx.db
+    .select({ n: count() })
+    .from(SourceFilePage)
+    .where(eq(SourceFilePage.fileId, file.id));
+  const markdown = n > 0 ? (await assembleFile(ctx, file)).markdown : (file.markdown ?? "");
   const target = await embeddingsTarget(ctx);
   const cap = target ? chunkCap(target) : undefined;
   return {

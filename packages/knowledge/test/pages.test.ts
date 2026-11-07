@@ -67,6 +67,17 @@ describe("a book's pages made into one text", () => {
     expect(headings(assemblePages(pages, OUTLINE))).toEqual(["# Linear functions"]);
   });
 
+  test("an equation's own lines at page edges aren't running headers, however often they recur (VMLS)", () => {
+    // Equations set over several lines, ending and starting pages: their `$$` lines sit at the edges, page after page.
+    const pages = [40, 41, 42, 43].map((page) => ({
+      page,
+      markdown: `$$\nx_${page} = y\n$$\n\n${prose(page)}\n\n$$\nz_${page} = w\n$$`,
+    }));
+    const md = assemblePages(pages);
+    expect((md.match(/\$\$/g) ?? []).length).toBe(16);
+    expect(md).toContain("x_41 = y");
+  });
+
   test("a heading far apart, once a chapter, isn't a running header", () => {
     const pages = [5, 25, 45, 65].map((page) => ({ page, markdown: `## Exercises\n\n${prose(page)}` }));
     expect(assemblePages(pages).match(/## Exercises/g)?.length).toBe(4);
