@@ -46,7 +46,8 @@ test.afterAll(async () => {
 
 test("C37 empty state; the nav reaches the page", async () => {
   await page.goto("/");
-  await page.getByRole("link", { name: "LLM", exact: true }).first().click();
+  await page.getByRole("navigation").getByRole("button", { name: "Admin" }).click();
+  await page.getByRole("menuitem", { name: "LLM", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "LLM" })).toBeVisible();
   await expect(page.getByText("No endpoints yet.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Assign Analysis" })).toBeDisabled();

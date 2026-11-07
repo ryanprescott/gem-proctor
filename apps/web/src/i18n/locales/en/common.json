@@ -10,11 +10,14 @@
     "tests": "Tests",
     "sources": "Sources",
     "authoring": "Authoring",
-    "import": "Import",
     "users": "Users",
     "settings": "Settings",
     "auditLog": "Audit log",
-    "llm": "LLM"
+    "llm": "LLM",
+    "admin": "Admin",
+    "import": "Import a test",
+    "allTests": "All tests",
+    "create": "Create"
   },
   "roles": {
     "student": "Student",
@@ -48,5 +51,8 @@
   "toasts": {
     "region": "Notifications",
     "dismiss": "Dismiss notification"
+  },
+  "account": {
+    "menu": "Account: {{name}}"
   }
 }

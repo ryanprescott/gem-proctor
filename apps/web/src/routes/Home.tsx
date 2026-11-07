@@ -5,8 +5,9 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client.ts";
 import { atLeast, useMe } from "../auth.tsx";
 import { formatDateTime } from "../format.ts";
-import { Card, ErrorMessage } from "../ui/controls.tsx";
+import { ButtonLink, Card, ErrorMessage } from "../ui/controls.tsx";
 import { useDocumentTitle } from "../ui/live.tsx";
+import styles from "./Home.module.css";
 import { scoreText } from "./PracticeSection.tsx";
 
 /** The five most recent practice attempts, across tests (P1.md §6). */
@@ -57,14 +58,14 @@ export function HomePage() {
       {isProctor ? (
         <Card title={t("common:home.proctorTitle")}>
           <p>{t("common:home.proctorBody")}</p>
-          <ul>
-            <li>
-              <Link to="/import">{t("common:home.importLink")}</Link>
-            </li>
-            <li>
-              <Link to="/tests">{t("common:home.testsLink")}</Link>
-            </li>
-          </ul>
+          <div className={styles.actions}>
+            <ButtonLink href="/tests" size="small">
+              {t("common:home.testsLink")}
+            </ButtonLink>
+            <ButtonLink href="/import" size="small">
+              {t("common:home.importLink")}
+            </ButtonLink>
+          </div>
         </Card>
       ) : null}
       {isProctor ? (
@@ -76,20 +77,20 @@ export function HomePage() {
       )}
       {isAdmin ? (
         <Card title={t("common:home.adminTitle")}>
-          <ul>
-            <li>
-              <Link to="/admin/users">{t("common:nav.users")}</Link>
-            </li>
-            <li>
-              <Link to="/admin/settings">{t("common:nav.settings")}</Link>
-            </li>
-            <li>
-              <Link to="/admin/llm">{t("common:nav.llm")}</Link>
-            </li>
-            <li>
-              <Link to="/admin/audit-log">{t("common:nav.auditLog")}</Link>
-            </li>
-          </ul>
+          <div className={styles.actions}>
+            <ButtonLink href="/admin/users" size="small">
+              {t("common:nav.users")}
+            </ButtonLink>
+            <ButtonLink href="/admin/settings" size="small">
+              {t("common:nav.settings")}
+            </ButtonLink>
+            <ButtonLink href="/admin/llm" size="small">
+              {t("common:nav.llm")}
+            </ButtonLink>
+            <ButtonLink href="/admin/audit-log" size="small">
+              {t("common:nav.auditLog")}
+            </ButtonLink>
+          </div>
         </Card>
       ) : null}
     </>

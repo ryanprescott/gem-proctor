@@ -6,10 +6,6 @@
   justify-content: space-between;
 }
 
-.importLink {
-  margin-block-end: var(--space-4);
-}
-
 .tableWrap {
   overflow-x: auto;
 }

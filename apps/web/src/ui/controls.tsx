@@ -24,16 +24,35 @@ import styles from "./controls.module.css";
 
 /** Thin wrappers around React Aria Components with our styles (P0.md §5). Text always comes in translated. */
 
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+
 export function Button({
   variant = "primary",
+  size = "medium",
   className,
   ...props
-}: ButtonProps & { variant?: "primary" | "secondary" | "danger" }) {
-  return <AriaButton {...props} className={[styles.button, styles[variant], className].filter(Boolean).join(" ")} />;
+}: ButtonProps & { variant?: ButtonVariant; size?: "medium" | "small" }) {
+  return (
+    <AriaButton
+      {...props}
+      className={[styles.button, styles[variant], size === "small" ? styles.small : null, className]
+        .filter(Boolean)
+        .join(" ")}
+    />
+  );
 }
 
-export function ButtonLink({ variant = "secondary", ...props }: LinkProps & { variant?: "primary" | "secondary" }) {
-  return <AriaLink {...props} className={[styles.button, styles[variant]].join(" ")} />;
+export function ButtonLink({
+  variant = "secondary",
+  size = "medium",
+  ...props
+}: LinkProps & { variant?: ButtonVariant; size?: "medium" | "small" }) {
+  return (
+    <AriaLink
+      {...props}
+      className={[styles.button, styles[variant], size === "small" ? styles.small : null].filter(Boolean).join(" ")}
+    />
+  );
 }
 
 interface TextFieldProps extends Omit<AriaTextFieldProps, "children"> {

@@ -5,7 +5,7 @@
     "active": "Active tests",
     "all": "All tests",
     "archived": "Archived tests",
-    "import": "Import a quiz",
+    "import": "Import a test",
     "empty": "No tests here yet.",
     "caption_one": "{{count}} test",
     "caption_other": "{{count}} tests",

@@ -1,7 +1,7 @@
 // A31: keyboard only — sign in → import the fixture → fix Q7 → save → export.
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
-import { adminRequest, createUser, FIXTURE_PATH, liveRegionText, PASSWORD, tabTo } from "./helpers.ts";
+import { adminRequest, createUser, FIXTURE_PATH, liveRegionText, navByKeyboard, PASSWORD, tabTo } from "./helpers.ts";
 
 let proctorEmail = "";
 
@@ -24,9 +24,8 @@ test("keyboard-only flow", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { level: 1, name: /^Welcome/ })).toBeVisible();
 
-  // Navigate to Import with the keyboard.
-  await tabTo(page, page.getByRole("navigation").getByRole("link", { name: "Import" }));
-  await page.keyboard.press("Enter");
+  // Navigate to Import with the keyboard: the Tests menu in the header, then its item.
+  await navByKeyboard(page, "Tests", "Import a test");
   await expect(page.getByRole("heading", { level: 1, name: "Import a quiz" })).toBeVisible();
 
   // Upload the fixture: Enter on the upload button opens the file chooser.

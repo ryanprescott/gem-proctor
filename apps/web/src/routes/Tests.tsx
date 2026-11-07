@@ -7,8 +7,9 @@ import { useTranslation } from "react-i18next";
 import { api, contractUrl } from "../api/client.ts";
 import { RequireRole } from "../auth.tsx";
 import { formatDate, formatNumber } from "../format.ts";
-import { Button, Card, ErrorMessage, errorText, Select, TextField } from "../ui/controls.tsx";
+import { Button, ButtonLink, Card, ErrorMessage, errorText, Select, TextField } from "../ui/controls.tsx";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
+import { PageHeader } from "../ui/PageHeader.tsx";
 import { QuestionList } from "../ui/QuestionList.tsx";
 import { PracticeSection } from "./PracticeSection.tsx";
 import styles from "./Tests.module.css";
@@ -35,9 +36,6 @@ function TestsTable() {
             { id: "only", label: t("tests:list.archived") },
           ]}
         />
-        <Link to="/import" className={styles.importLink}>
-          {t("tests:list.import")}
-        </Link>
       </div>
       <ErrorMessage error={query.error} />
       {query.isPending ? <p>{t("common:loading")}</p> : null}
@@ -84,7 +82,14 @@ export function TestsPage() {
     <RequireRole minRole="proctor">
       {() => (
         <>
-          <h1>{t("tests:list.title")}</h1>
+          <PageHeader
+            title={t("tests:list.title")}
+            actions={
+              <ButtonLink href="/import" variant="primary">
+                {t("tests:list.import")}
+              </ButtonLink>
+            }
+          />
           <TestsTable />
         </>
       )}

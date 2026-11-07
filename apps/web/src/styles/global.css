@@ -1,57 +1,123 @@
-/* Design tokens (CSS custom properties). Text/background pairs meet WCAG 2.2 AA contrast (≥ 4.5:1). */
+/*
+ * Design tokens (CSS custom properties): the one place the look is decided. Components and pages use these, never
+ * literal colours or sizes. Text on its background meets WCAG 2.2 AA (4.5:1, 3:1 for large text), and the borders
+ * of controls 3:1 against what's around them (1.4.11); `bun run ui:contrast` checks every pair below.
+ *
+ * Geist (sans and mono) is bundled with the app, not fetched from a font service: the app runs on its owner's network.
+ */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
 :root {
   color-scheme: light dark;
-  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Type */
+  --font-body: "Geist Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* The app's chrome is set at 14 px; reading text (passages, questions, previews) at 16 px. */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-read: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --leading-tight: 1.25;
+  --leading: 1.5;
+  --leading-read: 1.65;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --tracking-tight: -0.015em;
+
+  /* Space, on a 4 px grid */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
+  --space-5: 1.25rem;
   --space-6: 1.5rem;
   --space-8: 2rem;
-  --radius-sm: 4px;
-  --radius: 8px;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
 
+  /* Shape and size */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+  --control-height: 2.25rem;
+  --control-height-sm: 1.875rem;
+  --page-width: 72rem;
+  --reading-width: 46rem;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration: 180ms;
+
+  /* Colour, light */
   --color-bg: #ffffff;
-  --color-surface: #f6f7f9;
+  --color-surface: #fafafa;
   --color-surface-raised: #ffffff;
-  --color-text: #1b1f24;
-  --color-text-muted: #4a5360;
-  --color-border: #c9ced6;
-  --color-border-strong: #6b7380;
-  --color-accent: #1d4ed8;
+  --color-surface-muted: #f4f4f5;
+  --color-surface-hover: #f4f4f5;
+  --color-text: #18181b;
+  --color-text-muted: #52525b;
+  --color-text-subtle: #696971;
+  --color-border: #e4e4e7;
+  --color-border-strong: #8b8b94;
+  --color-accent: #4f46e5;
   --color-accent-text: #ffffff;
-  --color-accent-hover: #1e40af;
-  --color-danger: #b42318;
-  --color-danger-bg: #fdecea;
-  --color-warning: #8a4b00;
-  --color-warning-bg: #fff4e0;
-  --color-success: #146c2e;
-  --color-success-bg: #e7f6ec;
-  --color-focus: #c2410c;
-  --shadow: 0 2px 10px rgb(0 0 0 / 0.12);
+  --color-accent-hover: #4338ca;
+  --color-accent-subtle: #eef2ff;
+  --color-accent-subtle-text: #3730a3;
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fef2f2;
+  --color-warning: #a16207;
+  --color-warning-bg: #fefce8;
+  --color-success: #15803d;
+  --color-success-bg: #f0fdf4;
+  --color-focus: #4f46e5;
+  --color-mark-bg: #fef08a;
+  --color-overlay: rgb(9 9 11 / 0.4);
+
+  /* Elevation */
+  --shadow-1: 0 1px 2px rgb(24 24 27 / 0.05);
+  --shadow-2: 0 4px 12px -2px rgb(24 24 27 / 0.08), 0 2px 4px -2px rgb(24 24 27 / 0.04);
+  --shadow-3: 0 18px 40px -8px rgb(24 24 27 / 0.2), 0 4px 10px -4px rgb(24 24 27 / 0.08);
+  --shadow: var(--shadow-2);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #111418;
-    --color-surface: #1a1e24;
-    --color-surface-raised: #222831;
-    --color-text: #e8ebef;
-    --color-text-muted: #b3bac4;
-    --color-border: #3a424d;
-    --color-border-strong: #8b94a1;
-    --color-accent: #8fb3ff;
-    --color-accent-text: #0b1220;
-    --color-accent-hover: #b3cbff;
-    --color-danger: #ff9b91;
-    --color-danger-bg: #3a1714;
-    --color-warning: #ffc46b;
-    --color-warning-bg: #3a2a10;
-    --color-success: #7ed79a;
-    --color-success-bg: #12301c;
-    --color-focus: #ffb86b;
-    --shadow: 0 2px 10px rgb(0 0 0 / 0.5);
+    --color-bg: #09090b;
+    --color-surface: #0f0f12;
+    --color-surface-raised: #18181b;
+    --color-surface-muted: #1f1f23;
+    --color-surface-hover: #27272a;
+    --color-text: #fafafa;
+    --color-text-muted: #a1a1aa;
+    --color-text-subtle: #8f8f99;
+    --color-border: #27272a;
+    --color-border-strong: #71717a;
+    --color-accent: #818cf8;
+    --color-accent-text: #0b0b1f;
+    --color-accent-hover: #a5b4fc;
+    --color-accent-subtle: #1e1b4b;
+    --color-accent-subtle-text: #c7d2fe;
+    --color-danger: #f87171;
+    --color-danger-bg: #2a1215;
+    --color-warning: #facc15;
+    --color-warning-bg: #2a2210;
+    --color-success: #4ade80;
+    --color-success-bg: #0f2a19;
+    --color-focus: #a5b4fc;
+    --color-mark-bg: #713f12;
+    --color-overlay: rgb(0 0 0 / 0.6);
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 4px 12px -2px rgb(0 0 0 / 0.5);
+    --shadow-3: 0 18px 40px -8px rgb(0 0 0 / 0.7);
   }
 }
 
@@ -64,48 +130,97 @@
 html {
   font-family: var(--font-body);
   font-size: 100%;
-  line-height: 1.5;
+  font-feature-settings: "cv11", "ss01";
+  line-height: var(--leading);
   color: var(--color-text);
   background: var(--color-bg);
   -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   margin: 0;
   min-inline-size: 320px;
+  font-size: var(--text-base);
 }
 
 h1,
 h2,
+h3,
+h4 {
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  font-weight: var(--weight-semibold);
+  margin-block: 0 var(--space-3);
+}
+
+h1 {
+  font-size: var(--text-2xl);
+}
+
+h2 {
+  font-size: var(--text-xl);
+}
+
 h3 {
-  line-height: 1.25;
+  font-size: var(--text-lg);
+}
+
+h4 {
+  font-size: var(--text-base);
+}
+
+p {
+  margin-block: 0 var(--space-3);
 }
 
 a {
   color: var(--color-accent);
-  text-underline-offset: 0.15em;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 0.2em;
+  transition: color var(--duration-fast) var(--ease-out);
 }
 
 a:hover {
   color: var(--color-accent-hover);
+  text-decoration-color: currentColor;
 }
 
 /* Visible focus on every interactive element (WCAG 2.4.7 / 2.4.11). */
 :focus-visible,
 [data-focus-visible] {
-  outline: 3px solid var(--color-focus);
+  outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
 
 code,
 pre,
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:not(pre) > code {
+  background: var(--color-surface-muted);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
 textarea {
   font-family: var(--font-mono);
+}
+
+::selection {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-subtle-text);
 }
 
 table {
   border-collapse: collapse;
   inline-size: 100%;
+  font-variant-numeric: tabular-nums;
 }
 
 th,
@@ -113,7 +228,32 @@ td {
   text-align: start;
   padding: var(--space-2) var(--space-3);
   border-block-end: 1px solid var(--color-border);
-  vertical-align: top;
+  vertical-align: middle;
+}
+
+th {
+  font-weight: var(--weight-medium);
+}
+
+/* Column headers are small labels; a row's own header (`th scope="row"`) reads as the row's name. */
+thead th {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+tbody tr {
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+tbody tr:hover {
+  background: var(--color-surface);
+}
+
+caption {
+  text-align: start;
 }
 
 /* Reflow at 320 px / 200 % zoom: wide content scrolls inside its own container. */

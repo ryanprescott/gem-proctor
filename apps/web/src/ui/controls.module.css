@@ -1,26 +1,48 @@
+/* The shared controls: buttons, fields, select, card, error. Every value is a token from styles/global.css. */
+
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-block-size: 2.5rem;
-  padding: var(--space-2) var(--space-4);
+  min-block-size: var(--control-height);
+  padding: 0 var(--space-4);
   border-radius: var(--radius);
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   font: inherit;
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.button[data-pressed] {
+  transform: translateY(0.5px);
 }
 
 .button[data-disabled] {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.5;
+}
+
+.small {
+  min-block-size: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
 }
 
 .primary {
   background: var(--color-accent);
   color: var(--color-accent-text);
+  box-shadow: var(--shadow-1);
 }
 
 .primary[data-hovered] {
@@ -30,12 +52,34 @@
 .secondary {
   background: var(--color-surface-raised);
   color: var(--color-text);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-1);
+}
+
+.secondary[data-hovered] {
+  background: var(--color-surface-hover);
   border-color: var(--color-border-strong);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.ghost[data-hovered] {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
 }
 
 .danger {
   background: var(--color-surface-raised);
   color: var(--color-danger);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-1);
+}
+
+.danger[data-hovered] {
+  background: var(--color-danger-bg);
   border-color: var(--color-danger);
 }
 
@@ -47,35 +91,68 @@
 }
 
 .label {
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
 }
 
 .input,
 .textarea,
 .selectButton {
   font: inherit;
+  font-size: var(--text-base);
   color: var(--color-text);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
-  min-block-size: 2.5rem;
+  border-radius: var(--radius);
+  padding: 0 var(--space-3);
+  min-block-size: var(--control-height);
   max-inline-size: 100%;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.input[data-hovered],
+.textarea[data-hovered],
+.selectButton[data-hovered] {
+  border-color: var(--color-text-muted);
+}
+
+.input[data-focused],
+.textarea[data-focused] {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+
+.input[data-disabled],
+.textarea[data-disabled] {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
 }
 
 .textarea {
+  padding: var(--space-2) var(--space-3);
   font-family: var(--font-mono);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
+  line-height: var(--leading);
 }
 
 .input[data-invalid],
 .textarea[data-invalid] {
   border-color: var(--color-danger);
-  border-width: 2px;
+  box-shadow: 0 0 0 1px var(--color-danger);
 }
 
 .selectButton {
   display: inline-flex;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   min-inline-size: 12rem;
@@ -83,12 +160,30 @@
   text-align: start;
 }
 
+.selectButton > [aria-hidden="true"] {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
 .popover {
   background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
   min-inline-size: var(--trigger-width);
+  max-block-size: 20rem;
+  overflow: auto;
+}
+
+.popover[data-entering] {
+  animation: pop-in var(--duration) var(--ease-out);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
 }
 
 .listbox {
@@ -97,52 +192,69 @@
 }
 
 .option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--color-text);
+  outline: none;
 }
 
 .option[data-focused] {
-  background: var(--color-surface);
+  background: var(--color-surface-hover);
+}
+
+.option[data-focus-visible] {
   outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
 }
 
 .option[data-selected] {
-  font-weight: 700;
+  font-weight: var(--weight-medium);
+  color: var(--color-accent);
 }
 
 .option[data-selected]::before {
-  content: "✓ ";
+  content: "✓";
 }
 
 .description {
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
 }
 
 .fieldError {
   color: var(--color-danger);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
 }
 
 .errorBox {
   color: var(--color-danger);
   background: var(--color-danger-bg);
-  border-inline-start: 6px solid var(--color-danger);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
+  font-size: var(--text-base);
 }
 
 .card {
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: var(--space-4) var(--space-6);
-  margin-block-end: var(--space-6);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: var(--space-5) var(--space-6);
+  margin-block-end: var(--space-5);
 }
 
 .cardTitle {
-  margin-block-start: 0;
-  font-size: 1.25rem;
+  margin-block: 0 var(--space-4);
+  font-size: var(--text-lg);
+}
+
+@media (max-width: 40rem) {
+  .card {
+    padding: var(--space-4);
+  }
 }

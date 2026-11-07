@@ -17,6 +17,7 @@ const steps: { name: string; cmd: string[]; cwd?: string; when?: () => boolean; 
   { name: "lint-rule snapshot", cmd: ["bun", "tools/biome/snapshot.ts", "--check"] },
   { name: "suppression baseline", cmd: ["bun", "tools/biome/check-suppressions.ts"] },
   { name: "i18n catalog check", cmd: ["bun", "tools/i18n/check-catalogs.ts"] },
+  { name: "colour tokens meet WCAG AA", cmd: ["bun", "apps/web/scripts/contrast.ts"] },
   {
     name: "JSON Schema export is up to date",
     cmd: ["bun", "packages/shared/scripts/export-json-schema.ts", "--check"],

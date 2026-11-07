@@ -18,6 +18,7 @@
     "lint:rule:snapshot": "bun tools/biome/snapshot.ts --check",
     "lint:suppressions": "bun tools/biome/check-suppressions.ts",
     "i18n:check": "bun tools/i18n/check-catalogs.ts",
+    "ui:contrast": "bun apps/web/scripts/contrast.ts",
     "schema:export": "bun packages/shared/scripts/export-json-schema.ts",
     "db:generate": "drizzle-kit generate --config packages/db/drizzle.config.ts",
     "db:migrate": "bun packages/db/scripts/migrate.ts",

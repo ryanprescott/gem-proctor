@@ -1,0 +1,118 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: var(--control-height-sm);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.ghost,
+.nav {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.ghost[data-hovered],
+.nav[data-hovered],
+.ghost[data-pressed],
+.nav[data-pressed] {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.secondary {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-1);
+}
+
+.current {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.caret {
+  font-size: var(--text-xs);
+  opacity: 0.7;
+}
+
+.popover {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-2);
+  min-inline-size: 12rem;
+}
+
+.popover[data-entering] {
+  animation: menu-in var(--duration) var(--ease-out);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+.menu {
+  outline: none;
+  padding: var(--space-1);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  text-decoration: none;
+  cursor: pointer;
+  outline: none;
+}
+
+.item[data-focused] {
+  background: var(--color-surface-hover);
+}
+
+.item[data-focus-visible] {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.item[aria-current="page"] {
+  color: var(--color-accent);
+  font-weight: var(--weight-medium);
+}
+
+.danger {
+  color: var(--color-danger);
+}
+
+.danger[data-focused] {
+  background: var(--color-danger-bg);
+}
+
+.separator {
+  block-size: 1px;
+  background: var(--color-border);
+  margin: var(--space-1) 0;
+}
+
+.note {
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: default;
+}

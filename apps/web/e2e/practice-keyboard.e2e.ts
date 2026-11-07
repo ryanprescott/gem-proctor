@@ -6,6 +6,7 @@ import {
   adminRequest,
   createUser,
   liveRegionText,
+  navByKeyboard,
   newSignedInPage,
   PASSWORD,
   PRACTICE_QUIZ,
@@ -74,8 +75,7 @@ test("B36: keyboard-only practice flow", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: /^Welcome/ })).toBeVisible();
 
   // Tests → the test → Take test.
-  await tabTo(page, page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Tests" }));
-  await page.keyboard.press("Enter");
+  await navByKeyboard(page, "Tests", "All tests");
   await tabTo(page, page.getByRole("link", { name: "Practice e2e quiz" }));
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { level: 1, name: "Practice e2e quiz" })).toBeVisible();

@@ -85,6 +85,20 @@ export async function tabTo(page: Page, target: Locator, max = 80) {
   throw new Error(`could not reach ${target} with Tab`);
 }
 
+/** Keyboard only: Tab to a header menu (Tests, Create, Admin), open it with Enter, arrow to `item`, and Enter. */
+export async function navByKeyboard(page: Page, menu: string, item: string) {
+  await tabTo(page, page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: menu, exact: true }));
+  await page.keyboard.press("Enter");
+  const target = page.getByRole("menuitem", { name: item, exact: true });
+  await expect(target).toBeVisible();
+  for (let i = 0; i < 10; i++) {
+    if (await target.evaluate((el) => el === document.activeElement)) break;
+    await page.keyboard.press("ArrowDown");
+  }
+  await expect(target).toBeFocused();
+  await page.keyboard.press("Enter");
+}
+
 export async function liveRegionText(page: Page) {
   return (await page.getByTestId("live-region").textContent()) ?? "";
 }
