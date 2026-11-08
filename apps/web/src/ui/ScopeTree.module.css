@@ -64,3 +64,32 @@
   color: var(--color-text-muted);
   font-size: 0.875rem;
 }
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.caret {
+  flex: none;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+button.caret:hover {
+  background: var(--color-surface);
+}
+
+button.caret[data-focus-visible] {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}

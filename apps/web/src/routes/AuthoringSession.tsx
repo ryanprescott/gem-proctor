@@ -25,7 +25,7 @@ import {
   type SessionProgress,
   sourcesSections,
 } from "@gem/shared/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Form } from "react-aria-components";
@@ -214,6 +214,24 @@ const toItem = (o: ObjectiveView): Item => ({
   sectionIds: o.sectionIds,
 });
 
+/** Each section's chapter: its top-level heading (or the one under a book's single title), for grouping objectives. */
+function chapterIndex(sections: { id: string; parentId: string | null; title: string }[]) {
+  const byId = new Map(sections.map((x) => [x.id, x]));
+  const roots = sections.filter((x) => x.parentId === null);
+  const top = roots.length === 1 ? roots[0]?.id : undefined;
+  const chapter = new Map<string, { id: string; title: string }>();
+  for (const x of sections) {
+    let at = x;
+    while (at.parentId !== null && at.parentId !== top) {
+      const up = byId.get(at.parentId);
+      if (!up) break;
+      at = up;
+    }
+    chapter.set(x.id, { id: at.id, title: at.title });
+  }
+  return chapter;
+}
+
 function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; refresh: Refresh; open: boolean }) {
   const { t } = useTranslation();
   const { announce } = useLive();
@@ -222,6 +240,17 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
   const [picked, setPicked] = useState<Set<string>>(new Set());
   // The objective being edited in the dialog (a copy), or a new one; null when the dialog is closed.
   const [editing, setEditing] = useState<{ item: Item; isNew: boolean } | null>(null);
+  const [chapterKey, setChapterKey] = useState("all");
+  const sectionLists = useQueries({
+    queries: detail.sources.map((s) => ({
+      queryKey: ["source", s.sourceId, "sections", s.revisionNumber],
+      queryFn: () => api.call(sourcesSections, { params: { id: s.sourceId }, query: { revision: s.revisionNumber } }),
+    })),
+  });
+  const chapterOf = chapterIndex(sectionLists.flatMap((q) => q.data?.sections ?? []));
+  const chapterFor = (o: Item) => chapterOf.get(o.sectionIds[0] ?? "");
+  const chapters = [...new Map(items.flatMap((o) => chapterFor(o) ?? []).map((c) => [c.id, c])).values()];
+  const shown = items.filter((o) => chapterKey === "all" || chapterFor(o)?.id === chapterKey);
   const seen = useRef(JSON.stringify(detail.objectives));
   useEffect(() => {
     const now = JSON.stringify(detail.objectives);
@@ -276,50 +305,84 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
       open={open}
     >
       <p className={styles.muted}>{t("authoring:objectives.help")}</p>
+      {chapters.length > 1 ? (
+        <div className={styles.row}>
+          <Select
+            label={t("authoring:objectives.chapter")}
+            selectedKey={chapterKey}
+            onSelectionChange={setChapterKey}
+            options={[
+              { id: "all", label: t("authoring:objectives.allChapters", { count: items.length }) },
+              ...chapters.map((c) => ({
+                id: c.id,
+                label: t("authoring:objectives.chapterOption", {
+                  title: c.title.replace(/[*_`#$]/g, "").trim(),
+                  count: items.filter((o) => chapterFor(o)?.id === c.id).length,
+                }),
+              })),
+            ]}
+          />
+          {editable && chapterKey !== "all" ? (
+            <Button
+              variant="secondary"
+              onPress={() => {
+                const gone = new Set(shown.map((o) => o.key));
+                setItems((l) => l.filter((i) => !gone.has(i.key)));
+                setChapterKey("all");
+              }}
+            >
+              {t("authoring:objectives.removeShown", { count: shown.length })}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <ol className={styles.objectiveList} aria-label={t("authoring:objectives.title")}>
-        {items.map((o, n) => (
-          <li key={o.key} className={styles.objectiveRow}>
-            {editable ? (
-              <input
-                type="checkbox"
-                className={styles.objectivePick}
-                aria-label={t("authoring:objectives.pick", { n: n + 1 })}
-                checked={picked.has(o.key)}
-                onChange={(e) =>
-                  setPicked((p) => {
-                    const next = new Set(p);
-                    if (e.target.checked) next.add(o.key);
-                    else next.delete(o.key);
-                    return next;
-                  })
-                }
-              />
-            ) : null}
-            <span className={styles.objectiveNumber} aria-hidden="true">
-              {n + 1}
-            </span>
-            <div className={styles.objectiveText}>
-              <span className={styles.objectiveLabel}>{o.label || t("authoring:objectives.untitled")}</span>
-              {o.description ? <span className={styles.muted}>{o.description}</span> : null}
-            </div>
-            <Badge>{t("authoring:objectives.evidence", { count: o.evidence.length })}</Badge>
-            {editable ? (
-              <Menu
-                label={t("authoring:objectives.actions", { n: n + 1 })}
-                items={
-                  <>
-                    <MenuItem onAction={() => setEditing({ item: { ...o }, isNew: false })}>
-                      {t("authoring:objectives.edit")}
-                    </MenuItem>
-                    <MenuItem danger onAction={() => setItems((l) => l.filter((i) => i.key !== o.key))}>
-                      {t("authoring:objectives.removeShort")}
-                    </MenuItem>
-                  </>
-                }
-              />
-            ) : null}
-          </li>
-        ))}
+        {shown.map((o) => {
+          const n = items.indexOf(o);
+          return (
+            <li key={o.key} className={styles.objectiveRow}>
+              {editable ? (
+                <input
+                  type="checkbox"
+                  className={styles.objectivePick}
+                  aria-label={t("authoring:objectives.pick", { n: n + 1 })}
+                  checked={picked.has(o.key)}
+                  onChange={(e) =>
+                    setPicked((p) => {
+                      const next = new Set(p);
+                      if (e.target.checked) next.add(o.key);
+                      else next.delete(o.key);
+                      return next;
+                    })
+                  }
+                />
+              ) : null}
+              <span className={styles.objectiveNumber} aria-hidden="true">
+                {n + 1}
+              </span>
+              <div className={styles.objectiveText}>
+                <span className={styles.objectiveLabel}>{o.label || t("authoring:objectives.untitled")}</span>
+                {o.description ? <span className={styles.muted}>{o.description}</span> : null}
+              </div>
+              <Badge>{t("authoring:objectives.evidence", { count: o.evidence.length })}</Badge>
+              {editable ? (
+                <Menu
+                  label={t("authoring:objectives.actions", { n: n + 1 })}
+                  items={
+                    <>
+                      <MenuItem onAction={() => setEditing({ item: { ...o }, isNew: false })}>
+                        {t("authoring:objectives.edit")}
+                      </MenuItem>
+                      <MenuItem danger onAction={() => setItems((l) => l.filter((i) => i.key !== o.key))}>
+                        {t("authoring:objectives.removeShort")}
+                      </MenuItem>
+                    </>
+                  }
+                />
+              ) : null}
+            </li>
+          );
+        })}
       </ol>
       {editable ? (
         <div className={styles.row}>

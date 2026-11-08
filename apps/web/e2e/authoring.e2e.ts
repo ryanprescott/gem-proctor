@@ -410,3 +410,62 @@ test("a new session leaves a source's Exercises out and says so; unticking and t
   ).not.toBeChecked();
   await page.context().close();
 });
+
+test("a long book's scope opens as chapters: tick one whole, then narrow its objectives by chapter", async ({
+  browser,
+}) => {
+  const page = await signedIn(browser);
+  const chapter = (n: number) =>
+    [
+      `# Chapter ${n}: Topic ${n}\n\nChapter ${n} opens with the ideas of topic ${n}, which the sections below develop in turn.`,
+      ...Array.from(
+        { length: 14 },
+        (_, k) => `## Part ${n}.${k + 1}\n\nPart ${n}.${k + 1} explains one fact about topic ${n}, number ${k + 1}.`,
+      ),
+    ].join("\n\n");
+  const added = await page.request.post("/api/v1/sources", {
+    data: { title: "Long book", citationLabel: "LB", text: [chapter(1), chapter(2)].join("\n\n") },
+  });
+  expect(added.status(), await added.text()).toBe(200);
+  const bookId = (await added.json()).source.id as string;
+  await expect
+    .poll(async () => (await (await page.request.get(`/api/v1/sources/${bookId}`)).json()).source.latest.embedStatus, {
+      timeout: 30_000,
+    })
+    .toBe("ready");
+  const made = await page.request.post("/api/v1/authoring/sessions", {
+    data: { title: "Long quiz", testType: "chapter_quiz", sources: [{ sourceId: bookId }] },
+  });
+  expect(made.status(), await made.text()).toBe(200);
+  await page.goto(`/authoring/${((await made.json()) as { session: { id: string } }).session.id}`);
+
+  const objectives = page.getByRole("list", { name: "Objectives" }).getByRole("listitem");
+  await expect(objectives).toHaveCount(30);
+  await page.getByRole("button", { name: /^Sources and scope/ }).click();
+  const tree = page.getByRole("group", { name: /^Sections of/ });
+  // Only the chapters show; a chapter says how much of it is ticked.
+  await expect(tree.getByRole("checkbox")).toHaveCount(2);
+  await expect(tree).toContainText("15 of 15 sections");
+  await expectNoAxeViolations(page, "a long book's scope, collapsed");
+
+  // Untick chapter 2 whole, without opening it, and save: only chapter 1 stays.
+  await tree.locator("label", { has: page.getByRole("checkbox", { name: /^Chapter 2/ }) }).click();
+  await expect(tree).toContainText("0 of 15 sections");
+  await page.getByRole("button", { name: "Save scope" }).click();
+  await expect(objectives).toHaveCount(15);
+  // A chapter opens to its sections.
+  await tree.getByRole("button", { name: /Show what's under Chapter 1/ }).click();
+  await expect(tree.getByRole("checkbox")).toHaveCount(16);
+
+  // Bring chapter 2 back, and narrow the objectives by chapter.
+  await tree.locator("label", { has: page.getByRole("checkbox", { name: /^Chapter 2/ }) }).click();
+  await page.getByRole("button", { name: "Save scope" }).click();
+  await expect(objectives).toHaveCount(30);
+  await page.getByRole("button", { name: /Show objectives from/ }).click();
+  await page.getByRole("option", { name: /^Chapter 2/ }).click();
+  await expect(objectives).toHaveCount(15);
+  await page.getByRole("button", { name: "Remove these 15" }).click();
+  await expect(objectives).toHaveCount(15);
+  await expect(objectives.first()).toContainText("Chapter 1");
+  await page.context().close();
+});
