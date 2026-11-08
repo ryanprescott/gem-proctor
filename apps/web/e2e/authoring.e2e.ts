@@ -345,3 +345,68 @@ test("a session is deleted from the list after a question, and said so", async (
   await expect(page.getByRole("row", { name: /^Vectors quiz/ })).toBeVisible();
   await page.context().close();
 });
+
+test("a new session leaves a source's Exercises out and says so; unticking and ticking work as shown", async ({
+  browser,
+}) => {
+  const page = await signedIn(browser);
+  const text = [
+    "# Chapter 1: Vectors\n\nA vector is an ordered list of numbers, and the length of the list is its size.",
+    "## Inner product\n\nThe inner product of two vectors multiplies their entries in pairs and adds the results.",
+    "## Exercises\n\n1.1 What is the nearest neighbor of x among the unit vectors?",
+  ].join("\n\n");
+  const added = await page.request.post("/api/v1/sources", {
+    data: { title: "Book with exercises", citationLabel: "BE", text },
+  });
+  expect(added.status(), await added.text()).toBe(200);
+  const bookId = (await added.json()).source.id as string;
+  await expect
+    .poll(async () => (await (await page.request.get(`/api/v1/sources/${bookId}`)).json()).source.latest.embedStatus, {
+      timeout: 30_000,
+    })
+    .toBe("ready");
+  // What the new-session form sends: the source, and no sections.
+  const made = await page.request.post("/api/v1/authoring/sessions", {
+    data: { title: "Exercises quiz", testType: "chapter_quiz", sources: [{ sourceId: bookId }] },
+  });
+  expect(made.status(), await made.text()).toBe(200);
+  await page.goto(`/authoring/${((await made.json()) as { session: { id: string } }).session.id}`);
+
+  const objectives = page.getByRole("list", { name: "Objectives" }).getByRole("listitem");
+  await expect(objectives).toHaveCount(2);
+  await expect(objectives.nth(0)).toContainText("Chapter 1: Vectors");
+  await expect(objectives.nth(1)).toContainText("Inner product");
+
+  await page.getByRole("button", { name: /^Sources and scope/ }).click();
+  const tree = page.getByRole("group", { name: /^Sections of/ });
+  await expect(page.getByRole("note")).toContainText("One Exercises section is left out");
+  await expect(tree.getByRole("checkbox", { name: /^Exercises/ })).not.toBeChecked();
+  await expect(tree.getByRole("checkbox", { name: /^Inner product/ })).toBeChecked();
+  await expectNoAxeViolations(page, "scope with the exercises left out");
+
+  // Ticking them brings them in, and the note goes.
+  const tick = async (name: RegExp) => {
+    const box = tree.getByRole("checkbox", { name });
+    await tree.locator("label", { has: page.getByRole("checkbox", { name }) }).click();
+    return box;
+  };
+  await expect(await tick(/^Exercises/)).toBeChecked();
+  await expect(page.getByRole("note")).toHaveCount(0);
+  await page.getByRole("button", { name: "Save scope" }).click();
+  await expect.poll(() => liveRegionText(page)).toContain("Scope saved");
+  await expect(objectives).toHaveCount(3);
+  await expect(objectives.nth(2)).toContainText("Exercises");
+
+  // Unticking one section under a ticked heading leaves just that one out: the heading's text stays.
+  await expect(await tick(/^Inner product/)).not.toBeChecked();
+  await page.getByRole("button", { name: "Save scope" }).click();
+  await expect(objectives).toHaveCount(2);
+  await expect(objectives.nth(0)).toContainText("Chapter 1: Vectors");
+  await expect(objectives.nth(1)).toContainText("Exercises");
+  await page.reload();
+  await page.getByRole("button", { name: /^Sources and scope/ }).click();
+  await expect(
+    page.getByRole("group", { name: /^Sections of/ }).getByRole("checkbox", { name: /^Inner product/ }),
+  ).not.toBeChecked();
+  await page.context().close();
+});

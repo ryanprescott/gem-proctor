@@ -1,5 +1,5 @@
 import { Source, SourceChunk, SourceRevision, SourceSection } from "@gem/db";
-import { chunkCap, expandSections, previewSource } from "@gem/knowledge";
+import { chunkCap, effectiveSections, previewSource } from "@gem/knowledge";
 import { LlmError } from "@gem/llm";
 import { AppError, MODEL_ROLES } from "@gem/shared";
 import {
@@ -277,7 +277,7 @@ export function sourcesRoutes(app: FastifyInstance, ctx: AppContext) {
 
   route(app, sourcesEstimate, async ({ params, body: b }) => {
     const revision = await loadRevision(ctx, params.id, b.revision);
-    const sectionIds = b.sectionIds ? await expandSections(ctx.db, revision.id, b.sectionIds) : null;
+    const sectionIds = await effectiveSections(ctx.db, revision.id, b.sectionIds ?? null, b.excludeSectionIds ?? null);
     const [total] = await ctx.db
       .select({
         chunks: sql<number>`count(*)::int`,

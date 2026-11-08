@@ -163,6 +163,21 @@ describe("E29: L1", () => {
     expect(placeholdersIn("a \\frac{a}{b} c")).toEqual([]);
   });
 
+  test("numbers that are only notation (a size, a subscript) aren't numbers smuggled into the question", () => {
+    const warns = (question: string) =>
+      codes(checkStructure(calc({ question }), ctx)).filter((c) => c === "number_outside_placeholder");
+    // The question that made three warnings: "3-vector", "e_1, e_2, e_3".
+    expect(
+      warns("Let x be the 3-vector {x}. Find the unit vector e_i among e_1, e_2, e_3 that is closest to {y}."),
+    ).toEqual([]);
+    expect(warns("For the 2 by 3 matrix {x} and the 4x4 matrix {y}, what is the product?")).toEqual([]);
+    expect(warns("Let {x} be a 5-dimensional vector with entries x_1, x_{12} and x2.")).toEqual([]);
+    // A value is still a value, next to notation or not.
+    expect(warns("Let {x} be a 3-vector. What is the sum of {x} and 7?")).toEqual(["number_outside_placeholder"]);
+    expect(warns("With {x}, {y} and e_2 times 12, what is it?")).toEqual(["number_outside_placeholder"]);
+    expect(warns("What is {x} plus 3.5?")).toEqual(["number_outside_placeholder"]);
+  });
+
   test("a number outside a placeholder is a warn, unless the quote has it; a source value must be in a quote", () => {
     const warned = checkStructure(calc({ question: "With {x}, {y} and the number 7, what is it?" }), ctx);
     expect(warned.outcome).toBe("warn");

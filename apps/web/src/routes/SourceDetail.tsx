@@ -26,7 +26,7 @@ import { useDocumentTitle, useLive } from "../ui/live.tsx";
 import { Menu, MenuItem } from "../ui/Menu.tsx";
 import { PageHeader } from "../ui/PageHeader.tsx";
 import { Passage } from "../ui/Passage.tsx";
-import { ScopeTree } from "../ui/ScopeTree.tsx";
+import { ScopeTree, scopeOf } from "../ui/ScopeTree.tsx";
 import { Tab, TabList, TabPanel, Tabs } from "../ui/Tabs.tsx";
 import styles from "./Sources.module.css";
 import { EmbedStatus } from "./Sources.tsx";
@@ -37,11 +37,19 @@ export interface SourceSearch {
   quote?: string;
 }
 
-function Estimate({ sourceId, revision, sectionIds }: { sourceId: string; revision: number; sectionIds: string[] }) {
+function Estimate({
+  sourceId,
+  revision,
+  scope,
+}: {
+  sourceId: string;
+  revision: number;
+  scope: { sectionIds?: string[]; excludeSectionIds?: string[] };
+}) {
   const { t } = useTranslation();
   const query = useQuery({
-    queryKey: ["source", sourceId, "estimate", revision, sectionIds],
-    queryFn: () => api.call(sourcesEstimate, { params: { id: sourceId }, body: { sectionIds, revision } }),
+    queryKey: ["source", sourceId, "estimate", revision, scope],
+    queryFn: () => api.call(sourcesEstimate, { params: { id: sourceId }, body: { ...scope, revision } }),
   });
   if (!query.data) return <ErrorMessage error={query.error} />;
   return (
@@ -278,7 +286,7 @@ function SizeCheck({ source, revision }: { source: SourceSummary; revision: numb
       <p className={styles.muted}>{t("sources:scope.help")}</p>
       <ErrorMessage error={sections.error} />
       <ScopeTree sections={list} selected={chosen} onChange={setSelected} label={t("sources:scope.label")} />
-      <Estimate sourceId={source.id} revision={revision} sectionIds={[...chosen]} />
+      <Estimate sourceId={source.id} revision={revision} scope={scopeOf(chosen, list)} />
     </>
   );
 }

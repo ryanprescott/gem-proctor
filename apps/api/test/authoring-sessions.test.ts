@@ -136,6 +136,72 @@ describe.skipIf(!hasDb || !verifyPython)("authoring sessions", () => {
       expect(only.objectives.map((o) => o.label)).toEqual(["Norms"]);
     }, 20_000);
 
+    test("a new session leaves a source's exercises out, and what's explicit is taken as it is", async () => {
+      // Exercises pose problems and don't state their answers: a question made from one has nothing to be right about.
+      const book = await addSource(
+        env.proctor,
+        [
+          "# Chapter 1: Vectors\n\nA vector is an ordered list of numbers, and its length is its size.",
+          "## Inner product\n\nThe inner product of two vectors multiplies their entries in pairs and adds them.",
+          "## Exercises\n\n1.1 What is the nearest neighbor of x among the unit vectors?",
+          "# Chapter 2: Matrices\n\nA matrix is a rectangular array of numbers.",
+          "## Exercises\n\n2.1 Add two matrices of the same size.",
+        ].join("\n\n"),
+      );
+      const all = (await env.proctor.get(`${API}/sources/${book.id}/sections`)).json().sections as Section[];
+      const ids = (title: string) => all.filter((x) => x.title === title).map((x) => x.id);
+      const make = async (entry: Record<string, unknown>) =>
+        (await create(env.proctor, { sources: [{ sourceId: book.id, ...entry }] })).json() as SessionDetail;
+      const labels = (d: SessionDetail) => d.objectives.map((o) => o.label);
+
+      // No scope given: everything but the exercises. The chapters keep their own introductions.
+      const started = await make({});
+      expect(labels(started)).toEqual(["Chapter 1: Vectors", "Inner product", "Chapter 2: Matrices"]);
+      const used = started.sources[0]?.sectionIds as string[];
+      expect(used).toHaveLength(all.length - 2);
+      expect(used).toEqual(expect.arrayContaining([...ids("Chapter 1: Vectors"), ...ids("Chapter 2: Matrices")]));
+      expect(used.some((id) => ids("Exercises").includes(id))).toBe(false);
+
+      // Naming a chapter stands for what's under it, exercises included: that's an explicit choice.
+      const chosen = await make({ sectionIds: ids("Chapter 1: Vectors") });
+      expect(labels(chosen)).toEqual(["Chapter 1: Vectors", "Inner product", "Exercises"]);
+
+      // A scope of exclusions alone is all but those, exactly.
+      const lessOne = await make({ excludeSectionIds: ids("Inner product") });
+      expect(labels(lessOne)).toEqual(["Chapter 1: Vectors", "Exercises", "Chapter 2: Matrices", "Exercises"]);
+
+      // Sections of another source can't be left out.
+      const foreign = sections[0]?.id as string;
+      const refused = await create(env.proctor, { sources: [{ sourceId: book.id, excludeSectionIds: [foreign] }] });
+      expect(refused.statusCode).toBe(422);
+      expect(refused.json().code).toBe("authoring_scope_invalid");
+
+      // The picker sends no sections when everything is ticked: the exercises are back in, because it was asked for.
+      const put = await env.proctor.put(`${API}/authoring/sessions/${started.session.id}/scope`, {
+        sources: [{ sourceId: book.id }],
+      });
+      expect(put.statusCode).toBe(200);
+      const after = (await env.proctor.get(`${API}/authoring/sessions/${started.session.id}`)).json() as SessionDetail;
+      expect(labels(after)).toEqual([
+        "Chapter 1: Vectors",
+        "Inner product",
+        "Exercises",
+        "Chapter 2: Matrices",
+        "Exercises",
+      ]);
+      expect(after.sources[0]?.sectionIds).toBeNull();
+
+      // Unticking one section under a ticked heading leaves it out, and leaves the heading's own text in.
+      const partial = await env.proctor.put(`${API}/authoring/sessions/${started.session.id}/scope`, {
+        sources: [
+          { sourceId: book.id, sectionIds: ids("Chapter 1: Vectors"), excludeSectionIds: ids("Inner product") },
+        ],
+      });
+      expect(partial.statusCode).toBe(200);
+      const left = (await env.proctor.get(`${API}/authoring/sessions/${started.session.id}`)).json() as SessionDetail;
+      expect(labels(left)).toEqual(["Chapter 1: Vectors", "Exercises"]);
+    }, 30_000);
+
     test("the model proposes per section, each citing real chunks, and the passages sent are in the prompt", async () => {
       const { session: s, objectives } = await session();
       const sent = env.mock.chatRequests().length;

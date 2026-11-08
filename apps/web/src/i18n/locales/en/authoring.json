@@ -51,7 +51,9 @@
     "changedTitle": "A source changed.",
     "changed": "{{titles}} has a newer revision. This session still uses the one it started from.",
     "revalidate": "Check the quotes against the new revision",
-    "revalidated": "Quotes checked against the new revision."
+    "revalidated": "Quotes checked against the new revision.",
+    "exercisesLeftOut_one": "One Exercises section is left out: it poses problems without their answers, so questions made from it often have none. Tick it to include it.",
+    "exercisesLeftOut_other": "{{count}} Exercises sections are left out: they pose problems without their answers, so questions made from them often have none. Tick them to include them."
   },
   "objectives": {
     "title": "Objectives",

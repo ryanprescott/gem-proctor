@@ -681,6 +681,11 @@ export const AuthoringSessionSource = pgTable(
       .notNull()
       .references(() => SourceRevision.id),
     sectionIds: uuid("section_ids").array(),
+    /**
+     * Sections left out of what `sectionIds` stands for, each exactly (not its subtree): a session starts without a
+     * source's exercises, and a picker's unticked sections are these. Null: none.
+     */
+    excludedSectionIds: uuid("excluded_section_ids").array(),
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.sourceId] })],
 );

@@ -981,8 +981,12 @@ export const sourcesEstimate = contract({
   method: "POST",
   path: "/sources/:id/scope/estimate",
   params: IdParams,
-  /** No `sectionIds`: the whole revision. A section stands for everything under it. */
-  body: z.object({ sectionIds: z.array(Uuid).max(2000).optional(), revision: z.number().int().positive().optional() }),
+  /** No `sectionIds`: the whole revision. A section stands for everything under it, less `excludeSectionIds`, exactly. */
+  body: z.object({
+    sectionIds: z.array(Uuid).max(2000).optional(),
+    excludeSectionIds: z.array(Uuid).max(2000).optional(),
+    revision: z.number().int().positive().optional(),
+  }),
   response: ScopeEstimate,
 });
 
@@ -1155,7 +1159,7 @@ export const SessionSourceView = z.object({
   /** The revision the session works from: pinned, so a later edit can't move it. */
   revisionId: Uuid,
   revisionNumber: z.number().int(),
-  /** Null: the whole source. */
+  /** The sections in use, exactly (what was ticked, less what was left out); null: the whole source. */
   sectionIds: z.array(Uuid).nullable(),
   latestRevisionNumber: z.number().int(),
   /** A newer revision is ready (SPEC §3C.5). */
@@ -1265,9 +1269,19 @@ export const SessionDetail = z.object({
 });
 export type SessionDetail = z.infer<typeof SessionDetail>;
 
+/**
+ * A session's scope: per source, the sections it uses (each standing for what's under it; none given: all of it) and,
+ * optionally, sections to leave out of that, each exactly. A source given neither starts without its exercises.
+ */
 const ScopeBody = z.object({
   sources: z
-    .array(z.object({ sourceId: Uuid, sectionIds: z.array(Uuid).max(2000).optional() }))
+    .array(
+      z.object({
+        sourceId: Uuid,
+        sectionIds: z.array(Uuid).max(2000).optional(),
+        excludeSectionIds: z.array(Uuid).max(2000).optional(),
+      }),
+    )
     .min(1)
     .max(20),
 });

@@ -92,3 +92,19 @@ export const Citation = z.object({
   revision: z.number().int(),
 });
 export type Citation = z.infer<typeof Citation>;
+
+/**
+ * Whether a section is a set of exercises: "Exercises", "3.2 Problems", "Practice problems", "Review questions",
+ * "Homework". These pose problems and don't state their answers, so a question made from one has nothing in the source
+ * to be right about: an authoring session leaves them out unless they're ticked (SPEC §3C.4). The whole title has to be
+ * that, so "Exercises in linear algebra" or a chapter on "Problems of scale" is a section like any other.
+ */
+export function isExerciseSection(title: string): boolean {
+  const plain = title
+    .replace(/[*_`#]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /^(?:(?:chapter\s+)?\d+(?:\.\d+)*[.:)]?\s+)?(?:exercises?|problems?|practice\s+(?:exercises?|problems?)|review\s+(?:exercises?|questions?)|homework(?:\s+problems?)?|end[- ]of[- ]chapter\s+(?:exercises?|problems?|questions?))\s*[.:]?$/i.test(
+    plain,
+  );
+}

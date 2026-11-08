@@ -82,6 +82,26 @@ export async function expandSections(db: Pick<Db, "select">, revisionId: string,
   return [...out];
 }
 
+/**
+ * The sections a scope uses, exactly: each listed section standing for what's under it (none listed: all of the
+ * revision), less the sections left out. Null when that is the whole revision.
+ */
+export async function effectiveSections(
+  db: Pick<Db, "select">,
+  revisionId: string,
+  sectionIds: string[] | null,
+  excluded: string[] | null,
+): Promise<string[] | null> {
+  const left = new Set(excluded ?? []);
+  if (!sectionIds && left.size === 0) return null;
+  const base = sectionIds
+    ? await expandSections(db, revisionId, sectionIds)
+    : (
+        await db.select({ id: SourceSection.id }).from(SourceSection).where(eq(SourceSection.revisionId, revisionId))
+      ).map((r) => r.id);
+  return base.filter((id) => !left.has(id));
+}
+
 type Hit = { id: string };
 
 async function vectorSearch(db: Db, filter: SQL, model: string, vector: number[]): Promise<Hit[]> {

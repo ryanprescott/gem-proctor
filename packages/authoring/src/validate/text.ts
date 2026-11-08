@@ -51,6 +51,20 @@ export function bestWindowSimilarity(quote: string, text: string): number {
   return Math.min(best, 1);
 }
 
+/**
+ * The text without the numbers that are only notation: a size ("a 3-vector", "a 2 by 3 matrix", "a 4x4 matrix", "a
+ * 5-dimensional space") and a subscript ("e_2", "x_{12}", "e2"). They name things and aren't values the question
+ * smuggles in, so they don't count when checking that every number comes from an input or the source.
+ */
+export function withoutNotation(text: string): string {
+  return text
+    .replace(/\b\d+\s*-\s*(?:vectors?|dimensional|dim|d|entry|element|tuple|column|row|sparse)\b/gi, " ")
+    .replace(/\b\d+\s+by\s+\d+\b/gi, " ")
+    .replace(/\b\d+\s*[x×]\s*\d+\b/gi, " ")
+    .replace(/\b[A-Za-z]_\{?\d+(?:\s*,\s*\d+)?\}?/g, " ")
+    .replace(/\b[A-Za-z]\d+\b/g, " ");
+}
+
 /** Numbers as written: `1,000` is one number, and `-3` keeps its sign only when it isn't a subtraction. */
 export function numbersIn(text: string): string[] {
   return (text.replace(/\$[^$]*\$/g, " ").match(/\d+(?:[.,]\d+)*/g) ?? []).map((n) => n.replace(/,/g, ""));

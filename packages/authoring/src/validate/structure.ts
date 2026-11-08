@@ -1,5 +1,5 @@
 import { type LayerResult, layerResult, type ValidationIssue, type ValidationIssueCode } from "@gem/shared";
-import { normalizeText, numbersIn } from "./text.ts";
+import { normalizeText, numbersIn, withoutNotation } from "./text.ts";
 
 /** L1: the cross-field rules Zod can't state (SPEC §3A.3). Everything here is about one question's own fields. */
 
@@ -74,7 +74,7 @@ function computableIssues(q: StructureInput, chunks?: ReadonlyMap<string, string
     }
   }
   const allowed = new Set(numbersIn(q.evidence.map((e) => e.quote).join(" ")));
-  for (const n of numbersIn(withoutPlaceholders(q.question))) {
+  for (const n of numbersIn(withoutNotation(withoutPlaceholders(q.question)))) {
     if (!allowed.has(n)) out.push(issue("number_outside_placeholder", "warn", { number: n }));
   }
   return out;

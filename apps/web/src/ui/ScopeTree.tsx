@@ -6,6 +6,19 @@ import { formatNumber } from "../format.ts";
 import { Markdown } from "./Markdown.tsx";
 import styles from "./ScopeTree.module.css";
 
+/**
+ * What to send for a selection: nothing when every section is ticked (the whole source), else the ticked sections and,
+ * exactly, the unticked ones. A ticked heading stands for what's under it on the server, so unticking one section of it
+ * has to be said or it comes straight back.
+ */
+export function scopeOf(
+  selected: ReadonlySet<string>,
+  sections: readonly { id: string }[],
+): { sectionIds?: string[]; excludeSectionIds?: string[] } {
+  const left = sections.filter((s) => !selected.has(s.id)).map((s) => s.id);
+  return left.length === 0 ? {} : { sectionIds: [...selected], excludeSectionIds: left };
+}
+
 /** Everything under a section, itself included. */
 function subtree(id: string, children: Map<string | null, SourceSectionView[]>): string[] {
   return [id, ...(children.get(id) ?? []).flatMap((c) => subtree(c.id, children))];

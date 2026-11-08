@@ -1,0 +1,1 @@
+ALTER TABLE "authoring_session_source" ADD COLUMN "excluded_section_ids" uuid[];

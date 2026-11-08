@@ -1,4 +1,11 @@
-import { type Blueprint, QUESTION_TYPES, type QuestionType, TEST_TYPES, type TestType } from "@gem/shared";
+import {
+  type Blueprint,
+  isExerciseSection,
+  QUESTION_TYPES,
+  type QuestionType,
+  TEST_TYPES,
+  type TestType,
+} from "@gem/shared";
 import {
   authoringBatchRetry,
   authoringBlueprint,
@@ -34,11 +41,14 @@ import { Disclosure } from "../ui/Disclosure.tsx";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
 import { Menu, MenuItem } from "../ui/Menu.tsx";
 import { PageHeader } from "../ui/PageHeader.tsx";
-import { ScopeTree } from "../ui/ScopeTree.tsx";
+import { ScopeTree, scopeOf } from "../ui/ScopeTree.tsx";
 import styles from "./Authoring.module.css";
 import { ReviewSection } from "./AuthoringReview.tsx";
 
 type Refresh = () => Promise<unknown>;
+
+/** What a source's scope step sends: the sections ticked and left out, or nothing for the whole source. */
+type Picked = { sectionIds?: string[]; excludeSectionIds?: string[] };
 
 /**
  * One stage of a session (scope, objectives, blueprint, generation): a section that opens and closes, with a line
@@ -71,7 +81,7 @@ function SourceScope({
 }: {
   source: SessionDetail["sources"][number];
   editable: boolean;
-  onChange: (sourceId: string, ids: string[] | null) => void;
+  onChange: (sourceId: string, picked: Picked) => void;
 }) {
   const { t } = useTranslation();
   const query = useQuery({
@@ -82,12 +92,18 @@ function SourceScope({
   const sections = query.data?.sections ?? [];
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const current = selected ?? new Set(source.sectionIds ?? sections.map((s) => s.id));
+  const leftOut = sections.filter((s) => isExerciseSection(s.title) && !current.has(s.id)).length;
   return (
     <section aria-labelledby={`scope-${source.sourceId}`}>
       <h3 id={`scope-${source.sourceId}`}>
         {t("authoring:scope.source", { title: source.title, revision: source.revisionNumber })}
       </h3>
       <ErrorMessage error={query.error} />
+      {editable && leftOut > 0 ? (
+        <p className={styles.muted} role="note">
+          {t("authoring:scope.exercisesLeftOut", { count: leftOut })}
+        </p>
+      ) : null}
       {editable ? (
         <ScopeTree
           sections={sections}
@@ -95,7 +111,7 @@ function SourceScope({
           label={t("authoring:scope.label", { title: source.title })}
           onChange={(next) => {
             setSelected(next);
-            onChange(source.sourceId, next.size === sections.length ? null : [...next]);
+            onChange(source.sourceId, scopeOf(next, sections));
           }}
         />
       ) : (
@@ -113,16 +129,21 @@ function ScopeSection({ detail, refresh, open }: { detail: SessionDetail; refres
   const { t } = useTranslation();
   const { announce } = useLive();
   const editable = detail.session.status === "draft" && detail.questions.length === 0;
-  const [chosen, setChosen] = useState<Record<string, string[] | null>>({});
+  const qc = useQueryClient();
+  const [chosen, setChosen] = useState<Record<string, Picked>>({});
+  // A source nobody touched keeps the scope it has: its sections are in the cache, loaded for the picker above.
+  const unchanged = (s: SessionDetail["sources"][number]): Picked => {
+    const sections =
+      qc.getQueryData<{ sections: { id: string }[] }>(["source", s.sourceId, "sections", s.revisionNumber])?.sections ??
+      [];
+    return scopeOf(new Set(s.sectionIds ?? sections.map((x) => x.id)), sections);
+  };
   const save = useMutation({
     mutationFn: () =>
       api.call(authoringScope, {
         params: { id: detail.session.id },
         body: {
-          sources: detail.sources.map((s) => {
-            const ids = s.sourceId in chosen ? chosen[s.sourceId] : s.sectionIds;
-            return ids ? { sourceId: s.sourceId, sectionIds: ids } : { sourceId: s.sourceId };
-          }),
+          sources: detail.sources.map((s) => ({ sourceId: s.sourceId, ...(chosen[s.sourceId] ?? unchanged(s)) })),
         },
       }),
     onSuccess: async () => {
@@ -165,7 +186,7 @@ function ScopeSection({ detail, refresh, open }: { detail: SessionDetail; refres
           key={s.sourceId}
           source={s}
           editable={editable}
-          onChange={(id, ids) => setChosen((c) => ({ ...c, [id]: ids }))}
+          onChange={(id, picked) => setChosen((c) => ({ ...c, [id]: picked }))}
         />
       ))}
       {editable ? (

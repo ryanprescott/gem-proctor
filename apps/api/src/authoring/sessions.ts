@@ -8,13 +8,14 @@ import {
   SourceRevision,
   SourceSection,
 } from "@gem/db";
-import { estimateChunkTokens, expandSections, type ScopeEntry } from "@gem/knowledge";
+import { effectiveSections, estimateChunkTokens, type ScopeEntry } from "@gem/knowledge";
 import { LlmError, styleLine } from "@gem/llm";
 import {
   AppError,
   Blueprint,
   blueprintProblems,
   defaultBlueprint,
+  isExerciseSection,
   ObjectiveProposal,
   type TestType,
 } from "@gem/shared";
@@ -60,11 +61,7 @@ async function latestRevision(ctx: Pick<AppContext, "db">, sourceId: string) {
 }
 
 /** A session uses its owner's sources, whoever is asking: an admin reads anything, but authors from their own. */
-async function ownedReadySources(
-  ctx: Pick<AppContext, "db">,
-  ownerId: string,
-  wanted: { sourceId: string; sectionIds?: string[] | undefined }[],
-) {
+async function ownedReadySources(ctx: Pick<AppContext, "db">, ownerId: string, wanted: ScopeInput["sources"]) {
   const rows = [];
   for (const w of wanted) {
     const [source] = await ctx.db
@@ -74,14 +71,20 @@ async function ownedReadySources(
     if (!source) throw new AppError("source_not_found");
     const revision = await latestRevision(ctx, source.id);
     if (revision.embedStatus !== "ready") throw new AppError("source_not_ready");
-    if (w.sectionIds) {
+    for (const ids of [w.sectionIds, w.excludeSectionIds]) {
+      if (!ids || ids.length === 0) continue;
       const known = await ctx.db
         .select({ id: SourceSection.id })
         .from(SourceSection)
-        .where(and(eq(SourceSection.revisionId, revision.id), inArray(SourceSection.id, w.sectionIds)));
-      if (known.length !== new Set(w.sectionIds).size) throw new AppError("authoring_scope_invalid");
+        .where(and(eq(SourceSection.revisionId, revision.id), inArray(SourceSection.id, ids)));
+      if (known.length !== new Set(ids).size) throw new AppError("authoring_scope_invalid");
     }
-    rows.push({ source, revision, sectionIds: w.sectionIds ?? null });
+    rows.push({
+      source,
+      revision,
+      sectionIds: w.sectionIds ?? null,
+      excludedSectionIds: w.excludeSectionIds && w.excludeSectionIds.length > 0 ? w.excludeSectionIds : null,
+    });
   }
   return rows;
 }
@@ -96,7 +99,7 @@ export async function sessionScope(ctx: Pick<AppContext, "db">, sessionId: strin
     rows.map(async (r) => ({
       sourceId: r.sourceId,
       revisionId: r.revisionId,
-      sectionIds: r.sectionIds ? await expandSections(ctx.db, r.revisionId, r.sectionIds) : null,
+      sectionIds: await effectiveSections(ctx.db, r.revisionId, r.sectionIds, r.excludedSectionIds),
     })),
   );
 }
@@ -165,8 +168,30 @@ async function headingObjectives(ctx: Pick<AppContext, "db">, sessionId: string)
   }
 }
 
+/**
+ * What a new session leaves out when no scope is given: the source's exercises, and every section under one (SPEC
+ * §3C.4). They pose problems and don't state the answers, so a question made from one has nothing to be right about.
+ * Each is left out exactly, so the headings above them keep their own introductions. Null when there's nothing to leave
+ * out, or nothing else would be left.
+ */
+export async function defaultExclusions(ctx: Pick<AppContext, "db">, revisionId: string): Promise<string[] | null> {
+  const rows = await ctx.db
+    .select({ id: SourceSection.id, parentId: SourceSection.parentId, title: SourceSection.title })
+    .from(SourceSection)
+    .where(eq(SourceSection.revisionId, revisionId));
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const inExercises = (id: string) => {
+    for (let at: string | null | undefined = id; at; at = byId.get(at)?.parentId) {
+      if (isExerciseSection(byId.get(at)?.title ?? "")) return true;
+    }
+    return false;
+  };
+  const left = rows.filter((r) => inExercises(r.id)).map((r) => r.id);
+  return left.length > 0 && left.length < rows.length ? left : null;
+}
+
 export interface ScopeInput {
-  sources: { sourceId: string; sectionIds?: string[] | undefined }[];
+  sources: { sourceId: string; sectionIds?: string[] | undefined; excludeSectionIds?: string[] | undefined }[];
 }
 
 export async function createSession(
@@ -176,7 +201,15 @@ export async function createSession(
   meta: object,
 ) {
   await requireEmbeddings(ctx);
-  const sources = await ownedReadySources(ctx, ownerId, input.sources);
+  const asked = await ownedReadySources(ctx, ownerId, input.sources);
+  // A source given no scope at all starts without its exercises; one given sections or exclusions is taken as it is.
+  const sources = await Promise.all(
+    asked.map(async (s) =>
+      s.sectionIds === null && s.excludedSectionIds === null
+        ? { ...s, excludedSectionIds: await defaultExclusions(ctx, s.revision.id) }
+        : s,
+    ),
+  );
   const id = newId();
   await ctx.db.transaction(async (tx) => {
     await tx.insert(AuthoringSession).values({
@@ -193,6 +226,7 @@ export async function createSession(
         sourceId: s.source.id,
         revisionId: s.revision.id,
         sectionIds: s.sectionIds,
+        excludedSectionIds: s.excludedSectionIds,
       })),
     );
     await writeAudit(tx, {
@@ -220,6 +254,7 @@ export async function updateScope(ctx: Ctx, session: SessionRow, input: ScopeInp
         sourceId: s.source.id,
         revisionId: s.revision.id,
         sectionIds: s.sectionIds,
+        excludedSectionIds: s.excludedSectionIds,
       })),
     );
     await tx.update(AuthoringSession).set({ blueprint: null }).where(eq(AuthoringSession.id, session.id));
@@ -243,7 +278,7 @@ export async function sessionSources(ctx: Pick<AppContext, "db">, sessionId: str
         citationLabel: source.citationLabel,
         revisionId: revision.id,
         revisionNumber: revision.number,
-        sectionIds: scope.sectionIds,
+        sectionIds: await effectiveSections(ctx.db, revision.id, scope.sectionIds, scope.excludedSectionIds),
         latestRevisionNumber: latest.number,
         // A newer revision isn't news until it can be used (SPEC §3C.5).
         changed: latest.id !== revision.id && latest.embedStatus === "ready",

@@ -113,6 +113,13 @@
       "when": 1793934466927,
       "tag": "0015_p22_revision_pages",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794148211069,
+      "tag": "0016_p22_scope_exclusions",
+      "breakpoints": true
     }
   ]
 }
