@@ -8,14 +8,15 @@ import {
   SourceRevision,
   SourceSection,
 } from "@gem/db";
-import { effectiveSections, estimateChunkTokens, type ScopeEntry } from "@gem/knowledge";
+import { effectiveSections, estimateChunkTokens, expandSections, type ScopeEntry } from "@gem/knowledge";
 import { LlmError, styleLine } from "@gem/llm";
 import {
   AppError,
   Blueprint,
   blueprintProblems,
   defaultBlueprint,
-  isExerciseSection,
+  exerciseSectionIds,
+  type ObjectiveKind,
   ObjectiveProposal,
   type TestType,
 } from "@gem/shared";
@@ -71,7 +72,7 @@ async function ownedReadySources(ctx: Pick<AppContext, "db">, ownerId: string, w
     if (!source) throw new AppError("source_not_found");
     const revision = await latestRevision(ctx, source.id);
     if (revision.embedStatus !== "ready") throw new AppError("source_not_ready");
-    for (const ids of [w.sectionIds, w.excludeSectionIds]) {
+    for (const ids of [w.sectionIds, w.excludeSectionIds, w.exerciseSectionIds]) {
       if (!ids || ids.length === 0) continue;
       const known = await ctx.db
         .select({ id: SourceSection.id })
@@ -79,9 +80,19 @@ async function ownedReadySources(ctx: Pick<AppContext, "db">, ownerId: string, w
         .where(and(eq(SourceSection.revisionId, revision.id), inArray(SourceSection.id, ids)));
       if (known.length !== new Set(ids).size) throw new AppError("authoring_scope_invalid");
     }
+    // Only an exercise section can be one of the exercises used: that's what keeps them apart from the content.
+    if (w.exerciseSectionIds && w.exerciseSectionIds.length > 0) {
+      const all = await ctx.db
+        .select({ id: SourceSection.id, parentId: SourceSection.parentId, title: SourceSection.title })
+        .from(SourceSection)
+        .where(eq(SourceSection.revisionId, revision.id));
+      const exercises = new Set(exerciseSectionIds(all));
+      if (w.exerciseSectionIds.some((id) => !exercises.has(id))) throw new AppError("authoring_scope_invalid");
+    }
     rows.push({
       source,
       revision,
+      exerciseSectionIds: [...new Set(w.exerciseSectionIds ?? [])],
       sectionIds: w.sectionIds ?? null,
       excludedSectionIds: w.excludeSectionIds && w.excludeSectionIds.length > 0 ? w.excludeSectionIds : null,
     });
@@ -89,19 +100,56 @@ async function ownedReadySources(ctx: Pick<AppContext, "db">, ownerId: string, w
   return rows;
 }
 
-/** The session's scope as retrieval takes it: revisions pinned, and each section standing for what's under it. */
+type SessionSourceRow = typeof AuthoringSessionSource.$inferSelect;
+
+/**
+ * The sections a session's content uses. Once a session has an exercise scope (even an empty one) exercises are never
+ * part of it: they have their own objectives. A session from before that kept them as ordinary sections, and still does.
+ */
+async function contentSections(db: Pick<AppContext, "db">["db"], row: SessionSourceRow): Promise<string[] | null> {
+  const base = await effectiveSections(db, row.revisionId, row.sectionIds, row.excludedSectionIds);
+  if (row.exerciseSectionIds === null) return base;
+  const all = await db
+    .select({ id: SourceSection.id, parentId: SourceSection.parentId, title: SourceSection.title })
+    .from(SourceSection)
+    .where(eq(SourceSection.revisionId, row.revisionId));
+  const exercises = new Set(exerciseSectionIds(all));
+  if (exercises.size === 0) return base;
+  return (base ?? all.map((x) => x.id)).filter((id) => !exercises.has(id));
+}
+
+/** The exercise sections in use, each standing for what's under it. */
+async function exercisesUsed(db: Pick<AppContext, "db">["db"], row: SessionSourceRow): Promise<string[]> {
+  return row.exerciseSectionIds && row.exerciseSectionIds.length > 0
+    ? expandSections(db, row.revisionId, row.exerciseSectionIds)
+    : [];
+}
+
+async function sourceRows(ctx: Pick<AppContext, "db">, sessionId: string) {
+  return ctx.db.select().from(AuthoringSessionSource).where(eq(AuthoringSessionSource.sessionId, sessionId));
+}
+
+/** The session's content scope as retrieval takes it: revisions pinned, and each section standing for what's under it. */
 export async function sessionScope(ctx: Pick<AppContext, "db">, sessionId: string): Promise<ScopeEntry[]> {
-  const rows = await ctx.db
-    .select()
-    .from(AuthoringSessionSource)
-    .where(eq(AuthoringSessionSource.sessionId, sessionId));
+  const rows = await sourceRows(ctx, sessionId);
   return Promise.all(
     rows.map(async (r) => ({
       sourceId: r.sourceId,
       revisionId: r.revisionId,
-      sectionIds: await effectiveSections(ctx.db, r.revisionId, r.sectionIds, r.excludedSectionIds),
+      sectionIds: await contentSections(ctx.db, r),
     })),
   );
+}
+
+/** The exercises scope: only sources that have exercises in use, and only those sections. */
+export async function exerciseScope(ctx: Pick<AppContext, "db">, sessionId: string): Promise<ScopeEntry[]> {
+  const rows = await sourceRows(ctx, sessionId);
+  const out: ScopeEntry[] = [];
+  for (const r of rows) {
+    const ids = await exercisesUsed(ctx.db, r);
+    if (ids.length > 0) out.push({ sourceId: r.sourceId, revisionId: r.revisionId, sectionIds: ids });
+  }
+  return out;
 }
 
 async function chunksInScope(ctx: Pick<AppContext, "db">, scope: ScopeEntry[]) {
@@ -146,52 +194,45 @@ async function sectionsInScope(ctx: Pick<AppContext, "db">, scope: ScopeEntry[])
   return out;
 }
 
-/** One objective per selected section that has text: coverage follows the material's own shape (SPEC §3C.4). */
+/**
+ * One objective per selected section that has text: coverage follows the material's own shape (SPEC §3C.4). The
+ * exercises in use get theirs, named for the chapter they end, and kept apart as `exercise` objectives.
+ */
 async function headingObjectives(ctx: Pick<AppContext, "db">, sessionId: string) {
-  const scope = await sessionScope(ctx, sessionId);
-  const [sections, chunks] = [await sectionsInScope(ctx, scope), await chunksInScope(ctx, scope)];
+  const groups = [
+    { kind: "content" as const, scope: await sessionScope(ctx, sessionId) },
+    { kind: "exercise" as const, scope: await exerciseScope(ctx, sessionId) },
+  ];
   await ctx.db.delete(Objective).where(eq(Objective.sessionId, sessionId));
   let order = 0;
-  for (const section of sections) {
-    const own = chunks.filter((c) => c.sectionId === section.id);
-    if (own.length === 0) continue;
-    await ctx.db.insert(Objective).values({
-      id: newId(),
-      sessionId,
-      label: section.title,
-      description: "",
-      evidence: own.slice(0, HEADING_EVIDENCE).map((c) => ({ chunkId: c.id })),
-      origin: "heading",
-      order: order++,
-      sectionIds: [section.id],
-    });
+  for (const { kind, scope } of groups) {
+    const [sections, chunks] = [await sectionsInScope(ctx, scope), await chunksInScope(ctx, scope)];
+    for (const section of sections) {
+      const own = chunks.filter((c) => c.sectionId === section.id);
+      if (own.length === 0) continue;
+      const parent = section.headingPath[section.headingPath.length - 2];
+      await ctx.db.insert(Objective).values({
+        id: newId(),
+        sessionId,
+        label: kind === "exercise" && parent ? `${section.title}: ${parent}` : section.title,
+        description: "",
+        evidence: own.slice(0, HEADING_EVIDENCE).map((c) => ({ chunkId: c.id })),
+        origin: "heading",
+        kind,
+        order: order++,
+        sectionIds: [section.id],
+      });
+    }
   }
 }
 
-/**
- * What a new session leaves out when no scope is given: the source's exercises, and every section under one (SPEC
- * §3C.4). They pose problems and don't state the answers, so a question made from one has nothing to be right about.
- * Each is left out exactly, so the headings above them keep their own introductions. Null when there's nothing to leave
- * out, or nothing else would be left.
- */
-export async function defaultExclusions(ctx: Pick<AppContext, "db">, revisionId: string): Promise<string[] | null> {
-  const rows = await ctx.db
-    .select({ id: SourceSection.id, parentId: SourceSection.parentId, title: SourceSection.title })
-    .from(SourceSection)
-    .where(eq(SourceSection.revisionId, revisionId));
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  const inExercises = (id: string) => {
-    for (let at: string | null | undefined = id; at; at = byId.get(at)?.parentId) {
-      if (isExerciseSection(byId.get(at)?.title ?? "")) return true;
-    }
-    return false;
-  };
-  const left = rows.filter((r) => inExercises(r.id)).map((r) => r.id);
-  return left.length > 0 && left.length < rows.length ? left : null;
-}
-
 export interface ScopeInput {
-  sources: { sourceId: string; sectionIds?: string[] | undefined; excludeSectionIds?: string[] | undefined }[];
+  sources: {
+    sourceId: string;
+    sectionIds?: string[] | undefined;
+    excludeSectionIds?: string[] | undefined;
+    exerciseSectionIds?: string[] | undefined;
+  }[];
 }
 
 export async function createSession(
@@ -201,15 +242,7 @@ export async function createSession(
   meta: object,
 ) {
   await requireEmbeddings(ctx);
-  const asked = await ownedReadySources(ctx, ownerId, input.sources);
-  // A source given no scope at all starts without its exercises; one given sections or exclusions is taken as it is.
-  const sources = await Promise.all(
-    asked.map(async (s) =>
-      s.sectionIds === null && s.excludedSectionIds === null
-        ? { ...s, excludedSectionIds: await defaultExclusions(ctx, s.revision.id) }
-        : s,
-    ),
-  );
+  const sources = await ownedReadySources(ctx, ownerId, input.sources);
   const id = newId();
   await ctx.db.transaction(async (tx) => {
     await tx.insert(AuthoringSession).values({
@@ -227,6 +260,7 @@ export async function createSession(
         revisionId: s.revision.id,
         sectionIds: s.sectionIds,
         excludedSectionIds: s.excludedSectionIds,
+        exerciseSectionIds: s.exerciseSectionIds,
       })),
     );
     await writeAudit(tx, {
@@ -255,6 +289,7 @@ export async function updateScope(ctx: Ctx, session: SessionRow, input: ScopeInp
         revisionId: s.revision.id,
         sectionIds: s.sectionIds,
         excludedSectionIds: s.excludedSectionIds,
+        exerciseSectionIds: s.exerciseSectionIds,
       })),
     );
     await tx.update(AuthoringSession).set({ blueprint: null }).where(eq(AuthoringSession.id, session.id));
@@ -278,7 +313,8 @@ export async function sessionSources(ctx: Pick<AppContext, "db">, sessionId: str
         citationLabel: source.citationLabel,
         revisionId: revision.id,
         revisionNumber: revision.number,
-        sectionIds: await effectiveSections(ctx.db, revision.id, scope.sectionIds, scope.excludedSectionIds),
+        sectionIds: await contentSections(ctx.db, scope),
+        exerciseSectionIds: await exercisesUsed(ctx.db, scope),
         latestRevisionNumber: latest.number,
         // A newer revision isn't news until it can be used (SPEC §3C.5).
         changed: latest.id !== revision.id && latest.embedStatus === "ready",
@@ -299,6 +335,7 @@ export async function objectiveViews(ctx: Pick<AppContext, "db">, sessionId: str
     description: o.description,
     evidence: o.evidence as { chunkId: string }[],
     origin: o.origin,
+    kind: o.kind,
     order: o.order,
     sectionIds: o.sectionIds,
   }));
@@ -313,6 +350,10 @@ interface Proposed {
   /** Sections the model failed on; they keep their heading objective. */
   failedSections: string[];
 }
+
+/** Sent in place of "Section" when the passages are a chapter's exercises: they pose problems, so what's proposed is skills. */
+const EXERCISE_NOTE =
+  "Exercises (problems for students to solve; name the skill or idea each one practises, not the problem itself)";
 
 const normalLabel = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -336,8 +377,16 @@ export async function proposeObjectives(ctx: Ctx, session: SessionRow, userId: s
       failedSections: [],
     };
   }
-  const scope = await sessionScope(ctx, session.id);
-  const [sections, chunks] = [await sectionsInScope(ctx, scope), await chunksInScope(ctx, scope)];
+  const groups = [
+    { kind: "content" as const, scope: await sessionScope(ctx, session.id) },
+    { kind: "exercise" as const, scope: await exerciseScope(ctx, session.id) },
+  ];
+  const sections: (typeof SourceSection.$inferSelect & { kind: ObjectiveKind })[] = [];
+  const chunks: Awaited<ReturnType<typeof chunksInScope>> = [];
+  for (const g of groups) {
+    sections.push(...(await sectionsInScope(ctx, g.scope)).map((x) => ({ ...x, kind: g.kind })));
+    chunks.push(...(await chunksInScope(ctx, g.scope)));
+  }
   const existing = await objectiveViews(ctx, session.id);
   const budget = target.capabilities.contextWindow - target.capabilities.maxOutputTokens - 1024;
   const failedSections: string[] = [];
@@ -364,7 +413,12 @@ export async function proposeObjectives(ctx: Ctx, session: SessionRow, userId: s
         {
           promptId: "authoring.objectives",
           vars: { maxObjectives: String(MAX_OBJECTIVES_PER_SECTION) },
-          messages: [{ role: "user", content: `Section: ${section.headingPath.join(" > ")}\n\n${passages}` }],
+          messages: [
+            {
+              role: "user",
+              content: `${section.kind === "exercise" ? EXERCISE_NOTE : "Section"}: ${section.headingPath.join(" > ")}\n\n${passages}`,
+            },
+          ],
         },
         { userId, maxRepairs: 1 },
       )
@@ -394,6 +448,7 @@ export async function proposeObjectives(ctx: Ctx, session: SessionRow, userId: s
         description: o.description.trim(),
         evidence: [...new Set(ids as string[])].map((chunkId) => ({ chunkId })),
         origin: "llm",
+        kind: section.kind,
         sectionIds: [section.id],
       });
     }
@@ -422,7 +477,7 @@ export async function replaceObjectives(ctx: Ctx, session: SessionRow, input: Ob
   if (session.status === "generating" || session.status === "published") {
     throw new AppError("authoring_session_busy");
   }
-  const scope = await sessionScope(ctx, session.id);
+  const scope = [...(await sessionScope(ctx, session.id)), ...(await exerciseScope(ctx, session.id))];
   const inScope = new Set((await chunksInScope(ctx, scope)).map((c) => c.id));
   const known = new Map((await objectiveViews(ctx, session.id)).map((o) => [o.id, o]));
   for (const o of input) {
@@ -441,6 +496,7 @@ export async function replaceObjectives(ctx: Ctx, session: SessionRow, input: Ob
         description: o.description ?? "",
         evidence: o.evidence,
         origin: before?.origin ?? "human",
+        kind: before?.kind ?? o.kind ?? "content",
         order,
         sectionIds: o.sectionIds,
       });
@@ -453,7 +509,10 @@ export async function replaceObjectives(ctx: Ctx, session: SessionRow, input: Ob
 /** Tokens of selected text behind each objective: its sections, or its evidence when it has none. */
 async function objectiveWeights(ctx: Pick<AppContext, "db">, sessionId: string) {
   const objectives = await objectiveViews(ctx, sessionId);
-  const chunks = await chunksInScope(ctx, await sessionScope(ctx, sessionId));
+  const chunks = await chunksInScope(ctx, [
+    ...(await sessionScope(ctx, sessionId)),
+    ...(await exerciseScope(ctx, sessionId)),
+  ]);
   return objectives.map((o) => {
     const evidence = new Set(o.evidence.map((e) => e.chunkId));
     const own = chunks.filter((c) =>

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AuthoringStatus, Blueprint, ObjectiveOrigin } from "../authoring.ts";
+import { AuthoringStatus, Blueprint, ObjectiveKind, ObjectiveOrigin } from "../authoring.ts";
 import { ConvertSettings, ConvertStrategy, PAGE_RANGE_PATTERN } from "../convert.ts";
 import { DraftContent, DraftStatus, LayerResult, QuestionEventKind } from "../draft.ts";
 import { ErrorCode } from "../errors.ts";
@@ -1161,6 +1161,8 @@ export const SessionSourceView = z.object({
   revisionNumber: z.number().int(),
   /** The sections in use, exactly (what was ticked, less what was left out); null: the whole source. */
   sectionIds: z.array(Uuid).nullable(),
+  /** The exercise sections in use, exactly: they have their own scope and objectives. */
+  exerciseSectionIds: z.array(Uuid),
   latestRevisionNumber: z.number().int(),
   /** A newer revision is ready (SPEC §3C.5). */
   changed: z.boolean(),
@@ -1173,6 +1175,7 @@ export const ObjectiveView = z.object({
   description: z.string(),
   evidence: z.array(z.object({ chunkId: Uuid })),
   origin: ObjectiveOrigin,
+  kind: ObjectiveKind,
   order: z.number().int(),
   sectionIds: z.array(Uuid),
 });
@@ -1185,6 +1188,8 @@ export const ObjectiveInput = z.object({
   description: z.string().max(1000).optional(),
   evidence: z.array(z.object({ chunkId: Uuid })).max(100),
   sectionIds: z.array(Uuid).max(2000),
+  /** An objective that came from the server keeps its kind; a new one is `content` unless this says otherwise. */
+  kind: ObjectiveKind.optional(),
 });
 export type ObjectiveInput = z.infer<typeof ObjectiveInput>;
 
@@ -1280,6 +1285,8 @@ const ScopeBody = z.object({
         sourceId: Uuid,
         sectionIds: z.array(Uuid).max(2000).optional(),
         excludeSectionIds: z.array(Uuid).max(2000).optional(),
+        /** Exercise sections to write questions from. They're never taken from `sectionIds`; none by default. */
+        exerciseSectionIds: z.array(Uuid).max(2000).optional(),
       }),
     )
     .min(1)

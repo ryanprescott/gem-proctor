@@ -696,8 +696,15 @@ export async function publishSession(
       revisionId: s.revisionId,
       revisionNumber: s.revisionNumber,
       sectionIds: s.sectionIds,
+      exerciseSectionIds: s.exerciseSectionIds,
     })),
-    objectives: objectives.map((o) => ({ id: o.id, label: o.label, description: o.description, origin: o.origin })),
+    objectives: objectives.map((o) => ({
+      id: o.id,
+      label: o.label,
+      description: o.description,
+      origin: o.origin,
+      kind: o.kind,
+    })),
     questions: chosen.map((d, i) => {
       const content = contentOf(d);
       const versions = chain.get(d.id) ?? [d];

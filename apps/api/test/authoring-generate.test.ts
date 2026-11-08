@@ -392,6 +392,85 @@ describe.skipIf(!hasDb || !verifyPython)("authoring generation", () => {
     }, 90_000);
   });
 
+  describe("exercises", () => {
+    /** A book with an exercises section, a session using only those exercises, and its generation. */
+    async function fromExercises(b: Behaviour) {
+      const book = (await env.settled(
+        env.proctor,
+        (
+          await env.proctor.post(`${API}/sources`, {
+            title: "Workbook",
+            citationLabel: "WB",
+            text: [
+              "# Chapter 1: Vectors\n\nThe inner product of two vectors multiplies their entries in pairs and adds the results.",
+              "## Exercises\n\n1.1 Find the nearest neighbor of the point among the given unit vectors and say why.",
+            ].join("\n\n"),
+          })
+        ).json().source.id,
+      )) as SourceBody;
+      const all = (await env.proctor.get(`${API}/sources/${book.id}/sections`)).json().sections as {
+        id: string;
+        title: string;
+      }[];
+      const created = (
+        await env.proctor.post(`${API}/authoring/sessions`, {
+          title: "Exercise quiz",
+          testType: "custom",
+          sources: [
+            {
+              sourceId: book.id,
+              sectionIds: all.filter((x) => x.title !== "Exercises").map((x) => x.id),
+              exerciseSectionIds: all.filter((x) => x.title === "Exercises").map((x) => x.id),
+            },
+          ],
+        })
+      ).json() as SessionDetail;
+      const exercise = created.objectives.filter((o) => o.kind === "exercise");
+      expect(exercise).toHaveLength(1);
+      const bp = await env.proctor.put(`${API}/authoring/sessions/${created.session.id}/blueprint`, {
+        testType: "custom",
+        questionCount: 2,
+        mix: { single_choice: 2 },
+        perObjective: created.objectives.map((o) => ({ objectiveId: o.id, count: o.kind === "exercise" ? 2 : 0 })),
+      });
+      expect(bp.statusCode, bp.body).toBe(200);
+      env.setReply(scripted(b));
+      const before = env.mock.chatRequests().length;
+      expect((await generate(created.session.id)).statusCode).toBe(200);
+      const detail = (await review(env.proctor, created.session.id)) as SessionDetail;
+      const sent = env.mock
+        .chatRequests()
+        .slice(before)
+        .filter((r) => JSON.stringify(r.body).includes("Source chunk ["));
+      return { detail, sent: JSON.stringify(sent.map((r) => r.body)) };
+    }
+
+    test("an exercise objective draws on the exercises only, and is told they are problems without solutions", async () => {
+      const { sent } = await fromExercises({ computable: true });
+      expect(sent).toContain("nearest neighbor");
+      expect(sent).not.toContain("multiplies their entries");
+      expect(sent).toContain("exercises from the book");
+    }, 90_000);
+
+    test("a computed answer stands; one that couldn't be confirmed is set aside, with the reason in its history", async () => {
+      const kept = await fromExercises({ computable: true });
+      const computed = kept.detail.questions.filter((q) => q.content.computable);
+      expect(computed.length).toBeGreaterThan(0);
+      expect(computed.every((q) => q.status === "proposed")).toBe(true);
+
+      const dropped = await fromExercises({ computable: true, blindExpression: "x.dot(y) + 1" });
+      const q = dropped.detail.questions.find((x) => x.content.computable) as SessionDetail["questions"][number];
+      expect(q.status).toBe("rejected");
+      const events = await env.t.db.select().from(QuestionEvent).where(eq(QuestionEvent.draftQuestionId, q.id));
+      expect(events.find((e) => e.kind === "rejected")?.note).toContain("couldn't be computed and confirmed");
+
+      // The same disagreement on a content objective is a failed check for the creator to read, not a removal.
+      const { detail } = await run({ computable: true, blindExpression: "x.dot(y) + 1" });
+      const plain = detail.questions.find((x) => x.content.computable) as SessionDetail["questions"][number];
+      expect(plain.status).toBe("proposed");
+    }, 180_000);
+  });
+
   describe("E35: a prompt-injected source", () => {
     test("a program that attacks the sandbox is denied: the question fails, an audit row is written, the chunks are flagged", async () => {
       const before = (await env.t.db.select().from(AuditLog).where(eq(AuditLog.action, "verify.sandbox_denial")))

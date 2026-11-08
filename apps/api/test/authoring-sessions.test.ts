@@ -136,8 +136,8 @@ describe.skipIf(!hasDb || !verifyPython)("authoring sessions", () => {
       expect(only.objectives.map((o) => o.label)).toEqual(["Norms"]);
     }, 20_000);
 
-    test("a new session leaves a source's exercises out, and what's explicit is taken as it is", async () => {
-      // Exercises pose problems and don't state their answers: a question made from one has nothing to be right about.
+    test("exercises have their own scope and objectives, apart from the content", async () => {
+      // Exercises pose problems and don't state their answers, so they are used on their own terms (SPEC §3C.4).
       const book = await addSource(
         env.proctor,
         [
@@ -152,54 +152,66 @@ describe.skipIf(!hasDb || !verifyPython)("authoring sessions", () => {
       const ids = (title: string) => all.filter((x) => x.title === title).map((x) => x.id);
       const make = async (entry: Record<string, unknown>) =>
         (await create(env.proctor, { sources: [{ sourceId: book.id, ...entry }] })).json() as SessionDetail;
-      const labels = (d: SessionDetail) => d.objectives.map((o) => o.label);
+      const labels = (d: SessionDetail, kind: string) =>
+        d.objectives.filter((o) => o.kind === kind).map((o) => o.label);
+      const [ex1, ex2] = ids("Exercises") as [string, string];
 
-      // No scope given: everything but the exercises. The chapters keep their own introductions.
+      // No scope given: all the content, and none of the exercises. Nothing is made from them unless they're chosen.
       const started = await make({});
-      expect(labels(started)).toEqual(["Chapter 1: Vectors", "Inner product", "Chapter 2: Matrices"]);
+      expect(labels(started, "content")).toEqual(["Chapter 1: Vectors", "Inner product", "Chapter 2: Matrices"]);
+      expect(labels(started, "exercise")).toEqual([]);
       const used = started.sources[0]?.sectionIds as string[];
       expect(used).toHaveLength(all.length - 2);
-      expect(used).toEqual(expect.arrayContaining([...ids("Chapter 1: Vectors"), ...ids("Chapter 2: Matrices")]));
       expect(used.some((id) => ids("Exercises").includes(id))).toBe(false);
+      expect(started.sources[0]?.exerciseSectionIds).toEqual([]);
 
-      // Naming a chapter stands for what's under it, exercises included: that's an explicit choice.
+      // Naming a chapter doesn't bring its exercises with it.
       const chosen = await make({ sectionIds: ids("Chapter 1: Vectors") });
-      expect(labels(chosen)).toEqual(["Chapter 1: Vectors", "Inner product", "Exercises"]);
+      expect(labels(chosen, "content")).toEqual(["Chapter 1: Vectors", "Inner product"]);
+      expect(labels(chosen, "exercise")).toEqual([]);
 
-      // A scope of exclusions alone is all but those, exactly.
+      // Choosing a chapter's exercises gives them an objective of their own, after the content's.
+      const withEx = await make({ sectionIds: ids("Chapter 1: Vectors"), exerciseSectionIds: [ex1] });
+      expect(labels(withEx, "content")).toEqual(["Chapter 1: Vectors", "Inner product"]);
+      expect(labels(withEx, "exercise")).toEqual(["Exercises: Chapter 1: Vectors"]);
+      expect(withEx.objectives.at(-1)?.kind).toBe("exercise");
+      expect(withEx.sources[0]?.exerciseSectionIds).toEqual([ex1]);
+      expect(withEx.sources[0]?.sectionIds).not.toContain(ex1);
+      expect(withEx.objectives.find((o) => o.kind === "exercise")?.evidence.length).toBeGreaterThan(0);
+
+      // A scope of exclusions alone is all the content but those, exactly.
       const lessOne = await make({ excludeSectionIds: ids("Inner product") });
-      expect(labels(lessOne)).toEqual(["Chapter 1: Vectors", "Exercises", "Chapter 2: Matrices", "Exercises"]);
+      expect(labels(lessOne, "content")).toEqual(["Chapter 1: Vectors", "Chapter 2: Matrices"]);
 
-      // Sections of another source can't be left out.
+      // Only an exercise section can be chosen as exercises; and another source's sections can't be named at all.
+      const notExercise = await create(env.proctor, {
+        sources: [{ sourceId: book.id, exerciseSectionIds: ids("Inner product") }],
+      });
+      expect(notExercise.statusCode).toBe(422);
+      expect(notExercise.json().code).toBe("authoring_scope_invalid");
       const foreign = sections[0]?.id as string;
       const refused = await create(env.proctor, { sources: [{ sourceId: book.id, excludeSectionIds: [foreign] }] });
       expect(refused.statusCode).toBe(422);
       expect(refused.json().code).toBe("authoring_scope_invalid");
 
-      // The picker sends no sections when everything is ticked: the exercises are back in, because it was asked for.
-      const put = await env.proctor.put(`${API}/authoring/sessions/${started.session.id}/scope`, {
-        sources: [{ sourceId: book.id }],
-      });
-      expect(put.statusCode).toBe(200);
-      const after = (await env.proctor.get(`${API}/authoring/sessions/${started.session.id}`)).json() as SessionDetail;
-      expect(labels(after)).toEqual([
-        "Chapter 1: Vectors",
-        "Inner product",
-        "Exercises",
-        "Chapter 2: Matrices",
-        "Exercises",
-      ]);
-      expect(after.sources[0]?.sectionIds).toBeNull();
+      // Changing the scope starts the objectives over: the exercises chosen later are added, and removed again.
+      const url = `${API}/authoring/sessions/${started.session.id}`;
+      const put = (entry: Record<string, unknown>) =>
+        env.proctor.put(`${url}/scope`, { sources: [{ sourceId: book.id, ...entry }] });
+      expect((await put({ exerciseSectionIds: [ex1, ex2] })).statusCode).toBe(200);
+      const two = (await env.proctor.get(url)).json() as SessionDetail;
+      expect(labels(two, "exercise")).toEqual(["Exercises: Chapter 1: Vectors", "Exercises: Chapter 2: Matrices"]);
+      expect(labels(two, "content")).toEqual(["Chapter 1: Vectors", "Inner product", "Chapter 2: Matrices"]);
+      expect((await put({})).statusCode).toBe(200);
+      const none = (await env.proctor.get(url)).json() as SessionDetail;
+      expect(labels(none, "exercise")).toEqual([]);
 
       // Unticking one section under a ticked heading leaves it out, and leaves the heading's own text in.
-      const partial = await env.proctor.put(`${API}/authoring/sessions/${started.session.id}/scope`, {
-        sources: [
-          { sourceId: book.id, sectionIds: ids("Chapter 1: Vectors"), excludeSectionIds: ids("Inner product") },
-        ],
-      });
-      expect(partial.statusCode).toBe(200);
-      const left = (await env.proctor.get(`${API}/authoring/sessions/${started.session.id}`)).json() as SessionDetail;
-      expect(labels(left)).toEqual(["Chapter 1: Vectors", "Exercises"]);
+      expect(
+        (await put({ sectionIds: ids("Chapter 1: Vectors"), excludeSectionIds: ids("Inner product") })).statusCode,
+      ).toBe(200);
+      const left = (await env.proctor.get(url)).json() as SessionDetail;
+      expect(labels(left, "content")).toEqual(["Chapter 1: Vectors"]);
     }, 30_000);
 
     test("the model proposes per section, each citing real chunks, and the passages sent are in the prompt", async () => {

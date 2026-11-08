@@ -52,13 +52,16 @@
     "changed": "{{titles}} has a newer revision. This session still uses the one it started from.",
     "revalidate": "Check the quotes against the new revision",
     "revalidated": "Quotes checked against the new revision.",
-    "exercisesLeftOut_one": "One Exercises section is left out: it poses problems without their answers, so questions made from it often have none. Tick it to include it.",
-    "exercisesLeftOut_other": "{{count}} Exercises sections are left out: they pose problems without their answers, so questions made from them often have none. Tick them to include them."
+    "exercisesLabel": "Exercises of {{title}} to use",
+    "exercisesHelp": "Exercises are chosen apart from the sections above, and get objectives of their own. Their questions are new problems of the same kind. A calculation is kept only when its answer is computed and confirmed, because the book gives no solutions.",
+    "exercisesFixed_one": "Exercises from {{count}} chapter are used.",
+    "exercisesFixed_other": "Exercises from {{count}} chapters are used."
   },
   "objectives": {
     "title": "Objectives",
     "help": "What the test should cover. Each one comes from a section, and cites the passages behind it.",
     "evidence": "{{count}} passages cited",
+    "exerciseBadge": "Exercises",
     "pick": "Select objective {{n}} to merge",
     "chapter": "Show objectives from",
     "allChapters": "All chapters ({{count}})",

@@ -27,7 +27,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { trackInteractive } from "../activity.ts";
 import type { AppContext } from "../context.ts";
 import { addEvent, contentOf, type DraftRow, formResult, latestResults, recordResults } from "./drafts.ts";
-import { loadSession, objectiveViews, sessionScope, sessionTopic } from "./sessions.ts";
+import { exerciseScope, loadSession, objectiveViews, sessionScope, sessionTopic } from "./sessions.ts";
 
 /** Generation: per-objective batches, each one pg-boss job through `streamObject` (SPEC §3A.2, P2.md §5). */
 
@@ -121,8 +121,21 @@ interface Prompted {
 
 const chunkBlock = (c: RetrievedChunk) => `Source chunk [${c.chunkKey}]:\n${c.text}`;
 
-function userPrompt(blocks: string[], objectives: string[], plan: StoredPlan, blueprint: Blueprint) {
+/**
+ * For objectives made from a chapter's exercises: the passages are problems, not explanations. A question is a new
+ * problem of the same kind, not a copy, and a mathematical one is computed, since the book gives no solution to rely on.
+ */
+export const EXERCISE_GUIDANCE = [
+  "The passages for these objectives are exercises from the book: problems for students to solve, without their solutions.",
+  "Write each question as a new problem of the same kind, with different values or a different situation. Don't copy an exercise.",
+  "Quote the exercise's own wording as the evidence for the question.",
+  "A question that asks for a calculation or a derivation must be computable: give its inputs and an answerProgram, because the book's text doesn't state the answer. Don't write it as a plain question with a fixed answer.",
+  "A question about an idea (what a term means, which statement is true) is written as usual.",
+].join(" ");
+
+function userPrompt(blocks: string[], objectives: string[], plan: StoredPlan, blueprint: Blueprint, exercises = false) {
   const parts = [...blocks, `Objectives:\n${objectives.join("\n")}`];
+  if (exercises) parts.push(EXERCISE_GUIDANCE);
   if (plan.locked?.length) {
     const list = plan.locked.map((q) => `- ${q.question}`).join("\n");
     parts.push(`Already accepted, so don't repeat these or test the same thing:\n${list}`);
@@ -155,17 +168,19 @@ async function buildPrompt(
   const objectives = plan.objectiveIds.flatMap((id) => all.filter((o) => o.id === id));
   const ids = new Map(objectives.map((o, i) => [`O${i + 1}`, o.id]));
   const lines = objectives.map((o, i) => `O${i + 1}: ${o.label}${o.description ? ` — ${o.description}` : ""}`);
+  // A batch is one objective, so it is wholly content or wholly exercises: each draws on its own part of the source.
+  const exercises = objectives.length > 0 && objectives.every((o) => o.kind === "exercise");
   const vars = {
     allowedImports: ALLOWED_IMPORTS,
     resultTypeRules: RESULT_TYPE_RULES,
     styleGuidance: blueprint.style,
   };
   const prompt = loadPrompt("authoring.generate", target.model);
-  const frame = userPrompt([], lines, plan, blueprint);
+  const frame = userPrompt([], lines, plan, blueprint, exercises);
   const taken = Math.ceil((prompt.template.length + frame.length + vars.styleGuidance.length + 1200) / CHARS_PER_TOKEN);
   const room = target.capabilities.contextWindow - target.capabilities.maxOutputTokens - taken;
   const budget = Math.max(0, Math.min(room, MAX_RETRIEVAL_TOKENS));
-  const scope = await sessionScope(ctx, batch.sessionId);
+  const scope = exercises ? await exerciseScope(ctx, batch.sessionId) : await sessionScope(ctx, batch.sessionId);
 
   const chosen = new Map<string, RetrievedChunk>();
   const share = Math.floor(budget / Math.max(objectives.length, 1));
@@ -188,7 +203,12 @@ async function buildPrompt(
   while (chunks.length > 0 && chunks.reduce((n, c) => n + estimateChunkTokens(c) + 16, 0) > Math.max(room, 0)) {
     chunks.pop();
   }
-  return { vars, user: userPrompt(chunks.map(chunkBlock), lines, plan, blueprint), chunks, objectiveIds: ids };
+  return {
+    vars,
+    user: userPrompt(chunks.map(chunkBlock), lines, plan, blueprint, exercises),
+    chunks,
+    objectiveIds: ids,
+  };
 }
 
 function contentFrom(

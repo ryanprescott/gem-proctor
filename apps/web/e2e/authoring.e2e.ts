@@ -346,7 +346,7 @@ test("a session is deleted from the list after a question, and said so", async (
   await page.context().close();
 });
 
-test("a new session leaves a source's Exercises out and says so; unticking and ticking work as shown", async ({
+test("exercises are a scope of their own: none by default, chosen per chapter, with objectives marked as exercises", async ({
   browser,
 }) => {
   const page = await signedIn(browser);
@@ -379,35 +379,42 @@ test("a new session leaves a source's Exercises out and says so; unticking and t
 
   await page.getByRole("button", { name: /^Sources and scope/ }).click();
   const tree = page.getByRole("group", { name: /^Sections of/ });
-  await expect(page.getByRole("note")).toContainText("One Exercises section is left out");
-  await expect(tree.getByRole("checkbox", { name: /^Exercises/ })).not.toBeChecked();
+  const exercises = page.getByRole("group", { name: /^Exercises of/ });
+  // The exercises are not in the sections tree: they have their own list, a choice per chapter, none chosen.
+  await expect(tree.getByRole("checkbox", { name: /^Exercises/ })).toHaveCount(0);
   await expect(tree.getByRole("checkbox", { name: /^Inner product/ })).toBeChecked();
-  await expectNoAxeViolations(page, "scope with the exercises left out");
+  await expect(exercises.getByRole("checkbox", { name: /^Chapter 1: Vectors/ })).not.toBeChecked();
+  await expect(page.getByRole("note")).toContainText("Exercises are chosen apart");
+  await expectNoAxeViolations(page, "scope with its exercises apart");
 
-  // Ticking them brings them in, and the note goes.
-  const tick = async (name: RegExp) => {
-    const box = tree.getByRole("checkbox", { name });
-    await tree.locator("label", { has: page.getByRole("checkbox", { name }) }).click();
+  const tick = async (group: typeof tree, name: RegExp) => {
+    const box = group.getByRole("checkbox", { name });
+    await group.locator("label", { has: page.getByRole("checkbox", { name }) }).click();
     return box;
   };
-  await expect(await tick(/^Exercises/)).toBeChecked();
-  await expect(page.getByRole("note")).toHaveCount(0);
+  // Choosing a chapter's exercises gives them an objective of their own, marked as exercises.
+  await expect(await tick(exercises, /^Chapter 1: Vectors/)).toBeChecked();
   await page.getByRole("button", { name: "Save scope" }).click();
   await expect.poll(() => liveRegionText(page)).toContain("Scope saved");
   await expect(objectives).toHaveCount(3);
+  await expect(objectives.nth(2)).toContainText("Exercises: Chapter 1: Vectors");
   await expect(objectives.nth(2)).toContainText("Exercises");
+  await expect(objectives.nth(0)).not.toContainText("Exercises");
 
-  // Unticking one section under a ticked heading leaves just that one out: the heading's text stays.
-  await expect(await tick(/^Inner product/)).not.toBeChecked();
+  // Unticking a section under a ticked heading leaves just that one out, and the exercises stay chosen.
+  await expect(await tick(tree, /^Inner product/)).not.toBeChecked();
   await page.getByRole("button", { name: "Save scope" }).click();
   await expect(objectives).toHaveCount(2);
   await expect(objectives.nth(0)).toContainText("Chapter 1: Vectors");
-  await expect(objectives.nth(1)).toContainText("Exercises");
+  await expect(objectives.nth(1)).toContainText("Exercises: Chapter 1: Vectors");
   await page.reload();
   await page.getByRole("button", { name: /^Sources and scope/ }).click();
   await expect(
     page.getByRole("group", { name: /^Sections of/ }).getByRole("checkbox", { name: /^Inner product/ }),
   ).not.toBeChecked();
+  await expect(
+    page.getByRole("group", { name: /^Exercises of/ }).getByRole("checkbox", { name: /^Chapter 1: Vectors/ }),
+  ).toBeChecked();
   await page.context().close();
 });
 
@@ -417,10 +424,10 @@ test("a long book's scope opens as chapters: tick one whole, then narrow its obj
   const page = await signedIn(browser);
   const chapter = (n: number) =>
     [
-      `# Chapter ${n}: Topic ${n}\n\nChapter ${n} opens with the ideas of topic ${n}, which the sections below develop in turn.`,
+      `# Part ${n}\n\n## Chapter ${n}: Topic ${n}\n\nChapter ${n} opens with the ideas of topic ${n}, which the sections below develop in turn.`,
       ...Array.from(
         { length: 14 },
-        (_, k) => `## Part ${n}.${k + 1}\n\nPart ${n}.${k + 1} explains one fact about topic ${n}, number ${k + 1}.`,
+        (_, k) => `### Part ${n}.${k + 1}\n\nPart ${n}.${k + 1} explains one fact about topic ${n}, number ${k + 1}.`,
       ),
     ].join("\n\n");
   const added = await page.request.post("/api/v1/sources", {
@@ -444,21 +451,21 @@ test("a long book's scope opens as chapters: tick one whole, then narrow its obj
   await page.getByRole("button", { name: /^Sources and scope/ }).click();
   const tree = page.getByRole("group", { name: /^Sections of/ });
   // Only the chapters show; a chapter says how much of it is ticked.
-  await expect(tree.getByRole("checkbox")).toHaveCount(2);
-  await expect(tree).toContainText("15 of 15 sections");
+  await expect(tree.getByRole("checkbox")).toHaveCount(2); // the two Parts
+  await expect(tree).toContainText("16 of 16 sections");
   await expectNoAxeViolations(page, "a long book's scope, collapsed");
 
   // Untick chapter 2 whole, without opening it, and save: only chapter 1 stays.
-  await tree.locator("label", { has: page.getByRole("checkbox", { name: /^Chapter 2/ }) }).click();
-  await expect(tree).toContainText("0 of 15 sections");
+  await tree.locator("label", { has: page.getByRole("checkbox", { name: /^Part 2 \d+ of/ }) }).click();
+  await expect(tree).toContainText("0 of 16 sections");
   await page.getByRole("button", { name: "Save scope" }).click();
   await expect(objectives).toHaveCount(15);
   // A chapter opens to its sections.
-  await tree.getByRole("button", { name: /Show what's under Chapter 1/ }).click();
-  await expect(tree.getByRole("checkbox")).toHaveCount(16);
+  await tree.getByRole("button", { name: /Show what's under Part 1/ }).click();
+  await expect(tree.getByRole("checkbox")).toHaveCount(3); // Part 1 and its chapter
 
   // Bring chapter 2 back, and narrow the objectives by chapter.
-  await tree.locator("label", { has: page.getByRole("checkbox", { name: /^Chapter 2/ }) }).click();
+  await tree.locator("label", { has: page.getByRole("checkbox", { name: /^Part 2 \d+ of/ }) }).click();
   await page.getByRole("button", { name: "Save scope" }).click();
   await expect(objectives).toHaveCount(30);
   await page.getByRole("button", { name: /Show objectives from/ }).click();

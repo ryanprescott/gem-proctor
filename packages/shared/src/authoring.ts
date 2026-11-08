@@ -11,6 +11,10 @@ export const OBJECTIVE_ORIGINS = ["llm", "human", "heading"] as const;
 export const ObjectiveOrigin = z.enum(OBJECTIVE_ORIGINS);
 export type ObjectiveOrigin = z.infer<typeof ObjectiveOrigin>;
 
+export const OBJECTIVE_KINDS = ["content", "exercise"] as const;
+export const ObjectiveKind = z.enum(OBJECTIVE_KINDS);
+export type ObjectiveKind = z.infer<typeof ObjectiveKind>;
+
 export const SPREADS = ["even", "proportional"] as const;
 export const Spread = z.enum(SPREADS);
 export type Spread = z.infer<typeof Spread>;

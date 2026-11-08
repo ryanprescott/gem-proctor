@@ -1,5 +1,5 @@
 import { checkConceptNotation, checkQuestion, computeQuestion, importedQuestion, type L7Deps } from "@gem/authoring";
-import { AuthoringSession, DraftQuestion, Revision, SourceChunk } from "@gem/db";
+import { AuthoringSession, DraftQuestion, Objective, Revision, SourceChunk } from "@gem/db";
 import type { DraftContent, DraftL7, L7Reason, LayerResult, VerificationItem } from "@gem/shared";
 import { eq, inArray } from "drizzle-orm";
 import { trackInteractive } from "../activity.ts";
@@ -8,7 +8,7 @@ import { getSettings } from "../settings.ts";
 import { dbRecorder } from "../verification.ts";
 import { addEvent, chunkTexts, contentOf, recordResults } from "./drafts.ts";
 import { L7_QUEUE, settleSession } from "./generate.ts";
-import { revalidateLocal } from "./review.ts";
+import { revalidateLocal, setStatus } from "./review.ts";
 
 /** L7 on a draft question: the answer computed (flow A), checked (flow B), or the notation scan (SPEC §3A.3.1). */
 
@@ -167,6 +167,25 @@ async function runNotation(d: L7Deps, content: DraftContent): Promise<Outcome> {
 }
 
 /** Runs L7 on a draft to the end. Never throws: a failure becomes a warn the creator can re-run. */
+/** Why a question made from exercises is set aside: the book gives no solution, so only a computed answer stands. */
+export const EXERCISE_NOT_COMPUTED =
+  "Set aside: this question comes from an exercise, which has no solution in the book, and its answer couldn't be computed and confirmed.";
+
+/**
+ * A mathematical question from the exercises is kept only when its answer was computed and confirmed (SPEC §3A.3.1).
+ * A concept question isn't asked for that, and a check that never ran (the model failed) isn't a verdict.
+ */
+async function setAsideIfUncomputed(ctx: AppContext, draftId: string, ownerId: string, outcome: Outcome) {
+  const { content } = outcome;
+  if (!content.computable || outcome.computed || content.l7 === null) return;
+  const objectives = content.objectiveIds.length
+    ? await ctx.db.select({ kind: Objective.kind }).from(Objective).where(inArray(Objective.id, content.objectiveIds))
+    : [];
+  if (objectives.length === 0 || !objectives.every((o) => o.kind === "exercise")) return;
+  const [fresh] = await ctx.db.select().from(DraftQuestion).where(eq(DraftQuestion.id, draftId));
+  if (fresh?.status === "proposed") await setStatus(ctx, fresh, "rejected", ownerId, EXERCISE_NOT_COMPUTED);
+}
+
 export async function processL7(ctx: AppContext, draftId: string, flow: L7Flow): Promise<void> {
   const [draft] = await ctx.db.select().from(DraftQuestion).where(eq(DraftQuestion.id, draftId));
   if (!draft) return;
@@ -221,6 +240,7 @@ export async function processL7(ctx: AppContext, draftId: string, flow: L7Flow):
     }
   });
   await revalidateLocal(ctx, draftId);
+  if (flow !== "edited") await setAsideIfUncomputed(ctx, draftId, session.ownerId, outcome);
   await settleSession(ctx, draft.sessionId);
 }
 

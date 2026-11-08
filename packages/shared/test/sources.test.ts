@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isExerciseSection } from "../src/sources.ts";
+import { exerciseSectionIds, isExerciseSection } from "../src/sources.ts";
 
 describe("isExerciseSection", () => {
   test("a section that is a set of exercises, however it's numbered or marked up", () => {
@@ -37,5 +37,19 @@ describe("isExerciseSection", () => {
     ]) {
       expect(isExerciseSection(title), title).toBe(false);
     }
+  });
+});
+
+describe("exerciseSectionIds", () => {
+  test("an exercises section and everything under it, and nothing else", () => {
+    const s = [
+      { id: "a", parentId: null, title: "Chapter 1" },
+      { id: "b", parentId: "a", title: "Inner product" },
+      { id: "c", parentId: "a", title: "Exercises" },
+      { id: "d", parentId: "c", title: "Hints" },
+      { id: "e", parentId: null, title: "Chapter 2" },
+      { id: "f", parentId: "e", title: "Exercises in context" },
+    ];
+    expect(exerciseSectionIds(s)).toEqual(["c", "d"]);
   });
 });

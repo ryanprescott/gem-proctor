@@ -686,6 +686,11 @@ export const AuthoringSessionSource = pgTable(
      * source's exercises, and a picker's unticked sections are these. Null: none.
      */
     excludedSectionIds: uuid("excluded_section_ids").array(),
+    /**
+     * The exercise sections whose problems this session writes questions from, each exactly. They are never part of
+     * what `sectionIds` stands for: exercises have their own objectives. Null: none.
+     */
+    exerciseSectionIds: uuid("exercise_section_ids").array(),
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.sourceId] })],
 );
@@ -702,12 +707,17 @@ export const Objective = pgTable(
     /** The chunks it comes from: `{ chunkId }[]`. */
     evidence: jsonValue("evidence").notNull(),
     origin: text("origin", { enum: ["llm", "human", "heading"] }).notNull(),
+    /** `exercise`: made from the session's exercises, so its questions are adapted from problems (SPEC §3A.1). */
+    kind: text("kind", { enum: ["content", "exercise"] })
+      .notNull()
+      .default("content"),
     order: integer("order").notNull(),
     sectionIds: uuid("section_ids").array().notNull(),
   },
   (t) => [
     index("objective_session_idx").on(t.sessionId, t.order),
     check("objective_origin_check", sql`${t.origin} IN ('llm', 'human', 'heading')`),
+    check("objective_kind_check", sql`${t.kind} IN ('content', 'exercise')`),
   ],
 );
 

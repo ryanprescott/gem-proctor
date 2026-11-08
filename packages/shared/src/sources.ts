@@ -109,3 +109,20 @@ export function isExerciseSection(title: string): boolean {
     plain,
   );
 }
+
+/**
+ * The sections that are exercises: one titled so (`isExerciseSection`) and everything under it. A book keeps its
+ * exercises at the end of each chapter, so there is one such section per chapter, and its own subsections.
+ */
+export function exerciseSectionIds(
+  sections: readonly { id: string; parentId: string | null; title: string }[],
+): string[] {
+  const byId = new Map(sections.map((s) => [s.id, s]));
+  const inExercises = (id: string) => {
+    for (let at: string | null | undefined = id; at; at = byId.get(at)?.parentId) {
+      if (isExerciseSection(byId.get(at)?.title ?? "")) return true;
+    }
+    return false;
+  };
+  return sections.filter((s) => inExercises(s.id)).map((s) => s.id);
+}

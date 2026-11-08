@@ -1,6 +1,6 @@
 import {
   type Blueprint,
-  isExerciseSection,
+  exerciseSectionIds,
   QUESTION_TYPES,
   type QuestionType,
   TEST_TYPES,
@@ -23,6 +23,7 @@ import {
   type ObjectiveView,
   type SessionDetail,
   type SessionProgress,
+  type SourceSectionView,
   sourcesSections,
 } from "@gem/shared/contracts";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -47,8 +48,23 @@ import { ReviewSection } from "./AuthoringReview.tsx";
 
 type Refresh = () => Promise<unknown>;
 
-/** What a source's scope step sends: the sections ticked and left out, or nothing for the whole source. */
-type Picked = { sectionIds?: string[]; excludeSectionIds?: string[] };
+/**
+ * What a source's scope step sends: the content sections ticked and left out (or nothing for all of it), and the
+ * exercises chosen, which are a scope of their own.
+ */
+type Picked = { sectionIds?: string[]; excludeSectionIds?: string[]; exerciseSectionIds: string[] };
+
+/** A source's sections as the picker shows them: the content (exercises aren't in this tree), and each chapter's exercises. */
+function partsOf(sections: SourceSectionView[]) {
+  const exercise = new Set(exerciseSectionIds(sections));
+  const content = sections.filter((x) => !exercise.has(x.id));
+  const byId = new Map(sections.map((x) => [x.id, x]));
+  // The exercises of a chapter are one choice, named for the chapter, with whatever is under them.
+  const heads = sections
+    .filter((x) => exercise.has(x.id) && !(x.parentId && exercise.has(x.parentId)))
+    .map((x) => ({ ...x, parentId: null, title: x.parentId ? (byId.get(x.parentId)?.title ?? x.title) : x.title }));
+  return { exercise, content, heads };
+}
 
 /**
  * One stage of a session (scope, objectives, blueprint, generation): a section that opens and closes, with a line
@@ -90,39 +106,75 @@ function SourceScope({
       api.call(sourcesSections, { params: { id: source.sourceId }, query: { revision: source.revisionNumber } }),
   });
   const sections = query.data?.sections ?? [];
+  const { content, heads, exercise } = partsOf(sections);
   const [selected, setSelected] = useState<Set<string> | null>(null);
-  const current = selected ?? new Set(source.sectionIds ?? sections.map((s) => s.id));
-  const leftOut = sections.filter((s) => isExerciseSection(s.title) && !current.has(s.id)).length;
+  const [chosenExercises, setChosenExercises] = useState<Set<string> | null>(null);
+  const current =
+    selected ?? new Set((source.sectionIds ?? content.map((x) => x.id)).filter((id) => !exercise.has(id)));
+  const currentExercises = chosenExercises ?? new Set(source.exerciseSectionIds);
+  const report = (content: Set<string>, exercises: Set<string>) =>
+    onChange(source.sourceId, { ...scopeOf(content, partsOf(sections).content), exerciseSectionIds: [...exercises] });
   return (
     <section aria-labelledby={`scope-${source.sourceId}`}>
       <h3 id={`scope-${source.sourceId}`}>
         {t("authoring:scope.source", { title: source.title, revision: source.revisionNumber })}
       </h3>
       <ErrorMessage error={query.error} />
-      {editable && leftOut > 0 ? (
-        <p className={styles.muted} role="note">
-          {t("authoring:scope.exercisesLeftOut", { count: leftOut })}
-        </p>
-      ) : null}
       {editable ? (
         <ScopeTree
-          sections={sections}
+          sections={content}
           selected={current}
           label={t("authoring:scope.label", { title: source.title })}
           onChange={(next) => {
             setSelected(next);
-            onChange(source.sourceId, scopeOf(next, sections));
+            report(next, currentExercises);
           }}
         />
       ) : (
         <p>
           {t("authoring:scope.fixed", {
-            count: source.sectionIds === null ? sections.length : source.sectionIds.length,
+            count: source.sectionIds === null ? content.length : source.sectionIds.length,
           })}
         </p>
       )}
+      {heads.length > 0 ? (
+        <>
+          <p className={styles.muted} role="note">
+            {t("authoring:scope.exercisesHelp")}
+          </p>
+          {editable ? (
+            <ScopeTree
+              sections={heads}
+              selected={currentExercises}
+              label={t("authoring:scope.exercisesLabel", { title: source.title })}
+              onChange={(next) => {
+                // A chapter's exercises stand for what's under them, so what's sent is the heads and their subsections.
+                const picked = new Set(heads.filter((h) => next.has(h.id)).map((h) => h.id));
+                const full = new Set(
+                  sections.filter((x) => exercise.has(x.id) && picked.has(rootOf(x, sections))).map((x) => x.id),
+                );
+                setChosenExercises(full);
+                report(current, full);
+              }}
+            />
+          ) : (
+            <p>
+              {t("authoring:scope.exercisesFixed", { count: heads.filter((h) => currentExercises.has(h.id)).length })}
+            </p>
+          )}
+        </>
+      ) : null}
     </section>
   );
+}
+
+/** The exercises section a section sits under (itself, if it is one). */
+function rootOf(section: SourceSectionView, sections: SourceSectionView[]): string {
+  const byId = new Map(sections.map((x) => [x.id, x]));
+  const ex = new Set(exerciseSectionIds(sections));
+  let at = section;
+  while (at.parentId && ex.has(at.parentId)) at = byId.get(at.parentId) as SourceSectionView;
+  return at.id;
 }
 
 function ScopeSection({ detail, refresh, open }: { detail: SessionDetail; refresh: Refresh; open: boolean }) {
@@ -133,10 +185,12 @@ function ScopeSection({ detail, refresh, open }: { detail: SessionDetail; refres
   const [chosen, setChosen] = useState<Record<string, Picked>>({});
   // A source nobody touched keeps the scope it has: its sections are in the cache, loaded for the picker above.
   const unchanged = (s: SessionDetail["sources"][number]): Picked => {
-    const sections =
-      qc.getQueryData<{ sections: { id: string }[] }>(["source", s.sourceId, "sections", s.revisionNumber])?.sections ??
-      [];
-    return scopeOf(new Set(s.sectionIds ?? sections.map((x) => x.id)), sections);
+    const all =
+      qc.getQueryData<{ sections: SourceSectionView[] }>(["source", s.sourceId, "sections", s.revisionNumber])
+        ?.sections ?? [];
+    const { content, exercise } = partsOf(all);
+    const ticked = (s.sectionIds ?? content.map((x) => x.id)).filter((id) => !exercise.has(id));
+    return { ...scopeOf(new Set(ticked), content), exerciseSectionIds: s.exerciseSectionIds };
   };
   const save = useMutation({
     mutationFn: () =>
@@ -212,21 +266,32 @@ const toItem = (o: ObjectiveView): Item => ({
   description: o.description,
   evidence: o.evidence,
   sectionIds: o.sectionIds,
+  kind: o.kind,
 });
 
-/** Each section's chapter: its top-level heading (or the one under a book's single title), for grouping objectives. */
-function chapterIndex(sections: { id: string; parentId: string | null; title: string }[]) {
+/**
+ * Each section's chapter, for grouping objectives: the first heading on its way down from the top that has text of its
+ * own. A book's "Part" headings have none (they only hold chapters), so the chapters under them are what's found; a
+ * lone title above everything is passed over the same way.
+ */
+function chapterIndex(sections: { id: string; parentId: string | null; title: string; chunks: number }[]) {
   const byId = new Map(sections.map((x) => [x.id, x]));
+  const kids = new Map<string, number>();
+  for (const x of sections) if (x.parentId) kids.set(x.parentId, (kids.get(x.parentId) ?? 0) + 1);
   const roots = sections.filter((x) => x.parentId === null);
-  const top = roots.length === 1 ? roots[0]?.id : undefined;
+  const container = (x: { id: string; parentId: string | null; chunks: number }) =>
+    (kids.get(x.id) ?? 0) > 0 && (x.chunks === 0 || (x.parentId === null && roots.length === 1));
   const chapter = new Map<string, { id: string; title: string }>();
   for (const x of sections) {
-    let at = x;
-    while (at.parentId !== null && at.parentId !== top) {
-      const up = byId.get(at.parentId);
-      if (!up) break;
-      at = up;
+    const path = [x];
+    for (
+      let up = x.parentId === null ? undefined : byId.get(x.parentId);
+      up;
+      up = up.parentId ? byId.get(up.parentId) : undefined
+    ) {
+      path.unshift(up);
     }
+    const at = path.find((n) => !container(n)) ?? x;
     chapter.set(x.id, { id: at.id, title: at.title });
   }
   return chapter;
@@ -288,7 +353,7 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
   const merge = () => {
     const chosen = items.filter((i) => picked.has(i.key));
     const [first] = chosen;
-    if (!first || chosen.length < 2) return;
+    if (!first || chosen.length < 2 || chosen.some((c) => c.kind !== first.kind)) return;
     const merged: Item = {
       ...first,
       label: chosen.map((c) => c.label).join(" / "),
@@ -364,6 +429,7 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
                 <span className={styles.objectiveLabel}>{o.label || t("authoring:objectives.untitled")}</span>
                 {o.description ? <span className={styles.muted}>{o.description}</span> : null}
               </div>
+              {o.kind === "exercise" ? <Badge>{t("authoring:objectives.exerciseBadge")}</Badge> : null}
               <Badge>{t("authoring:objectives.evidence", { count: o.evidence.length })}</Badge>
               {editable ? (
                 <Menu
@@ -397,7 +463,11 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
           >
             {t("authoring:objectives.add")}
           </Button>
-          <Button variant="secondary" onPress={merge} isDisabled={picked.size < 2}>
+          <Button
+            variant="secondary"
+            onPress={merge}
+            isDisabled={picked.size < 2 || new Set(items.filter((i) => picked.has(i.key)).map((i) => i.kind)).size > 1}
+          >
             {t("authoring:objectives.merge")}
           </Button>
           <Button variant="secondary" onPress={() => propose.mutate()} isDisabled={propose.isPending}>

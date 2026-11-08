@@ -120,6 +120,13 @@
       "when": 1794148211069,
       "tag": "0016_p22_scope_exclusions",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794172450116,
+      "tag": "0017_p22_exercise_scope",
+      "breakpoints": true
     }
   ]
 }
