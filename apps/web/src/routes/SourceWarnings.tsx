@@ -11,11 +11,13 @@ export function Warnings({ warnings }: { warnings: SourceWarning[] }) {
     <ul className={styles.warnings}>
       {warnings.map((w) => (
         <li key={`${w.code}:${w.heading ?? ""}`}>
-          {t(`sources:warnings.${w.code}`, {
-            heading: w.heading ?? "",
-            tokens: formatNumber(w.tokens ?? 0),
-            count: w.count ?? 0,
-          })}
+          {w.code === "unbalanced_math" && w.heading
+            ? t("sources:warnings.unbalanced_math_in", { heading: w.heading })
+            : t(`sources:warnings.${w.code}`, {
+                heading: w.heading ?? "",
+                tokens: formatNumber(w.tokens ?? 0),
+                count: w.count ?? 0,
+              })}
         </li>
       ))}
     </ul>

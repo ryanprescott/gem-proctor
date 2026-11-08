@@ -125,6 +125,66 @@ export function unbalancedMath(text: string): boolean {
   return inline % 2 !== 0;
 }
 
+/** The heading the first paragraph with an unclosed equation sits under, so there is somewhere to look. */
+export function headingOfUnbalancedMath(markdown: string): string | undefined {
+  let heading: string | undefined;
+  for (const block of markdown.split(/\n[^\S\n]*\n/)) {
+    const h = /^#{1,6}[ \t]+(.+?)[ \t#]*$/m.exec(block);
+    if (h && block.trimStart().startsWith("#")) heading = h[1]?.replace(/[*_`]/g, "").trim();
+    if (unbalancedMath(block)) return heading;
+  }
+  return undefined;
+}
+
+const MATHY = /[\\^_={}]/;
+
+/**
+ * Closes the one inline equation in a paragraph that never closes. `$` opens when something other than a space
+ * follows and closes when something other than a space comes before (the Markdown rule), prices and `\$` aside. A
+ * single opener left over at the end is closed at the end of the sentence if what follows it looks like mathematics,
+ * and is a stray mark (dropped) if not. Anything less clear (a stray mid-paragraph, `$$`) is left for `unbalanced_math`.
+ */
+export function repairInlineMath(paragraph: string): { text: string; repaired: boolean } {
+  if (paragraph.includes("$$")) return { text: paragraph, repaired: false };
+  const skip = [...paragraph.matchAll(/\\\$|`[^`\n]*`/g), ...paragraph.matchAll(PRICE)].map((m) => [
+    m.index as number,
+    (m.index as number) + m[0].length,
+  ]);
+  const marks: number[] = [];
+  for (let i = 0; i < paragraph.length; i++) {
+    if (paragraph[i] === "$" && !skip.some(([a, b]) => i >= (a as number) && i < (b as number))) marks.push(i);
+  }
+  let open: number | null = null;
+  for (const at of marks) {
+    const next = paragraph[at + 1];
+    const prev = paragraph[at - 1];
+    if (open === null) {
+      if (next !== undefined && !/\s/.test(next)) open = at;
+    } else if (prev !== undefined && !/\s/.test(prev)) open = null;
+  }
+  if (open === null) return { text: paragraph, repaired: false };
+  const rest = paragraph.slice(open + 1);
+  // Only the last opener, in a short tail that is mathematics: otherwise the mark is noise.
+  if (MATHY.test(rest) && rest.length <= 200) {
+    const tail = /[.,;:!?)]*\s*$/.exec(rest);
+    const cut = open + 1 + (tail?.index ?? rest.length);
+    return { text: `${paragraph.slice(0, cut)}$${paragraph.slice(cut)}`, repaired: true };
+  }
+  return { text: paragraph.slice(0, open) + paragraph.slice(open + 1), repaired: true };
+}
+
+function repairMath(text: string, onRepair: () => void): string {
+  return text
+    .split(/(\n[^\S\n]*\n)/)
+    .map((block, i) => {
+      if (i % 2 === 1 || !block.includes("$")) return block;
+      const r = repairInlineMath(block);
+      if (r.repaired) onRepair();
+      return r.text;
+    })
+    .join("");
+}
+
 function dropEmptyHeadings(text: string): string {
   return text.replace(/^#{1,6}[ \t]*$/gm, "").replace(/^#{1,6}[ \t]+[#\s*_`]*$/gm, "");
 }
@@ -144,6 +204,7 @@ function runningLines(prose: string[]): Set<string> {
 export function cleanMarkdown(input: CleanInput): Cleaned {
   const warnings: SourceWarning[] = [];
   let images = 0;
+  let repaired = 0;
 
   const parts = segments(input.markdown.replace(/\r\n?/g, "\n"));
   const rewritten = parts.map((p) => {
@@ -152,7 +213,7 @@ export function cleanMarkdown(input: CleanInput): Cleaned {
       images++;
       return "";
     });
-    return { ...p, text: dropEmptyHeadings(text) };
+    return { ...p, text: dropEmptyHeadings(repairMath(text, () => repaired++)) };
   });
 
   // A line that repeats on every page is dropped, but only a paragraph line: not in code, and not in display
@@ -179,6 +240,10 @@ export function cleanMarkdown(input: CleanInput): Cleaned {
   }
   const pages = Math.max(1, input.pagesConverted);
   if (markdown.replace(/\s+/g, "").length / pages < LOW_TEXT_CHARS_PER_PAGE) warnings.push({ code: "low_text" });
-  if (unbalancedMath(markdown)) warnings.push({ code: "unbalanced_math" });
+  if (repaired > 0) warnings.push({ code: "math_repaired", count: repaired });
+  if (unbalancedMath(markdown)) {
+    const heading = headingOfUnbalancedMath(markdown);
+    warnings.push({ code: "unbalanced_math", ...(heading ? { heading } : {}) });
+  }
   return { markdown, warnings };
 }

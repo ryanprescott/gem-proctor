@@ -29,6 +29,7 @@ export const SOURCE_WARNING_CODES = [
   "unbalanced_math",
   "pages_skipped",
   "math_unparsed",
+  "math_repaired",
 ] as const;
 export const SourceWarning = z.object({
   code: z.enum(SOURCE_WARNING_CODES),

@@ -37,8 +37,11 @@ export interface ParsedSource {
   warnings: SourceWarning[];
 }
 
-/** A section past this is hard to review and retrieve: a warning, nothing more. */
-const LONG_SECTION_TOKENS = 6000;
+/**
+ * A section past this is hard to review: a warning, nothing more. Chunks split it for retrieval, and a book's chapter
+ * of exercises or its index is long as a matter of course, so only the extreme is worth a line.
+ */
+const LONG_SECTION_TOKENS = 25000;
 
 const ATOMIC = new Set(["code", "table", "math", "html"]);
 
@@ -130,7 +133,9 @@ function warningsFor(markdown: string, sections: ParsedSection[], hasHeadings: b
   for (const s of sections) {
     const tokens = estimateTokens(markdown.slice(s.start, s.end));
     if (tokens > LONG_SECTION_TOKENS) warnings.push({ code: "long_section", heading: s.title, tokens });
-    const name = s.title.trim().toLowerCase();
+    // The same title under different headings is how books are made ("Exercises" in every chapter); it only
+    // confuses when the whole path is the same, as that is how a passage is cited.
+    const name = s.headingPath.map((h) => h.trim().toLowerCase()).join("\u0000");
     if (seen.has(name) && !reported.has(name)) {
       warnings.push({ code: "duplicate_heading", heading: s.title });
       reported.add(name);

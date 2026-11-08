@@ -48,8 +48,11 @@
     "figures_dropped": "{{count}} figures or images were left out. Only the text and equations are kept.",
     "low_text": "Very little text was found. The pages may be scans that couldn't be read.",
     "unbalanced_math": "An equation is missing its closing dollar sign. Check the equations before saving.",
+    "unbalanced_math_in": "An equation under “{{heading}}” is missing its closing dollar sign. Check it before saving.",
     "pages_skipped": "{{count}} pages of the PDF weren't read.",
-    "math_unparsed": "Some equations couldn't be displayed. Check them before saving."
+    "math_unparsed": "Some equations couldn't be displayed. Check them before saving.",
+    "math_repaired_one": "One equation was missing its closing dollar sign and was fixed. It's worth a look.",
+    "math_repaired_other": "{{count}} equations were missing their closing dollar sign and were fixed. They're worth a look."
   },
   "status": {
     "pending": "Waiting to embed",

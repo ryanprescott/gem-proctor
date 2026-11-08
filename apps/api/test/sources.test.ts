@@ -245,8 +245,14 @@ describe.skipIf(!hasDb || !verifyPython)("sources", () => {
       expect(none.warnings).toEqual([{ code: "no_headings" }]);
       const dup = (await env.proctor.post(`${API}/sources/preview`, { text: "# A\n\nx\n\n# A\n\ny" })).json();
       expect(dup.warnings).toEqual([{ code: "duplicate_heading", heading: "A" }]);
+      const same = (
+        await env.proctor.post(`${API}/sources/preview`, {
+          text: "# A\n\n## Exercises\n\nx\n\n# B\n\n## Exercises\n\ny",
+        })
+      ).json();
+      expect(same.warnings).toEqual([]);
       const long = (
-        await env.proctor.post(`${API}/sources/preview`, { text: `# Long\n\n${"word ".repeat(5000)}` })
+        await env.proctor.post(`${API}/sources/preview`, { text: `# Long\n\n${"word ".repeat(25000)}` })
       ).json();
       expect(long.warnings[0].code).toBe("long_section");
       expect(long.warnings[0].heading).toBe("Long");

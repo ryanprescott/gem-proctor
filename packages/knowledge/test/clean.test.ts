@@ -69,7 +69,8 @@ describe("M14: mathematics", () => {
     expect(unbalancedMath("a $x + y here")).toBe(true);
     expect(unbalancedMath("a $x$ and $$y$$")).toBe(false);
     expect(unbalancedMath("price \\$5 and $x$")).toBe(false);
-    expect(clean(`${prose}We have $x + y.\n`).warnings.map((w) => w.code)).toContain("unbalanced_math");
+    expect(clean(`${prose}We have $$x + y.\n`).warnings.map((w) => w.code)).toContain("unbalanced_math");
+    expect(clean(`${prose}We have $x + y.\n`).warnings.map((w) => w.code)).toEqual(["math_repaired"]);
   });
 });
 
@@ -105,5 +106,26 @@ describe("M15: clean-up and warnings", () => {
 
   test("a normal document has no warnings", () => {
     expect(clean(prose).warnings).toEqual([]);
+  });
+});
+
+describe("where an unclosed equation is", () => {
+  test("names the heading above it", async () => {
+    const { headingOfUnbalancedMath } = await import("../src/clean.ts");
+    expect(headingOfUnbalancedMath("# One\n\nfine $x$.\n\n## Two\n\nbroken $x here.\n")).toBe("Two");
+    expect(headingOfUnbalancedMath("# One\n\nfine $x$.\n")).toBeUndefined();
+  });
+});
+
+describe("closing an equation that never closes", () => {
+  test("closes a math tail, drops a stray mark, leaves the unclear alone", async () => {
+    const { repairInlineMath } = await import("../src/clean.ts");
+    expect(repairInlineMath("so $x = \\alpha_1.").text).toBe("so $x = \\alpha_1$.");
+    expect(repairInlineMath("it costs $ a lot of money").text).toBe("it costs $ a lot of money");
+    expect(repairInlineMath("a stray $ mark and words").repaired).toBe(false);
+    expect(repairInlineMath("then $and some words here").text).toBe("then and some words here");
+    expect(repairInlineMath("fine $x$ and $y$.").repaired).toBe(false);
+    expect(repairInlineMath("pay $5 and $x^2$").repaired).toBe(false);
+    expect(repairInlineMath("$$a$$ then $b").repaired).toBe(false);
   });
 });
