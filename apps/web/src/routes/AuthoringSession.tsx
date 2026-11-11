@@ -285,6 +285,9 @@ function chapterIndex(sections: { id: string; parentId: string | null; title: st
   return chapter;
 }
 
+/** A list with more objectives than this opens with its chapters closed. */
+const GROUP_COLLAPSE_ABOVE = 40;
+
 function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; refresh: Refresh; open: boolean }) {
   const { t } = useTranslation();
   const { announce } = useLive();
@@ -351,6 +354,63 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
     setItems((list) => list.flatMap((i) => (i.key === first.key ? [merged] : picked.has(i.key) ? [] : [i])));
     setPicked(new Set());
   };
+  const row = (o: Item) => {
+    const n = items.indexOf(o);
+    return (
+      <li key={o.key} className={styles.objectiveRow}>
+        {editable ? (
+          <input
+            type="checkbox"
+            className={styles.objectivePick}
+            aria-label={t("authoring:objectives.pick", { n: n + 1 })}
+            checked={picked.has(o.key)}
+            onChange={(e) =>
+              setPicked((p) => {
+                const next = new Set(p);
+                if (e.target.checked) next.add(o.key);
+                else next.delete(o.key);
+                return next;
+              })
+            }
+          />
+        ) : null}
+        <span className={styles.objectiveNumber} aria-hidden="true">
+          {n + 1}
+        </span>
+        <div className={styles.objectiveText}>
+          <span className={styles.objectiveLabel}>{o.label || t("authoring:objectives.untitled")}</span>
+          {o.description ? <span className={styles.muted}>{o.description}</span> : null}
+        </div>
+        {o.kind === "exercise" ? <Badge>{t("authoring:objectives.exerciseBadge")}</Badge> : null}
+        <Badge>{t("authoring:objectives.evidence", { count: o.evidence.length })}</Badge>
+        {editable ? (
+          <Menu
+            label={t("authoring:objectives.actions", { n: n + 1 })}
+            items={
+              <>
+                <MenuItem onAction={() => setEditing({ item: { ...o }, isNew: false })}>
+                  {t("authoring:objectives.edit")}
+                </MenuItem>
+                <MenuItem danger onAction={() => setItems((l) => l.filter((i) => i.key !== o.key))}>
+                  {t("authoring:objectives.removeShort")}
+                </MenuItem>
+              </>
+            }
+          />
+        ) : null}
+      </li>
+    );
+  };
+  // With the whole list showing, a book's objectives sit under its chapters, not in one run of 100.
+  const grouped = chapterKey === "all" && chapters.length > 1;
+  const groups = [
+    ...chapters.map((c) => ({
+      id: c.id,
+      title: c.title.replace(/[*_`#$]/g, "").trim(),
+      items: shown.filter((o) => chapterFor(o)?.id === c.id),
+    })),
+    { id: "other", title: t("authoring:objectives.otherGroup"), items: shown.filter((o) => !chapterFor(o)) },
+  ].filter((g) => g.items.length > 0);
   return (
     <Step
       title={t("authoring:objectives.title")}
@@ -365,7 +425,7 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
             selectedKey={chapterKey}
             onSelectionChange={setChapterKey}
             options={[
-              { id: "all", label: t("authoring:objectives.allChapters", { count: items.length }) },
+              { id: "all", label: t("authoring:objectives.allObjectives", { count: items.length }) },
               ...chapters.map((c) => ({
                 id: c.id,
                 label: t("authoring:objectives.chapterOption", {
@@ -401,55 +461,28 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
           ) : null}
         </div>
       ) : null}
-      <ol className={styles.objectiveList} aria-label={t("authoring:objectives.title")}>
-        {shown.map((o) => {
-          const n = items.indexOf(o);
-          return (
-            <li key={o.key} className={styles.objectiveRow}>
-              {editable ? (
-                <input
-                  type="checkbox"
-                  className={styles.objectivePick}
-                  aria-label={t("authoring:objectives.pick", { n: n + 1 })}
-                  checked={picked.has(o.key)}
-                  onChange={(e) =>
-                    setPicked((p) => {
-                      const next = new Set(p);
-                      if (e.target.checked) next.add(o.key);
-                      else next.delete(o.key);
-                      return next;
-                    })
-                  }
-                />
-              ) : null}
-              <span className={styles.objectiveNumber} aria-hidden="true">
-                {n + 1}
-              </span>
-              <div className={styles.objectiveText}>
-                <span className={styles.objectiveLabel}>{o.label || t("authoring:objectives.untitled")}</span>
-                {o.description ? <span className={styles.muted}>{o.description}</span> : null}
-              </div>
-              {o.kind === "exercise" ? <Badge>{t("authoring:objectives.exerciseBadge")}</Badge> : null}
-              <Badge>{t("authoring:objectives.evidence", { count: o.evidence.length })}</Badge>
-              {editable ? (
-                <Menu
-                  label={t("authoring:objectives.actions", { n: n + 1 })}
-                  items={
-                    <>
-                      <MenuItem onAction={() => setEditing({ item: { ...o }, isNew: false })}>
-                        {t("authoring:objectives.edit")}
-                      </MenuItem>
-                      <MenuItem danger onAction={() => setItems((l) => l.filter((i) => i.key !== o.key))}>
-                        {t("authoring:objectives.removeShort")}
-                      </MenuItem>
-                    </>
-                  }
-                />
-              ) : null}
-            </li>
-          );
-        })}
-      </ol>
+      {grouped ? (
+        <div className={styles.objectiveGroups}>
+          {groups.map((g) => (
+            <Disclosure
+              key={g.id}
+              level={3}
+              variant="row"
+              defaultExpanded={items.length <= GROUP_COLLAPSE_ABOVE}
+              title={g.title}
+              summary={t("authoring:objectives.groupCount", { count: g.items.length })}
+            >
+              <ol className={styles.objectiveList} aria-label={`${t("authoring:objectives.title")}: ${g.title}`}>
+                {g.items.map(row)}
+              </ol>
+            </Disclosure>
+          ))}
+        </div>
+      ) : (
+        <ol className={styles.objectiveList} aria-label={t("authoring:objectives.title")}>
+          {shown.map(row)}
+        </ol>
+      )}
       {editable ? (
         <div className={styles.row}>
           <Button
