@@ -43,7 +43,7 @@ const batch = (quote = QUOTE) =>
 describe("C28: prompts", () => {
   test("every prompt has its version id, in its file, and renders", () => {
     expect(ACTIVE_PROMPTS).toMatchObject({
-      "authoring.generate": "gen-v10",
+      "authoring.generate": "gen-v11",
       "verify.solve.blind": "blind-v2",
       "verify.solve.classify": "classify-v1",
       "program-repair": "repair-v1",
@@ -153,7 +153,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
       status: "queued",
       role: "authoring.generate",
       model: "m",
-      promptVersion: "gen-v10",
+      promptVersion: "gen-v11",
     });
     const run = await finished(queued.id);
     expect(run.status).toBe("done");
@@ -169,7 +169,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
     expect(run.items).toHaveLength(2);
     const calls = await t.db.select().from(LlmCallLog).where(eq(LlmCallLog.evalRunId, queued.id));
     expect(calls).toHaveLength(2);
-    expect(calls[0]).toMatchObject({ kind: "eval", promptVersion: "gen-v10", role: "authoring.generate" });
+    expect(calls[0]).toMatchObject({ kind: "eval", promptVersion: "gen-v11", role: "authoring.generate" });
     expect(calls[0]?.requestBody).not.toBeNull();
   });
 
@@ -210,7 +210,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
   test("E51: grounding-smoke: L1 to L3 pass rates of the generated questions, through the job", async () => {
     const run = await finished((await start({ evalSet: "grounding-smoke", trials: 2 })).json().run.id);
     expect(run.status).toBe("done");
-    expect(run.promptVersion).toBe("gen-v10");
+    expect(run.promptVersion).toBe("gen-v11");
     // The mock's batch: four questions on the fixture's first chunk, the last quoting words that aren't in it.
     expect(run.summary).toMatchObject({
       trials: 2,
@@ -298,7 +298,7 @@ describe.skipIf(!hasDb)("C30–C32: eval runs", () => {
     expect(err).toBe("");
     expect(code).toBe(0);
     expect(out).toContain("eval generate-smoke (authoring.generate)");
-    expect(out).toContain("prompt gen-v10");
+    expect(out).toContain("prompt gen-v11");
     for (const [k, v] of Object.entries(run.summary)) {
       if (k !== "secondsPerQuestion") expect(out).toContain(`  ${k}: ${v}`);
     }
