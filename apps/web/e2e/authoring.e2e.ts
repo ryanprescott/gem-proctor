@@ -471,8 +471,31 @@ test("a long book's scope opens as chapters: tick one whole, then narrow its obj
   await page.getByRole("button", { name: /Show objectives from/ }).click();
   await page.getByRole("option", { name: /^Chapter 2/ }).click();
   await expect(objectives).toHaveCount(15);
+  // Keep only this chapter's objectives (not saved: a reload starts from the saved list again).
+  await page.getByRole("button", { name: "Keep only these 15" }).click();
+  await expect(objectives).toHaveCount(15);
+  await expect(objectives.first()).toContainText("Chapter 2");
+  await page.reload();
+  await expect(objectives).toHaveCount(30);
+  await page.getByRole("button", { name: /Show objectives from/ }).click();
+  await page.getByRole("option", { name: /^Chapter 2/ }).click();
   await page.getByRole("button", { name: "Remove these 15" }).click();
   await expect(objectives).toHaveCount(15);
   await expect(objectives.first()).toContainText("Chapter 1");
+
+  // The new-session form asks which chapters a book covers: it can't be created until one is ticked, and only
+  // what's ticked is in the session.
+  await page.goto("/authoring");
+  await page.getByRole("textbox", { name: "Name" }).fill("Part one quiz");
+  await page.getByRole("button", { name: /Source/ }).click();
+  await page.getByRole("option", { name: "Long book" }).click();
+  const form = page.getByRole("group", { name: "Sections this test covers" });
+  await expect(page.getByRole("note")).toContainText("whole book");
+  await expect(form.getByRole("checkbox")).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Create session" })).toBeDisabled();
+  await form.locator("label", { has: page.getByRole("checkbox", { name: /^Part 1 / }) }).click();
+  await page.getByRole("button", { name: "Create session" }).click();
+  await expect(page).toHaveURL(/\/authoring\/[0-9a-f-]+$/);
+  await expect(objectives).toHaveCount(15);
   await page.context().close();
 });

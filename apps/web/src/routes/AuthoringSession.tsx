@@ -42,7 +42,7 @@ import { Disclosure } from "../ui/Disclosure.tsx";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
 import { Menu, MenuItem } from "../ui/Menu.tsx";
 import { PageHeader } from "../ui/PageHeader.tsx";
-import { ScopeTree, scopeOf } from "../ui/ScopeTree.tsx";
+import { partsOf, ScopeTree, scopeOf } from "../ui/ScopeTree.tsx";
 import styles from "./Authoring.module.css";
 import { ReviewSection } from "./AuthoringReview.tsx";
 
@@ -53,18 +53,6 @@ type Refresh = () => Promise<unknown>;
  * exercises chosen, which are a scope of their own.
  */
 type Picked = { sectionIds?: string[]; excludeSectionIds?: string[]; exerciseSectionIds: string[] };
-
-/** A source's sections as the picker shows them: the content (exercises aren't in this tree), and each chapter's exercises. */
-function partsOf(sections: SourceSectionView[]) {
-  const exercise = new Set(exerciseSectionIds(sections));
-  const content = sections.filter((x) => !exercise.has(x.id));
-  const byId = new Map(sections.map((x) => [x.id, x]));
-  // The exercises of a chapter are one choice, named for the chapter, with whatever is under them.
-  const heads = sections
-    .filter((x) => exercise.has(x.id) && !(x.parentId && exercise.has(x.parentId)))
-    .map((x) => ({ ...x, parentId: null, title: x.parentId ? (byId.get(x.parentId)?.title ?? x.title) : x.title }));
-  return { exercise, content, heads };
-}
 
 /**
  * One stage of a session (scope, objectives, blueprint, generation): a section that opens and closes, with a line
@@ -388,16 +376,28 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
             ]}
           />
           {editable && chapterKey !== "all" ? (
-            <Button
-              variant="secondary"
-              onPress={() => {
-                const gone = new Set(shown.map((o) => o.key));
-                setItems((l) => l.filter((i) => !gone.has(i.key)));
-                setChapterKey("all");
-              }}
-            >
-              {t("authoring:objectives.removeShown", { count: shown.length })}
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                onPress={() => {
+                  const kept = new Set(shown.map((o) => o.key));
+                  setItems((l) => l.filter((i) => kept.has(i.key)));
+                  setChapterKey("all");
+                }}
+              >
+                {t("authoring:objectives.keepShown", { count: shown.length })}
+              </Button>
+              <Button
+                variant="secondary"
+                onPress={() => {
+                  const gone = new Set(shown.map((o) => o.key));
+                  setItems((l) => l.filter((i) => !gone.has(i.key)));
+                  setChapterKey("all");
+                }}
+              >
+                {t("authoring:objectives.removeShown", { count: shown.length })}
+              </Button>
+            </>
           ) : null}
         </div>
       ) : null}

@@ -21,6 +21,8 @@
     "testType": "Test type",
     "source": "Source",
     "create": "Create session",
+    "scope": "Sections this test covers",
+    "pickChapters": "This source is a whole book. Tick the chapters this test covers; the objectives and questions come only from what's ticked. Exercises are chosen afterwards.",
     "noSources": "You need a source that is ready to use first.",
     "toSources": "Go to Sources"
   },
@@ -66,6 +68,7 @@
     "chapter": "Show objectives from",
     "allChapters": "All chapters ({{count}})",
     "chapterOption": "{{title}} ({{count}})",
+    "keepShown": "Keep only these {{count}}",
     "removeShown": "Remove these {{count}}",
     "add": "Add an objective",
     "merge": "Merge selected",

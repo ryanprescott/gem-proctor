@@ -1,3 +1,4 @@
+import { exerciseSectionIds } from "@gem/shared";
 import type { SourceSectionView } from "@gem/shared/contracts";
 import { useMemo, useState } from "react";
 import { Button, Checkbox } from "react-aria-components";
@@ -19,9 +20,22 @@ export function scopeOf(
   return left.length === 0 ? {} : { sectionIds: [...selected], excludeSectionIds: left };
 }
 
-const COLLAPSE_ABOVE = 25;
+/** A source with more sections than this is a book: its tree opens as chapters, and a session must say what it covers. */
+export const LONG_SOURCE_SECTIONS = 25;
 
 const plain = (title: string) => title.replace(/[*_`#$]/g, "").trim();
+
+/** A source's sections as the picker shows them: the content (exercises aren't in this tree), and each chapter's exercises. */
+export function partsOf(sections: SourceSectionView[]) {
+  const exercise = new Set(exerciseSectionIds(sections));
+  const content = sections.filter((x) => !exercise.has(x.id));
+  const byId = new Map(sections.map((x) => [x.id, x]));
+  // The exercises of a chapter are one choice, named for the chapter, with whatever is under them.
+  const heads = sections
+    .filter((x) => exercise.has(x.id) && !(x.parentId && exercise.has(x.parentId)))
+    .map((x) => ({ ...x, parentId: null, title: x.parentId ? (byId.get(x.parentId)?.title ?? x.title) : x.title }));
+  return { exercise, content, heads };
+}
 
 /** Everything under a section, itself included. */
 function subtree(id: string, children: Map<string | null, SourceSectionView[]>): string[] {
@@ -51,7 +65,7 @@ export function ScopeTree({
 
   // A long book opens as its chapters, and a short source as everything: a tree of hundreds of rows is no picker.
   const [opened, setOpened] = useState<ReadonlyMap<string, boolean>>(new Map());
-  const many = sections.length > COLLAPSE_ABOVE;
+  const many = sections.length > LONG_SOURCE_SECTIONS;
   const isOpen = (id: string) => opened.get(id) ?? !many;
   const setOpen = (id: string, open: boolean) => setOpened((m) => new Map(m).set(id, open));
 

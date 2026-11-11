@@ -5,6 +5,7 @@ import {
   authoringSessionsList,
   type SessionSummary,
   sourcesList,
+  sourcesSections,
 } from "@gem/shared/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -17,6 +18,7 @@ import { formatDate, formatNumber } from "../format.ts";
 import { ConfirmDialog } from "../ui/ConfirmDialog.tsx";
 import { Button, Card, ErrorMessage, errorText, Select, TextField } from "../ui/controls.tsx";
 import { useDocumentTitle, useLive } from "../ui/live.tsx";
+import { LONG_SOURCE_SECTIONS, partsOf, ScopeTree, scopeOf } from "../ui/ScopeTree.tsx";
 import styles from "./Authoring.module.css";
 
 function NewSession() {
@@ -28,8 +30,21 @@ function NewSession() {
   const [testType, setTestType] = useState<TestType>("chapter_quiz");
   const [sourceId, setSourceId] = useState("");
   const chosen = sourceId || usable[0]?.id || "";
+  const sections = useQuery({
+    queryKey: ["source", chosen, "sections", "latest"],
+    queryFn: () => api.call(sourcesSections, { params: { id: chosen }, query: {} }),
+    enabled: chosen !== "",
+  });
+  const { content } = partsOf(sections.data?.sections ?? []);
+  // A book is too big to be what a test covers: it has to say which chapters, so a "Chapter 1 quiz" is one.
+  const isBook = content.length > LONG_SOURCE_SECTIONS;
+  const [picks, setPicks] = useState<Record<string, Set<string>>>({});
+  const picked = picks[chosen] ?? (isBook ? new Set<string>() : new Set(content.map((x) => x.id)));
   const create = useMutation({
-    mutationFn: () => api.call(authoringSessionsCreate, { body: { title, testType, sources: [{ sourceId: chosen }] } }),
+    mutationFn: () =>
+      api.call(authoringSessionsCreate, {
+        body: { title, testType, sources: [{ sourceId: chosen, ...scopeOf(picked, content), exerciseSectionIds: [] }] },
+      }),
     onSuccess: (detail) => navigate({ to: "/authoring/$sessionId", params: { sessionId: detail.session.id } }),
   });
   return (
@@ -58,9 +73,27 @@ function NewSession() {
             onSelectionChange={setSourceId}
             options={usable.map((s) => ({ id: s.id, label: s.title }))}
           />
-          <ErrorMessage error={create.error} />
+          {content.length > 0 ? (
+            <>
+              {isBook ? (
+                <p className={styles.muted} role="note">
+                  {t("authoring:new.pickChapters")}
+                </p>
+              ) : null}
+              <ScopeTree
+                sections={content}
+                selected={picked}
+                label={t("authoring:new.scope")}
+                onChange={(next) => setPicks((p) => ({ ...p, [chosen]: next }))}
+              />
+            </>
+          ) : null}
+          <ErrorMessage error={create.error ?? sections.error} />
           <div className={styles.row}>
-            <Button type="submit" isDisabled={create.isPending || title.trim() === "" || chosen === ""}>
+            <Button
+              type="submit"
+              isDisabled={create.isPending || title.trim() === "" || chosen === "" || picked.size === 0}
+            >
               {t("authoring:new.create")}
             </Button>
           </div>
