@@ -47,6 +47,10 @@ export interface StoredPlan extends BatchPlan {
   replaces?: { draftId: string; note: string | null; failures: string[]; question: string } | undefined;
   /** Sent as context and asserted unchanged (SPEC §3A.1 step 7). */
   locked?: { question: string }[] | undefined;
+  /** Set on the one automatic retry of a question that came back as the wrong kind, so it is never retried again. */
+  autoRetry?: boolean | undefined;
+  /** An instruction from the system (not the creator) for this call. */
+  hint?: string | undefined;
 }
 
 const running = new Map<string, AbortController>();
@@ -146,6 +150,7 @@ function userPrompt(blocks: string[], objectives: string[], plan: StoredPlan, bl
     if (note) parts.push(`The creator's note: ${note}`);
     if (failures.length > 0) parts.push(`It failed these checks: ${failures.join("; ")}`);
   }
+  if (plan.hint) parts.push(plan.hint);
   if (blueprint.constraints.trim()) parts.push(`Constraints from the creator: ${blueprint.constraints.trim()}`);
   parts.push(`Write ${plan.size} questions: ${describeCounts(plan.counts)}.`);
   return parts.join("\n\n");
@@ -296,6 +301,17 @@ async function nextPosition(ctx: Pick<AppContext, "db">, sessionId: string) {
   return (row?.n ?? 0) + 1;
 }
 
+/**
+ * Said to the model when a "calculation" named none of its inputs: a statement about vectors in general, written as if it
+ * were a sum. It is asked once more as the concept question it is, rather than left for the creator to sort out.
+ */
+export const CONCEPT_RETRY_HINT =
+  'The question you wrote for this was marked as a calculation, but it states a general fact or formula, and it names none of its inputs. Write it again as a CONCEPT question: "computable": false, no inputs, and options that state the fact in words or symbols. Do not use values.';
+
+const wantsConcept = (content: DraftContent, results: LayerResult[]) =>
+  content.computable &&
+  results.some((r) => r.layer === "L1" && r.outcome === "fail" && r.issues.some((i) => i.code === "no_placeholders"));
+
 /** The accept rule's input: whether L7 should run on this at all (P2.md §5). */
 const needsL7 = (results: LayerResult[]) =>
   !results.some((r) => (r.layer === "L1" || r.layer === "L2") && r.outcome === "fail");
@@ -345,7 +361,29 @@ async function saveQuestions(
     });
     position += 1;
     if (pending) await ctx.queue?.send(L7_QUEUE, { draftId: id, flow: "auto" });
+    if (!plan.autoRetry && !plan.replaces && wantsConcept(content, results))
+      await retryAsConcept(ctx, batch, id, content, results);
   }
+}
+
+/** One more try, as a concept question: it replaces the first when it arrives, and a second failure is left to be seen. */
+async function retryAsConcept(
+  ctx: AppContext,
+  batch: BatchRow,
+  draftId: string,
+  content: DraftContent,
+  results: LayerResult[],
+) {
+  const failures = results.flatMap((r) => (r.outcome === "fail" ? r.issues.map((i) => `${r.layer} ${i.code}`) : []));
+  const plan: StoredPlan = {
+    objectiveIds: content.objectiveIds.slice(0, 1),
+    counts: { [content.type]: 1 },
+    size: 1,
+    replaces: { draftId, note: null, failures, question: content.template },
+    autoRetry: true,
+    hint: CONCEPT_RETRY_HINT,
+  };
+  await queueBatches(ctx, await loadSession(ctx, batch.sessionId), batch.revisionId, [plan]);
 }
 
 async function settingsOf(ctx: AppContext) {

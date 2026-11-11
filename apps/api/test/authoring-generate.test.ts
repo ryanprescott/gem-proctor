@@ -392,6 +392,61 @@ describe.skipIf(!hasDb || !verifyPython)("authoring generation", () => {
     }, 90_000);
   });
 
+  describe("a calculation that is really a fact", () => {
+    test("one that names none of its inputs is asked again, once, as a concept question", async () => {
+      let first = true;
+      const before = env.mock.chatRequests().length;
+      const { detail } = await run(
+        {
+          intercept: (body) => {
+            if (!first) return undefined;
+            first = false;
+            const key = /Source chunk \[([^\]]+)\]:\n([\s\S]*?)(?=\n\n|$)/.exec(
+              JSON.stringify(body).replace(/\\n/g, "\n"),
+            );
+            return JSON.stringify({
+              questions: [
+                {
+                  tempId: "bad1",
+                  objectiveIds: ["O1"],
+                  type: "single_choice",
+                  topic: "Inner product",
+                  computable: true,
+                  evidence: [{ chunkId: key?.[1] ?? "", quote: (key?.[2] ?? "").split("\n")[0]?.slice(0, 60) ?? "" }],
+                  inputs: [{ name: "x", kind: "vector", size: [3], from: "sample", sourceText: "" }],
+                  question: "Let x be an n-vector. What is its size?",
+                  constraint: "",
+                  answerProgram: "result = 3",
+                  options: [],
+                  mistakes: [
+                    { whyWrong: "counts the entries twice", program: "result = 6" },
+                    { whyWrong: "forgets one", program: "result = 2" },
+                  ],
+                  explanation: "The size is the number of entries.",
+                },
+              ],
+            });
+          },
+        },
+        { count: 1 },
+      );
+      expect(detail.session.status).toBe("review");
+      // The retry replaced it: one current question, a concept one that passes the structure check.
+      expect(detail.questions).toHaveLength(1);
+      const q = detail.questions[0] as SessionDetail["questions"][number];
+      expect(q.content.computable).toBe(false);
+      expect(resultOf(q, "L1")).toMatchObject({ outcome: "pass" });
+      const asked = env.mock
+        .chatRequests()
+        .slice(before)
+        .filter((r) => JSON.stringify(r.body).includes("Source chunk ["));
+      expect(asked).toHaveLength(2);
+      expect(JSON.stringify(asked[1]?.body)).toContain("Write it again as a CONCEPT question");
+      const events = await env.t.db.select().from(QuestionEvent).where(eq(QuestionEvent.draftQuestionId, q.id));
+      expect(events.map((e) => e.kind)).toContain("regenerated");
+    }, 90_000);
+  });
+
   describe("exercises", () => {
     /** A book with an exercises section, a session using only those exercises, and its generation. */
     async function fromExercises(b: Behaviour) {

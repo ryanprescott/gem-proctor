@@ -493,6 +493,24 @@ test("a long book's scope opens as chapters: tick one whole, then narrow its obj
   await expect(objectives).toHaveCount(15);
   await expect(objectives.first()).toContainText("Chapter 1");
 
+  // Saving the objectives clears the blueprint on the server; the chosen type's numbers come back by themselves, even
+  // when the objectives keep their ids.
+  const stepSummary = page.getByRole("button", { name: /^Blueprint/ });
+  await expect(stepSummary).toContainText("questions");
+  await page.getByRole("button", { name: "Save objectives" }).click();
+  await expect.poll(() => liveRegionText(page)).toContain("Objectives saved");
+  await expect(stepSummary).not.toContainText("Not set yet");
+  await expect(stepSummary).toContainText("questions");
+  // Again, with nothing changed: the same ids, and the blueprint is cleared again. It is saved again too, which the
+  // server says (the page could still be showing the old one for a moment).
+  const sessionId = page.url().split("/").pop() as string;
+  const saved = async () =>
+    (await (await page.request.get(`/api/v1/authoring/sessions/${sessionId}`)).json()).blueprint !== null;
+  await page.getByRole("button", { name: "Save objectives" }).click();
+  await expect.poll(() => liveRegionText(page)).toContain("Objectives saved");
+  await expect.poll(saved, { timeout: 8000 }).toBe(true);
+  await expect(stepSummary).not.toContainText("Not set yet");
+
   // The new-session form asks which chapters a book covers: it can't be created until one is ticked, and only
   // what's ticked is in the session.
   await page.goto("/authoring");

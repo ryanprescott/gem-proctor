@@ -640,14 +640,23 @@ function BlueprintSection({ detail, refresh, open }: { detail: SessionDetail; re
   });
   // The test type is already chosen, so its numbers are filled in as soon as there are objectives to spread them over
   // (and again after the objectives change, which clears them), not when the type is picked again.
+  // It is tried again whenever the blueprint is cleared (objectives saved, scope changed), and not again after a
+  // failure for the same objectives, which the page says, with a button to try it by hand.
   const objectivesKey = detail.objectives.map((o) => o.id).join();
-  const asked = useRef<string | null>(null);
+  const failedFor = useRef<string | null>(null);
   const { mutate: applyDefaults } = apply;
   useEffect(() => {
-    if (!editable || detail.blueprint !== null || objectivesKey === "" || asked.current === objectivesKey) return;
-    asked.current = objectivesKey;
+    if (!editable || detail.blueprint !== null || objectivesKey === "" || failedFor.current === objectivesKey) return;
     quiet.current = true;
-    applyDefaults({ testType: detail.session.testType });
+    applyDefaults(
+      { testType: detail.session.testType },
+      {
+        onError: () => {
+          failedFor.current = objectivesKey;
+          quiet.current = false;
+        },
+      },
+    );
   }, [editable, detail.blueprint, detail.session.testType, objectivesKey, applyDefaults]);
   const sum = (o: Record<string, number | undefined>) => Object.values(o).reduce<number>((n, c) => n + (c ?? 0), 0);
   const label = (id: string) => detail.objectives.find((o) => o.id === id)?.label ?? id;
@@ -757,6 +766,16 @@ function BlueprintSection({ detail, refresh, open }: { detail: SessionDetail; re
             </div>
           ) : null}
         </Form>
+      ) : editable ? (
+        <div className={styles.row}>
+          <Button
+            variant="secondary"
+            onPress={() => apply.mutate({ testType: detail.session.testType })}
+            isDisabled={apply.isPending || detail.objectives.length === 0}
+          >
+            {t("authoring:blueprint.useDefaults", { type: t(`authoring:testTypes.${detail.session.testType}`) })}
+          </Button>
+        </div>
       ) : (
         <p>{t("authoring:blueprint.none")}</p>
       )}

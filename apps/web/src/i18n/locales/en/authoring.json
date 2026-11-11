@@ -117,7 +117,8 @@
     "none": "Choose a test type to start the blueprint.",
     "summary_one": "{{count}} question",
     "summary_other": "{{count}} questions",
-    "notSet": "Not set yet"
+    "notSet": "Not set yet",
+    "useDefaults": "Fill in the {{type}} numbers"
   },
   "generate": {
     "title": "Generate",
