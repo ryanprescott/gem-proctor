@@ -285,6 +285,32 @@ function chapterIndex(sections: { id: string; parentId: string | null; title: st
   return chapter;
 }
 
+/** One checkbox that selects a whole chapter's objectives: mixed when only some are. */
+function GroupPick({
+  label,
+  total,
+  picked,
+  onChange,
+}: {
+  label: string;
+  total: number;
+  picked: number;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <input
+      type="checkbox"
+      className={styles.objectivePick}
+      aria-label={label}
+      checked={picked === total}
+      ref={(el) => {
+        if (el) el.indeterminate = picked > 0 && picked < total;
+      }}
+      onChange={(e) => onChange(e.target.checked)}
+    />
+  );
+}
+
 /** A list with more objectives than this opens with its chapters closed. */
 const GROUP_COLLAPSE_ABOVE = 40;
 
@@ -341,6 +367,16 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
       );
     },
   });
+  const removeSelected = () => {
+    setItems((l) => l.filter((i) => !picked.has(i.key)));
+    setPicked(new Set());
+  };
+  const keepSelected = () => {
+    setItems((l) => l.filter((i) => picked.has(i.key)));
+    setPicked(new Set());
+    setChapterKey("all");
+  };
+  const canMerge = picked.size >= 2 && new Set(items.filter((i) => picked.has(i.key)).map((i) => i.kind)).size === 1;
   const merge = () => {
     const chosen = items.filter((i) => picked.has(i.key));
     const [first] = chosen;
@@ -435,30 +471,32 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
               })),
             ]}
           />
-          {editable && chapterKey !== "all" ? (
-            <>
-              <Button
-                variant="secondary"
-                onPress={() => {
-                  const kept = new Set(shown.map((o) => o.key));
-                  setItems((l) => l.filter((i) => kept.has(i.key)));
-                  setChapterKey("all");
-                }}
-              >
-                {t("authoring:objectives.keepShown", { count: shown.length })}
-              </Button>
-              <Button
-                variant="secondary"
-                onPress={() => {
-                  const gone = new Set(shown.map((o) => o.key));
-                  setItems((l) => l.filter((i) => !gone.has(i.key)));
-                  setChapterKey("all");
-                }}
-              >
-                {t("authoring:objectives.removeShown", { count: shown.length })}
-              </Button>
-            </>
-          ) : null}
+        </div>
+      ) : null}
+      {editable && items.length > 0 ? (
+        <div className={styles.row}>
+          <Button variant="secondary" onPress={() => setPicked(new Set(shown.map((o) => o.key)))}>
+            {t("authoring:objectives.selectAll")}
+          </Button>
+          <Button variant="secondary" onPress={() => setPicked(new Set())} isDisabled={picked.size === 0}>
+            {t("authoring:objectives.deselectAll")}
+          </Button>
+          <span className={styles.muted} aria-live="polite">
+            {t("authoring:objectives.selected", { count: picked.size })}
+          </span>
+          <Button
+            variant="secondary"
+            onPress={keepSelected}
+            isDisabled={picked.size === 0 || picked.size === items.length}
+          >
+            {t("authoring:objectives.keepSelected")}
+          </Button>
+          <Button variant="secondary" onPress={removeSelected} isDisabled={picked.size === 0}>
+            {t("authoring:objectives.removeSelected")}
+          </Button>
+          <Button variant="secondary" onPress={merge} isDisabled={!canMerge}>
+            {t("authoring:objectives.merge")}
+          </Button>
         </div>
       ) : null}
       {grouped ? (
@@ -471,6 +509,25 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
               defaultExpanded={items.length <= GROUP_COLLAPSE_ABOVE}
               title={g.title}
               summary={t("authoring:objectives.groupCount", { count: g.items.length })}
+              actions={
+                editable ? (
+                  <GroupPick
+                    label={t("authoring:objectives.pickGroup", { title: g.title })}
+                    total={g.items.length}
+                    picked={g.items.filter((o) => picked.has(o.key)).length}
+                    onChange={(on) =>
+                      setPicked((p) => {
+                        const next = new Set(p);
+                        for (const o of g.items) {
+                          if (on) next.add(o.key);
+                          else next.delete(o.key);
+                        }
+                        return next;
+                      })
+                    }
+                  />
+                ) : undefined
+              }
             >
               <ol className={styles.objectiveList} aria-label={`${t("authoring:objectives.title")}: ${g.title}`}>
                 {g.items.map(row)}
@@ -495,13 +552,6 @@ function ObjectivesSection({ detail, refresh, open }: { detail: SessionDetail; r
             }
           >
             {t("authoring:objectives.add")}
-          </Button>
-          <Button
-            variant="secondary"
-            onPress={merge}
-            isDisabled={picked.size < 2 || new Set(items.filter((i) => picked.has(i.key)).map((i) => i.kind)).size > 1}
-          >
-            {t("authoring:objectives.merge")}
           </Button>
           <Button variant="secondary" onPress={() => propose.mutate()} isDisabled={propose.isPending}>
             {propose.isPending ? t("authoring:objectives.proposing") : t("authoring:objectives.propose")}
@@ -576,6 +626,7 @@ function BlueprintSection({ detail, refresh, open }: { detail: SessionDetail; re
     setBp(detail.blueprint);
   }, [detail.blueprint]);
 
+  const quiet = useRef(false);
   const apply = useMutation({
     mutationFn: (body: Partial<Blueprint> & { testType: TestType }) =>
       api.call(authoringBlueprint, { params: { id: detail.session.id }, body }),
@@ -583,9 +634,21 @@ function BlueprintSection({ detail, refresh, open }: { detail: SessionDetail; re
       setBp(res.blueprint);
       seen.current = JSON.stringify(res.blueprint);
       await refresh();
-      announce(t("authoring:blueprint.saved"));
+      if (!quiet.current) announce(t("authoring:blueprint.saved"));
+      quiet.current = false;
     },
   });
+  // The test type is already chosen, so its numbers are filled in as soon as there are objectives to spread them over
+  // (and again after the objectives change, which clears them), not when the type is picked again.
+  const objectivesKey = detail.objectives.map((o) => o.id).join();
+  const asked = useRef<string | null>(null);
+  const { mutate: applyDefaults } = apply;
+  useEffect(() => {
+    if (!editable || detail.blueprint !== null || objectivesKey === "" || asked.current === objectivesKey) return;
+    asked.current = objectivesKey;
+    quiet.current = true;
+    applyDefaults({ testType: detail.session.testType });
+  }, [editable, detail.blueprint, detail.session.testType, objectivesKey, applyDefaults]);
   const sum = (o: Record<string, number | undefined>) => Object.values(o).reduce<number>((n, c) => n + (c ?? 0), 0);
   const label = (id: string) => detail.objectives.find((o) => o.id === id)?.label ?? id;
   return (

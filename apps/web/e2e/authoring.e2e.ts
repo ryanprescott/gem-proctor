@@ -143,7 +143,10 @@ test("a session from a source: objectives from its headings, a blueprint, genera
   await expect(edit.getByLabel("Objective", { exact: true })).toHaveValue("Inner product");
   await expectNoAxeViolations(page, "editing an objective");
   await edit.getByRole("button", { name: "Cancel" }).click();
-  await expect(page.getByText("Set the blueprint first.")).toBeVisible();
+  // The chosen test type's numbers are filled in already, without picking the type again.
+  const blueprintStep = page.getByRole("button", { name: /^Blueprint/ });
+  if ((await blueprintStep.getAttribute("aria-expanded")) !== "true") await blueprintStep.click();
+  await expect(page.getByRole("spinbutton", { name: "Number of questions" })).toHaveValue("10");
   await expectNoAxeViolations(page, "session draft");
 
   // A small blueprint, by the API: the UI shows what it holds.
@@ -468,18 +471,25 @@ test("a long book's scope opens as chapters: tick one whole, then narrow its obj
   await tree.locator("label", { has: page.getByRole("checkbox", { name: /^Part 2 \d+ of/ }) }).click();
   await page.getByRole("button", { name: "Save scope" }).click();
   await expect(objectives).toHaveCount(30);
-  await page.getByRole("button", { name: /Show objectives from/ }).click();
-  await page.getByRole("option", { name: /^Chapter 2/ }).click();
-  await expect(objectives).toHaveCount(15);
-  // Keep only this chapter's objectives (not saved: a reload starts from the saved list again).
-  await page.getByRole("button", { name: "Keep only these 15" }).click();
+  // Select all and Deselect all, then a whole chapter by its own box.
+  await page.getByRole("button", { name: "Select all", exact: true }).click();
+  await expect(page.getByText("30 selected")).toBeVisible();
+  await page.getByRole("button", { name: "Deselect all", exact: true }).click();
+  await expect(page.getByText("0 selected")).toBeVisible();
+  const chapter2 = page.getByRole("checkbox", { name: /^Select all objectives in Chapter 2/ });
+  await chapter2.check();
+  await expect(page.getByText("15 selected")).toBeVisible();
+  // Keep only what's selected (not saved: a reload starts from the saved list again).
+  await page.getByRole("button", { name: "Keep only selected" }).click();
   await expect(objectives).toHaveCount(15);
   await expect(objectives.first()).toContainText("Chapter 2");
   await page.reload();
+  // With a blueprint in place the page opens at the next step, so the objectives are opened again.
+  const objectivesStep = page.getByRole("button", { name: /^Objectives/ });
+  if ((await objectivesStep.getAttribute("aria-expanded")) !== "true") await objectivesStep.click();
   await expect(objectives).toHaveCount(30);
-  await page.getByRole("button", { name: /Show objectives from/ }).click();
-  await page.getByRole("option", { name: /^Chapter 2/ }).click();
-  await page.getByRole("button", { name: "Remove these 15" }).click();
+  await page.getByRole("checkbox", { name: /^Select all objectives in Chapter 2/ }).check();
+  await page.getByRole("button", { name: "Remove selected" }).click();
   await expect(objectives).toHaveCount(15);
   await expect(objectives.first()).toContainText("Chapter 1");
 
